@@ -4,7 +4,7 @@ const DIA_MS = 86400000;
 const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
 const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
 const fechaLarga = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()}`; };
-const fechaRel = f => { const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };
+const fechaRel = f => { const ayer = new Date(now); ayer.setDate(ayer.getDate() - 1); if (f === toISO(ayer)) return "Ayer"; const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };
 
 function iniciarPortal(perfil, u) {
   P.perfil = perfil; P.uid = u.uid;
@@ -21,14 +21,21 @@ function iniciarPortal(perfil, u) {
 }
 
 /* ---- Cálculos ---- */
-function misClases(dias = 14) {
+function rangoMes() {
+  // Todo el mes actual; si quedan 7 días o menos, también el mes que viene.
+  const fin = new Date(now.getFullYear(), now.getMonth() + 1, 0); const resta = (fin - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS;
+  return { desde: new Date(now.getFullYear(), now.getMonth(), 1), hasta: resta <= 7 ? new Date(now.getFullYear(), now.getMonth() + 2, 0) : fin };
+}
+function misClases(dias = 14, rango = null) {
   const a = P.a; if (!a) return [];
-  const out = []; const corte = Date.now() - 60 * 60 * 1000;
-  for (let i = 0; i < dias; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d);
+  const out = []; const corte = rango ? 0 : Date.now() - 60 * 60 * 1000;
+  const ini = rango ? rango.desde : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const n = rango ? Math.round((rango.hasta - rango.desde) / DIA_MS) + 1 : dias;
+  for (let i = 0; i < n; i++) {
+    const d = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i); const f = toISO(d);
     (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: a.club, nivel: h.nivel || a.categoria || "", tipo: "fija" }));
   }
-  P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= hoyISO && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
+  P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= toISO(ini) && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
   return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte)
     .map(c => { const vuelve = esVuelta(c.fecha, c.hora); return { ...c, vuelve, aus: vuelve ? null : P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }; })
     .sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
@@ -77,7 +84,9 @@ function renderPortal() {
   $("#pHola").textContent = a ? `Hola, ${nombreCorto(a.nombre)}` : "";
   if (!P.cargado) { v.innerHTML = `<p class="small" style="color:var(--paper);margin:16px 0">Cargando tus clases…</p>`; return; }
   if (!a) { v.innerHTML = `<div class="notice">No encontramos tu ficha de alumno. Escribile a Gabriel.</div>`; return; }
-  const cl = misClases(); const prox = cl.find(c => !c.aus); const rec = a.recuperar || 0;
+  const rg = rangoMes(); const cl = misClases(0, rg); const prox = misClases(70).find(c => !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now()); const rec = a.recuperar || 0;
+  const marcas = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) marcas[`${x.fecha}|${hora}`] = x.marcas[k]; }));
+  const mesesCl = [...new Set(cl.map(c => c.fecha.slice(0, 7)))];
   const mes = mesKey(now); const pagoMes = (a.pagos || {})[mes] || {}; const montoAct = montoMes(a, mes);
   const ops = rec > 0 ? opcionesRec() : []; const asis = misAsistencias();
   const asisMes = asis.filter(x => x.fecha.startsWith(mes)); const vino = asisMes.filter(x => x.estado === "vino" || x.estado === "recuperando").length;
@@ -93,17 +102,18 @@ function renderPortal() {
     </div>
   </section>
 
-  <section class="sec"><div class="sec-head"><h3>Tus próximas clases</h3><span class="small muted">2 semanas</span></div>
-    ${cl.length ? `<div class="list">${cl.map(c => { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now();
-      return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
+  ${mesesCl.map((mk, mi) => { const cm = cl.filter(c => c.fecha.startsWith(mk)); return `
+  <section class="sec"><div class="sec-head"><h3>Tus clases de ${mesSolo(mk)}</h3><span class="small muted">${cm.length} clase${cm.length === 1 ? "" : "s"}</span></div>
+    ${cm.length ? `<div class="list">${cm.map(c => { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now(); const est = marcas[`${c.fecha}|${c.hora}`]; const e = est && EST_AL[est];
+      return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center;${pasada ? "opacity:.6" : ""}"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
         <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${c.club === "ESPACIO" ? "Espacio" : "Jump"}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
-          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}</div>
+          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}</div>
         ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
-      : `<div class="empty">No tenés clases en las próximas dos semanas.</div>`}
-    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
-    <button class="mini" data-pa="varias" style="justify-self:start">Avisar varias fechas (viaje, trabajo…)</button>
-  </section>
+      : `<div class="empty">No tenés clases este mes.</div>`}
+    ${mi === mesesCl.length - 1 ? `<p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-pa="varias">Avisar varias fechas (viaje, trabajo…)</button><button class="mini" data-pa="calendario">Recordatorios en mi calendario</button></div>` : ""}
+  </section>`; }).join("")}
   ${avisadasHTML(wa)}
 
   <section class="sec"><div class="sec-head"><h3>Recuperar</h3>${rec ? `<span class="small muted">${rec} clase${rec > 1 ? "s" : ""}</span>` : ""}</div>
@@ -195,6 +205,8 @@ document.addEventListener("click", async e => {
     return;
   }
   if (pa === "varias") { abrirVarias(); return; }
+  if (pa === "calendario") { abrirCalendario(); return; }
+  if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {
     const { f, h } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     confirmar(`¿Al final venís ${cuando}?`, '<b style="color:var(--warn)">Ojo: esto se puede hacer una sola vez.</b> Volvés a tu lugar, se te descuenta la clase para recuperar que te había quedado, y <b>ya no vas a poder avisar que no venís a esta clase</b>: si después faltás, la perdés.', "Sí, voy", async () => {
@@ -254,4 +266,30 @@ async function confirmarVarias(b) {
   openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">Listo, avisado</h2><p class="small" style="margin:0">Avisaste ${ok.length} clase${ok.length === 1 ? "" : "s"}${rec ? `: sumaste ${rec} clase${rec === 1 ? "" : "s"} para recuperar` : ""}.${fallo ? ` <span class="due">${fallo} no se pudo${fallo > 1 ? "eron" : ""} avisar, probá de nuevo.</span>` : ""}</p></div>
     ${url ? `<div class="msg"><span class="small"><b>Último paso:</b> mandale el aviso a Gabriel por WhatsApp. Ya está escrito, solo tocás enviar.</span><div class="bubble">${esc(msg)}</div><a class="cta wa" href="${url}" target="_blank" rel="noopener" data-pa="cerrar" style="justify-self:start">Mandar por WhatsApp <i>→</i></a></div>` : ""}
     <div class="btns"><span></span><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
+}
+
+/* ---- Recordatorios: archivo de calendario con las clases fijas y aviso 3 horas antes ---- */
+function descargarCalendario() {
+  const a = P.a; if (!a) return;
+  const p2 = n => String(n).padStart(2, "0");
+  const lugar = a.club === "ESPACIO" ? "Espacio La 10" : "Jump";
+  const DIAS_ICS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
+  const ev = (a.horarios || []).map((h, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); while (d.getDay() !== h.dia) d.setDate(d.getDate() + 1);
+    const [hh, mm] = h.hora.split(":").map(Number); const ini = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(hh)}${p2(mm)}00`;
+    const fin = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(Math.min(hh + 1, 23))}${p2(hh + 1 > 23 ? 59 : mm)}00`;
+    return ["BEGIN:VEVENT", `UID:clase-${a.id}-${i}-${h.dia}-${h.hora.replace(":", "")}@clasespadel`, `DTSTAMP:${stamp}`, `DTSTART;TZID=America/Argentina/Cordoba:${ini}`, `DTEND;TZID=America/Argentina/Cordoba:${fin}`,
+      `RRULE:FREQ=WEEKLY;BYDAY=${DIAS_ICS[h.dia]}`, `SUMMARY:Clase de pádel (${lugar})`, `LOCATION:${lugar}`, `DESCRIPTION:Si no podés venir avisá en la app: ${LINK_APP}`,
+      "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:Hoy tenés pádel a las " + h.hora, "TRIGGER:-PT3H", "END:VALARM", "END:VEVENT"].join("\r\n");
+  });
+  const tz = ["BEGIN:VTIMEZONE", "TZID:America/Argentina/Cordoba", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:-0300", "TZOFFSETTO:-0300", "TZNAME:-03", "END:STANDARD", "END:VTIMEZONE"].join("\r\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Clases de Padel//ES", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", tz, ...ev, "END:VCALENDAR"].join("\r\n");
+  const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+  const el = document.createElement("a"); el.href = url; el.download = "clases-padel.ics"; document.body.appendChild(el); el.click(); setTimeout(() => { URL.revokeObjectURL(url); el.remove(); }, 4000);
+}
+function abrirCalendario() {
+  openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">Recordatorios</h2><p class="small" style="margin:0">Agregamos tus clases fijas al calendario del celu, y <b>3 horas antes de cada clase te suena un aviso</b>: "Hoy tenés pádel a las…".</p>
+    <p class="small muted" style="margin:0">Al tocar el botón, el celu te pregunta si querés agregarlas: tocá <b>Agregar todo</b>. Si cambiás de horario, volvé a hacerlo.</p></div>
+    <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="calOk">Agregar al calendario</button></span></div>`);
 }
