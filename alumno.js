@@ -136,8 +136,8 @@ async function avisarNoVoy(fecha, hora, tipo) {
   const cid = cupoId(club, fecha, hora); const d = isoDate(fecha);
   await fdb.runTransaction(async tx => {
     const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId);
-    const [aS, cS, vS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(vRef)];
-    if (vS.exists) throw { code: "ya" };
+    if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+    const [aS, cS] = [await tx.get(aRef), await tx.get(cRef)];
     const c = cS.exists ? cS.data() : {};
     tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: con, inicio: firebase.firestore.Timestamp.fromDate(ini), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false });
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: avId });
@@ -150,8 +150,8 @@ async function reservarRec(fecha, hora) {
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(a.club, fecha, hora); const cupo = P.info.cupo || CUPO;
   await fdb.runTransaction(async tx => {
     const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId), tRef = fdb.doc("publico/turnos");
-    const [aS, cS, vS, tS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(vRef), await tx.get(tRef)];
-    if (vS.exists) throw { code: "ya" };
+    if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+    const [aS, cS, tS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(tRef)];
     const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
     const base = ((tS.data() || {}).t || {})[`${a.club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
     if (!base || cupo - base.n + (c.aus || 0) - (c.rec || 0) < 1) throw { code: "lleno" };
