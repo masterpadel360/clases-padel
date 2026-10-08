@@ -1,0 +1,190 @@
+/* ---------- App del alumno ---------- */
+const P = { perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], cargado: false, ocupado: false };
+const DIA_MS = 86400000;
+const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
+const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
+const fechaLarga = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()}`; };
+const fechaRel = f => { const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };
+
+function iniciarPortal(perfil, u) {
+  P.perfil = perfil; P.uid = u.uid;
+  document.getElementById("login").hidden = true; document.getElementById("portal").hidden = false;
+  const id = perfil.alumnoId; const pr = () => { if ($("#overlay").hidden) renderPortal(); };
+  renderPortal();
+  fdb.doc("alumnos/" + id).onSnapshot(d => { P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
+  fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
+  fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
+  fdb.collection("cupos").where("fecha", ">=", hoyISO).onSnapshot(s => { P.cupos = {}; s.docs.forEach(d => P.cupos[d.id] = d.data()); pr(); }, () => {});
+  fdb.collection("avisos").where("alumnoId", "==", id).onSnapshot(s => { P.avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
+  { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
+}
+
+/* ---- Cálculos ---- */
+function misClases() {
+  const a = P.a; if (!a) return [];
+  const out = []; const corte = Date.now() - 60 * 60 * 1000;
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d);
+    (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: a.club, nivel: h.nivel || a.categoria || "", tipo: "fija" }));
+  }
+  P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= hoyISO).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
+  return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte)
+    .map(c => ({ ...c, aus: P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }))
+    .sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+}
+function libresDe(club, fecha, hora) {
+  const d = isoDate(fecha); const t = P.turnos[`${club}|${d.getDay()}|${hora}`]; if (!t) return 0;
+  const c = P.cupos[cupoId(club, fecha, hora)] || {}; const cupo = P.info.cupo || CUPO;
+  return cupo - (t.n || 0) + (c.aus || 0) - (c.rec || 0);
+}
+function opcionesRec() {
+  const a = P.a; if (!a) return [];
+  const mios = new Set((a.horarios || []).map(h => `${h.dia}|${h.hora}`)); const cats = catsDe(a);
+  const limite = Date.now() + 30 * 60 * 1000; const out = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d);
+    Object.entries(P.turnos).forEach(([k, t]) => {
+      const [club, dia, hora] = k.split("|");
+      if (club !== a.club || Number(dia) !== d.getDay() || mios.has(`${dia}|${hora}`)) return;
+      if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
+      if (inicioDe(f, hora).getTime() < limite) return;
+      if (P.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
+      const libres = libresDe(club, f, hora); if (libres > 0) out.push({ club, fecha: f, hora, nivel: t.nivel, dia: d.getDay(), libres });
+    });
+  }
+  return out.sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+}
+function misAsistencias() {
+  const a = P.a; if (!a) return []; const out = [];
+  P.asis.forEach(v => Object.keys(v.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) out.push({ fecha: v.fecha, hora, club: v.club, estado: v.marcas[k] }); }));
+  return out.sort((x, y) => (y.fecha + y.hora).localeCompare(x.fecha + x.hora));
+}
+function mesesPago() {
+  const a = P.a; if (!a) return [];
+  const actual = mesKey(now); const set = new Set([actual]);
+  Object.keys(a.pagos || {}).forEach(m => { if (m < actual && !(a.pagos[m] || {}).pagado) set.add(m); });
+  return [...set].sort().reverse();
+}
+
+/* ---- Vista ---- */
+const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"] };
+function renderPortal() {
+  const v = $("#pView"); if (!v) return;
+  const a = P.a;
+  $("#pHola").textContent = a ? `Hola, ${nombreCorto(a.nombre)}` : "";
+  if (!P.cargado) { v.innerHTML = `<p class="small" style="color:var(--paper);margin:16px 0">Cargando tus clases…</p>`; return; }
+  if (!a) { v.innerHTML = `<div class="notice">No encontramos tu ficha de alumno. Escribile a Gabriel.</div>`; return; }
+  const cl = misClases(); const prox = cl.find(c => !c.aus); const rec = a.recuperar || 0;
+  const mes = mesKey(now); const pagoMes = (a.pagos || {})[mes] || {}; const montoAct = montoMes(a, mes);
+  const ops = rec > 0 ? opcionesRec() : []; const asis = misAsistencias();
+  const asisMes = asis.filter(x => x.fecha.startsWith(mes)); const vino = asisMes.filter(x => x.estado === "vino" || x.estado === "recuperando").length;
+  const tel = P.info.telGabriel; const wa = tel ? waURL(tel, `Hola Gabi! Soy ${a.nombre}.`) : "";
+  v.innerHTML = `
+  <section class="hero" aria-label="Tu resumen"><span class="hero-glow" aria-hidden="true"></span>
+    <span class="pill-date" style="justify-self:start">${prox ? "Tu próxima clase" : "Sin clases próximas"}</span>
+    ${prox ? `<div class="hero-main"><div class="mega num" style="font-size:clamp(64px,22vw,104px)">${prox.hora}</div><div class="spec"><span class="spec-k">${prox.tipo === "recupera" ? "Recuperación" : "Clase"}</span><span style="font-weight:800">${fechaRel(prox.fecha)}</span><span class="small muted" style="text-transform:capitalize">${prox.club === "ESPACIO" ? "Espacio" : "Jump"}${prox.nivel ? " · " + esc(prox.nivel) : ""}</span></div></div>` : ""}
+    <div class="hero-stats">
+      <div class="stat"><div class="val num">${rec}</div><div class="lbl">Para recuperar</div></div>
+      <div class="stat"><div class="val num" style="font-size:24px;color:${pagoMes.pagado ? "var(--ok)" : "var(--sun)"}">${pagoMes.pagado ? "Pagado" : montoAct ? money(montoAct).replace("$ ", "$") : "—"}</div><div class="lbl">${pagoMes.pagado ? mesSolo(mes) : "A pagar " + mesSolo(mes)}</div></div>
+      <div class="stat"><div class="val num">${vino}</div><div class="lbl">Clases en ${mesSolo(mes)}</div></div>
+    </div>
+  </section>
+
+  <section class="sec"><div class="sec-head"><h3>Tus próximas clases</h3><span class="small muted">2 semanas</span></div>
+    ${cl.length ? `<div class="list">${cl.map(c => { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now();
+      return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
+        <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
+          <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${c.club === "ESPACIO" ? "Espacio" : "Jump"}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
+          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}</div>
+        ${c.aus || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
+      : `<div class="empty">No tenés clases en las próximas dos semanas.</div>`}
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
+  </section>
+
+  <section class="sec"><div class="sec-head"><h3>Recuperar</h3>${rec ? `<span class="small muted">${rec} clase${rec > 1 ? "s" : ""}</span>` : ""}</div>
+    ${!rec ? `<div class="empty">No tenés clases para recuperar.</div>`
+      : ops.length ? `<div class="list">${ops.slice(0, 12).map(o => `<div class="row"><span class="main"><span class="name">${fechaRel(o.fecha)} · ${o.hora}</span><span class="meta">${o.fecha === hoyISO || fechaRel(o.fecha) === "Mañana" ? `${DIAS_LARGO[o.dia]} ${isoDate(o.fecha).getDate()} · ` : ""}${esc(o.nivel || "")} · <span class="free">${o.libres} lugar${o.libres > 1 ? "es" : ""}</span></span></span><button class="mini go" data-pa="reservar" data-f="${o.fecha}" data-h="${o.hora}">Reservar</button></div>`).join("")}</div>`
+      : `<div class="empty">Por ahora no hay lugares libres de tu categoría en las próximas dos semanas. ${wa ? `<a class="wa-link" href="${wa}" target="_blank" rel="noopener">Escribile a Gabriel</a>` : "Consultale a Gabriel."}</div>`}
+  </section>
+
+  <section class="sec"><div class="sec-head"><h3>Pagos</h3></div>
+    <div class="list">${mesesPago().map(m => { const p = (a.pagos || {})[m] || {}; const n = clasesMes(a, m); const tot = montoMes(a, m); const aj = ajusteDe(a, m) !== null; const ex = extraDias(a, m).length;
+      return `<div class="row"><span class="main"><span class="name" style="text-transform:capitalize">${mesLbl(m)}</span><span class="meta">${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases x ${money(a.precioClase)}${ex ? " · incluye clase extra" : ""}`}</span></span>
+        <span style="display:grid;justify-items:end;gap:2px"><b class="num">${money(tot)}</b><span class="tag" style="background:${p.pagado ? "var(--ok-soft)" : "var(--warn-soft)"};color:${p.pagado ? "var(--ok)" : "var(--warn)"}">${p.pagado ? "PAGADO" : "PENDIENTE"}</span></span></div>`; }).join("")}</div>
+    ${P.info.alias && !pagoMes.pagado ? `<div class="msg" style="gap:8px"><span class="small">Podés transferir al alias <b>${esc(P.info.alias)}</b></span><button class="mini" data-pa="alias" style="justify-self:start">Copiar alias</button></div>` : ""}
+  </section>
+
+  <section class="sec"><div class="sec-head"><h3>Tu asistencia</h3><span class="small muted">${vino} en ${mesSolo(mes)}</span></div>
+    ${asis.length ? `<div class="list">${asis.slice(0, 20).map(x => { const d = isoDate(x.fecha); const e = EST_AL[x.estado] || [x.estado, "var(--muted)"];
+      return `<div class="row"><span class="name">${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${x.hora}</span><span class="small" style="font-weight:800;color:${e[1]}">${e[0]}</span></div>`; }).join("")}</div>`
+      : `<div class="empty">Todavía no hay asistencias cargadas.</div>`}
+  </section>
+  ${wa ? `<a class="cta wa" href="${wa}" target="_blank" rel="noopener" style="margin-top:22px;justify-self:start">Escribirle a Gabriel <i>→</i></a>` : ""}`;
+}
+
+/* ---- Acciones ---- */
+function confirmar(titulo, texto, boton, accion) {
+  openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">${titulo}</h2><p class="small" style="margin:0">${texto}</p></div>
+    <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
+    <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="ok">${boton}</button></span></div>`);
+  P.accion = accion;
+}
+async function avisarNoVoy(fecha, hora, tipo) {
+  const a = P.a; const ini = inicioDe(fecha, hora); const con = tipo === "fija" && ini.getTime() - Date.now() >= DIA_MS;
+  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || a.club) : a.club;
+  const cid = cupoId(club, fecha, hora); const d = isoDate(fecha);
+  await fdb.runTransaction(async tx => {
+    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId);
+    const [aS, cS, vS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(vRef)];
+    if (vS.exists) throw { code: "ya" };
+    const c = cS.exists ? cS.data() : {};
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: con, inicio: firebase.firestore.Timestamp.fromDate(ini), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false });
+    tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: avId });
+    if (con) tx.update(aRef, { recuperar: ((aS.data() || {}).recuperar || 0) + 1, ultimoAviso: avId });
+  });
+  return con;
+}
+async function reservarRec(fecha, hora) {
+  const a = P.a; const d = isoDate(fecha); const t = P.turnos[`${a.club}|${d.getDay()}|${hora}`] || {};
+  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(a.club, fecha, hora); const cupo = P.info.cupo || CUPO;
+  await fdb.runTransaction(async tx => {
+    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId), tRef = fdb.doc("publico/turnos");
+    const [aS, cS, vS, tS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(vRef), await tx.get(tRef)];
+    if (vS.exists) throw { code: "ya" };
+    const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
+    const base = ((tS.data() || {}).t || {})[`${a.club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
+    if (!base || cupo - base.n + (c.aus || 0) - (c.rec || 0) < 1) throw { code: "lleno" };
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club: a.club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false });
+    tx.set(cRef, { club: a.club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId });
+    tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
+  });
+}
+const ERR_AL = { ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo." };
+document.addEventListener("click", async e => {
+  if (window.MODO_STAFF) return;
+  const b = e.target.closest("[data-pa]"); if (!b) return;
+  const pa = b.dataset.pa;
+  if (pa === "salir") { salir(); return; }
+  if (pa === "cerrar") { closeSheet(); return; }
+  if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
+  if (pa === "novoy") {
+    const { f, h, t } = b.dataset; const horas = (inicioDe(f, h).getTime() - Date.now()) / 3600000; const con = t === "fija" && horas >= 24;
+    confirmar(`¿No venís ${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}?`,
+      t === "recupera" ? "Es una clase de recuperación: si no venís, se pierde." : con ? "Como avisás con más de 24 horas, <b>te queda una clase para recuperar</b>." : "Faltan menos de 24 horas: podés avisar igual, pero <b>esta clase no se recupera</b>.",
+      "Avisar que no voy", async () => { const r = await avisarNoVoy(f, h, t); toast(r ? "Listo. Te quedó una clase para recuperar." : "Listo, Gabriel ya sabe que no venís."); });
+    return;
+  }
+  if (pa === "reservar") {
+    const { f, h } = b.dataset;
+    confirmar(`¿Recuperás ${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}?`, "Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.", "Reservar", async () => { await reservarRec(f, h); toast("¡Reservado! Te esperamos."); });
+    return;
+  }
+  if (pa === "ok") {
+    if (P.ocupado || !P.accion) return; P.ocupado = true; b.disabled = true; b.textContent = "Un segundo…";
+    try { await P.accion(); closeSheet(); }
+    catch (x) { console.error(x); const el = $("#pErr"); if (el) el.textContent = ERR_AL[x && x.code] || "No se pudo. Probá de nuevo."; b.disabled = false; b.textContent = "Reintentar"; }
+    finally { P.ocupado = false; renderPortal(); }
+  }
+});
+new MutationObserver(() => { if (!window.MODO_STAFF && P.perfil && $("#overlay").hidden) renderPortal(); }).observe($("#overlay"), { attributes: true, attributeFilter: ["hidden"] });

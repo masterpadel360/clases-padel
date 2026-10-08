@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Quién es quién ----------
+    function signed() { return request.auth != null; }
+    function esDueno() {
+      return signed() && request.auth.token.email == 'gabohuppi22@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function rutaPerfil() { return /databases/$(database)/documents/usuarios/$(request.auth.uid); }
+    function tienePerfil() { return esDueno() || (signed() && exists(rutaPerfil())); }
+    function perfil() { return get(rutaPerfil()).data; }
+    function esProfe() { return signed() && exists(rutaPerfil()) && perfil().rol == 'profe'; }
+    function esStaff() { return esDueno() || esProfe(); }
+    function esAlumno() { return signed() && exists(rutaPerfil()) && perfil().rol == 'alumno'; }
+    function miAlumno() { return perfil().alumnoId; }
+    function doc(col, id) { return /databases/$(database)/documents/$(col)/$(id); }
+
+    // ---------- Usuarios (accesos) ----------
+    match /usuarios/{uid} {
+      allow read: if esStaff() || (signed() && request.auth.uid == uid);
+      allow write: if esDueno();
+    }
+
+    // ---------- Alumnos ----------
+    // El alumno solo ve su ficha. Solo puede cambiar "recuperar" de a 1,
+    // y únicamente junto con el aviso que lo justifica.
+    function cambioPorAviso(id) {
+      let d = request.resource.data;
+      let o = resource.data;
+      let av = getAfter(doc('avisos', d.ultimoAviso)).data;
+      return d.diff(o).affectedKeys().hasOnly(['recuperar', 'ultimoAviso'])
+        && !exists(doc('avisos', d.ultimoAviso))
+        && av.alumnoId == id
+        && ((av.tipo == 'ausencia' && av.conRecupero == true && d.recuperar == o.get('recuperar', 0) + 1)
+          || (av.tipo == 'recupera' && o.get('recuperar', 0) >= 1 && d.recuperar == o.get('recuperar', 0) - 1));
+    }
+    match /alumnos/{id} {
+      allow read: if esStaff() || (esAlumno() && miAlumno() == id);
+      allow create, delete: if esStaff();
+      allow update: if esStaff() || (esAlumno() && miAlumno() == id && cambioPorAviso(id));
+    }
+
+    // ---------- Avisos: "no voy" y reservas para recuperar ----------
+    function lugaresOk(d) {
+      let c = getAfter(doc('cupos', d.club + '_' + d.fecha + '_' + d.hhmm)).data;
+      let base = get(doc('publico', 'turnos')).data.t.get(d.club + '|' + string(d.dia) + '|' + d.hora, {'n': 99}).n;
+      return base - c.aus + c.rec <= 4;
+    }
+    function avisoValido(id) {
+      let d = request.resource.data;
+      return d.alumnoId == miAlumno() && d.uid == request.auth.uid
+        && d.tipo in ['ausencia', 'recupera']
+        && id == d.alumnoId + '_' + d.fecha + '_' + d.hhmm + '_' + d.tipo
+        && d.inicio is timestamp && d.inicio > request.time
+        && d.visto == false
+        && (d.tipo != 'ausencia' || d.conRecupero == (d.inicio > request.time + duration.value(24, 'h')))
+        && ((d.tipo == 'ausencia' && d.conRecupero == false)
+          || getAfter(doc('alumnos', d.alumnoId)).data.ultimoAviso == id)
+        && getAfter(doc('cupos', d.club + '_' + d.fecha + '_' + d.hhmm)).data.ultimo == id
+        && (d.tipo == 'ausencia' || lugaresOk(d));
+    }
+    match /avisos/{id} {
+      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow create: if esStaff() || (esAlumno() && avisoValido(id));
+      allow update, delete: if esStaff();
+    }
+
+    // ---------- Lugares por clase y fecha ----------
+    function cupoPorAviso() {
+      let d = request.resource.data;
+      let o = resource == null ? {'aus': 0, 'rec': 0} : resource.data;
+      let av = getAfter(doc('avisos', d.ultimo)).data;
+      return !exists(doc('avisos', d.ultimo)) && av.alumnoId == miAlumno()
+        && ((av.tipo == 'ausencia' && d.aus == o.get('aus', 0) + 1 && d.rec == o.get('rec', 0))
+          || (av.tipo == 'recupera' && d.rec == o.get('rec', 0) + 1 && d.aus == o.get('aus', 0)));
+    }
+    match /cupos/{id} {
+      allow read: if tienePerfil();
+      allow create, update: if esStaff() || (esAlumno() && cupoPorAviso());
+      allow delete: if esStaff();
+    }
+
+    // ---------- Resto ----------
+    match /asistencia/{id} {
+      allow read: if tienePerfil();
+      allow write: if esStaff();
+    }
+    match /publico/{id} {
+      allow read: if tienePerfil();
+      allow write: if esStaff();
+    }
+    match /config/{id} {
+      allow read, write: if esStaff();
+    }
+    match /interesados/{id} {
+      allow read, write: if esDueno();
+    }
+    match /horas/{uid} {
+      allow read, write: if esDueno() || (esProfe() && request.auth.uid == uid);
+    }
+    match /finanzas/{uid} {
+      allow read, write: if esDueno() || (esProfe() && request.auth.uid == uid);
+    }
+  }
+}
