@@ -183,7 +183,7 @@ document.addEventListener("click", async e => {
   if (pa === "ok") {
     if (P.ocupado || !P.accion) return; P.ocupado = true; b.disabled = true; b.textContent = "Un segundo…";
     try { await P.accion(); closeSheet(); }
-    catch (x) { console.error(x); const el = $("#pErr"); if (el) el.textContent = ERR_AL[x && x.code] || "No se pudo. Probá de nuevo."; b.disabled = false; b.textContent = "Reintentar"; }
+    catch (x) { console.error(x); const el = $("#pErr"); if (el) el.textContent = (ERR_AL[x && x.code] || "No se pudo. Probá de nuevo.") + (x && x.code ? ` (${x.code})` : ""); b.disabled = false; b.textContent = "Reintentar"; }
     finally { P.ocupado = false; renderPortal(); }
   }
 });
