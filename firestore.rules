@@ -62,7 +62,8 @@ service cloud.firestore {
         && (d.tipo == 'ausencia' || lugaresOk(d));
     }
     match /avisos/{id} {
-      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      // resource == null: el alumno puede comprobar que un aviso suyo todavía no existe
+      allow read: if esStaff() || (esAlumno() && (resource == null || resource.data.alumnoId == miAlumno()));
       allow create: if esStaff() || (esAlumno() && avisoValido(id));
       allow update, delete: if esStaff();
     }
