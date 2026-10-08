@@ -170,19 +170,34 @@ document.addEventListener("click", async e => {
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
   if (pa === "novoy") {
     const { f, h, t } = b.dataset; const horas = (inicioDe(f, h).getTime() - Date.now()) / 3600000; const con = t === "fija" && horas >= 24;
-    confirmar(`¿No venís ${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}?`,
-      t === "recupera" ? "Es una clase de recuperación: si no venís, se pierde." : con ? "Como avisás con más de 24 horas, <b>te queda una clase para recuperar</b>." : "Faltan menos de 24 horas: podés avisar igual, pero <b>esta clase no se recupera</b>.",
-      "Avisar que no voy", async () => { const r = await avisarNoVoy(f, h, t); toast(r ? "Listo. Te quedó una clase para recuperar." : "Listo, Gabriel ya sabe que no venís."); });
+    const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
+    confirmar(`¿No venís ${cuando}?`,
+      t === "recupera" ? '<b style="color:var(--warn)">Es una clase de recuperación: si no venís, la perdés.</b>'
+        : con ? "Como avisás con más de 24 horas, <b>te queda una clase para recuperar</b>."
+        : '<b style="color:var(--warn)">Faltan menos de 24 horas: si no venís, esta clase se pierde y no se recupera.</b> Podés avisar igual.',
+      con ? "Avisar que no voy" : "Avisar igual", async () => {
+        const r = await avisarNoVoy(f, h, t);
+        return { titulo: "Listo, avisado", texto: r ? "Te quedó una clase para recuperar. Podés reservarla en <b>Recuperar</b>." : "Quedó registrado que no venís.",
+          msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. No voy a ir ${cuando}${r ? ". Avisé por la app, me queda para recuperar." : ". Avisé por la app."}` };
+      });
     return;
   }
   if (pa === "reservar") {
-    const { f, h } = b.dataset;
-    confirmar(`¿Recuperás ${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}?`, "Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.", "Reservar", async () => { await reservarRec(f, h); toast("¡Reservado! Te esperamos."); });
+    const { f, h } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
+    confirmar(`¿Recuperás ${cuando}?`, "Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.", "Reservar", async () => {
+      await reservarRec(f, h);
+      return { titulo: "¡Reservado!", texto: `Te esperamos ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}.` };
+    });
     return;
   }
   if (pa === "ok") {
     if (P.ocupado || !P.accion) return; P.ocupado = true; b.disabled = true; b.textContent = "Un segundo…";
-    try { await P.accion(); closeSheet(); }
+    try { const r = await P.accion(); const url = r && r.msg && P.info.telGabriel ? waURL(P.info.telGabriel, r.msg) : "";
+      if (r && url) openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">${r.titulo}</h2><p class="small" style="margin:0">${r.texto}</p></div>
+        <div class="msg"><span class="small"><b>Último paso:</b> mandale el aviso a Gabriel por WhatsApp. Ya está escrito, solo tocás enviar.</span><div class="bubble">${esc(r.msg)}</div>
+        <a class="cta wa" href="${url}" target="_blank" rel="noopener" data-pa="cerrar" style="justify-self:start">Mandar por WhatsApp <i>→</i></a></div>
+        <div class="btns"><span></span><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
+      else { closeSheet(); if (r) toast(r.titulo); } }
     catch (x) { console.error(x); const el = $("#pErr"); if (el) el.textContent = (ERR_AL[x && x.code] || "No se pudo. Probá de nuevo.") + (x && x.code ? ` (${x.code})` : ""); b.disabled = false; b.textContent = "Reintentar"; }
     finally { P.ocupado = false; renderPortal(); }
   }
