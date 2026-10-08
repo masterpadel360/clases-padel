@@ -28,7 +28,7 @@ function avisosHoyHTML() {
   const nv = S.avisos.filter(v => !v.visto && !S.vistos[v.id]).sort((a, b) => ((b.creado && b.creado.seconds) || 0) - ((a.creado && a.creado.seconds) || 0));
   if (!nv.length) return "";
   return `<section class="sec"><div class="sec-head"><h3>Avisos de alumnos</h3><button class="linkish" data-act="avisosTodos">Marcar todos vistos</button></div>
-    <div class="list">${nv.slice(0, 12).map(v => `<div class="row"><span class="main"><span class="small" style="line-height:1.5">${textoAviso(v)}</span><span class="meta"><span class="tag ${v.club}">${v.club}</span></span></span><button class="mini" data-act="avisoVisto" data-av="${v.id}">Visto</button></div>`).join("")}</div></section>`;
+    <div class="list">${nv.slice(0, 12).map(v => `<div class="row"><span class="main"><span class="small" style="line-height:1.5">${textoAviso(v)}</span><span class="meta"><span class="tag ${v.club}">${v.club}</span></span></span><span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-act="avisoVisto" data-av="${v.id}">Visto</button><button class="linkish" style="font-size:12px" data-act="avisoDeshacer" data-av="${v.id}">Deshacer</button></span></div>`).join("")}</div></section>`;
 }
 
 /* ---------- Accesos ---------- */
@@ -130,7 +130,36 @@ window.accionExtra = async (act, b, A) => {
       try { const bt = fdb.batch(); ids.forEach(id => bt.update(fdb.doc("avisos/" + id), { visto: true })); await bt.commit(); } catch (e) {} break; }
     case "asRecApp": if (A) { S.asMarcas[`${A.id}|${b.dataset.hora}`] = "recuperando"; render(); if (await guardarAsist()) toast(`${A.nombre} vino a recuperar`); } break;
     case "accesoCrear": if (A) openAcceso(A, "alumno"); break;
+    case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
     case "profeCrear": openAcceso(null, "profe"); break;
     case "telGSave": { const v = $("#cTelG").value.trim(); if (await safe(() => fdb.doc("config/general").set({ ...S.cfg, telGabriel: v }), "Guardado")) S.cfg = { ...S.cfg, telGabriel: v }; break; }
   }
 };
+
+/* ---------- Deshacer un aviso (el alumno al final sí va / no va a recuperar) ---------- */
+function avisosFichaHTML(a) {
+  const av = S.avisos.filter(v => v.alumnoId === a.id && v.fecha >= hoyISO).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+  if (!av.length) return "";
+  return `<div class="field"><span class="flabel">Avisos por la app</span><div style="display:grid;gap:6px">${av.map(v => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px"><span>${v.tipo === "ausencia" ? `No va el <b>${fechaCorta(v.fecha)} ${v.hora}</b>${v.conRecupero ? " · recupera" : " · sin recupero"}` : `Recupera el <b>${fechaCorta(v.fecha)} ${v.hora}</b>`}</span><button type="button" class="mini" style="font-size:12px;padding:4px 10px" data-act="avisoDeshacer" data-av="${v.id}">Deshacer</button></div>`).join("")}</div>
+    <span class="small muted">Deshacer: si al final sí viene (o no viene a recuperar). La clase para recuperar se ajusta sola.</span></div>`;
+}
+async function deshacerAviso(id) {
+  const v = S.avisos.find(x => x.id === id); if (!v) return;
+  const a = S.alumnos.find(x => x.id === v.alumnoId) || {}; const n = a.nombre || v.nombre || "el alumno";
+  const txt = v.tipo === "ausencia"
+    ? `${n} vuelve a estar en la clase del ${fechaCorta(v.fecha)} a las ${v.hora}.${v.conRecupero ? ((a.recuperar || 0) > 0 ? " Se le descuenta la clase para recuperar que le había quedado." : " Ojo: ya usó esa clase para recuperar, queda en 0.") : ""}`
+    : `Se cancela la recuperación de ${n} del ${fechaCorta(v.fecha)} a las ${v.hora} y le vuelve la clase para recuperar.`;
+  if (!confirm(txt + "\n\n¿Deshacer el aviso?")) return;
+  try {
+    await fdb.runTransaction(async tx => {
+      const vRef = fdb.doc("avisos/" + id); const vS = await tx.get(vRef); if (!vS.exists) return; const d = vS.data();
+      const cRef = fdb.doc(`cupos/${d.club}_${d.fecha}_${d.hhmm}`); const aRef = fdb.doc("alumnos/" + d.alumnoId);
+      const cS = await tx.get(cRef); const aS = await tx.get(aRef);
+      const c = cS.exists ? cS.data() : {}; const rec = (aS.data() || {}).recuperar || 0;
+      if (d.tipo === "ausencia") { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1) }, { merge: true }); if (d.conRecupero) tx.update(aRef, { recuperar: Math.max(0, rec - 1) }); }
+      else { tx.set(cRef, { rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.update(aRef, { recuperar: rec + 1 }); }
+      tx.delete(vRef);
+    });
+    toast("Aviso deshecho"); if (!$("#overlay").hidden && $("#fA")) closeSheet();
+  } catch (e) { console.error(e); toast("No se pudo deshacer. Probá de nuevo."); }
+}

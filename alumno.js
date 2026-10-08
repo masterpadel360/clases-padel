@@ -21,10 +21,10 @@ function iniciarPortal(perfil, u) {
 }
 
 /* ---- Cálculos ---- */
-function misClases() {
+function misClases(dias = 14) {
   const a = P.a; if (!a) return [];
   const out = []; const corte = Date.now() - 60 * 60 * 1000;
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < dias; i++) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d);
     (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: a.club, nivel: h.nivel || a.categoria || "", tipo: "fija" }));
   }
@@ -100,7 +100,9 @@ function renderPortal() {
         ${c.aus || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
       : `<div class="empty">No tenés clases en las próximas dos semanas.</div>`}
     <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
+    <button class="mini" data-pa="varias" style="justify-self:start">Avisar varias fechas (viaje, trabajo…)</button>
   </section>
+  ${avisadasHTML(wa)}
 
   <section class="sec"><div class="sec-head"><h3>Recuperar</h3>${rec ? `<span class="small muted">${rec} clase${rec > 1 ? "s" : ""}</span>` : ""}</div>
     ${!rec ? `<div class="empty">No tenés clases para recuperar.</div>`
@@ -190,6 +192,8 @@ document.addEventListener("click", async e => {
     });
     return;
   }
+  if (pa === "varias") { abrirVarias(); return; }
+  if (pa === "variasOk") { await confirmarVarias(b); return; }
   if (pa === "ok") {
     if (P.ocupado || !P.accion) return; P.ocupado = true; b.disabled = true; b.textContent = "Un segundo…";
     try { const r = await P.accion(); const url = r && r.msg && P.info.telGabriel ? waURL(P.info.telGabriel, r.msg) : "";
@@ -203,3 +207,38 @@ document.addEventListener("click", async e => {
   }
 });
 new MutationObserver(() => { if (!window.MODO_STAFF && P.perfil && $("#overlay").hidden) renderPortal(); }).observe($("#overlay"), { attributes: true, attributeFilter: ["hidden"] });
+
+/* ---- Clases avisadas y ausencias programadas ---- */
+function avisadasHTML(wa) {
+  const av = P.avisos.filter(v => v.tipo === "ausencia" && v.fecha >= hoyISO).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+  if (!av.length) return "";
+  return `<section class="sec"><div class="sec-head"><h3>Avisaste que no venís</h3><span class="small muted">${av.length}</span></div>
+    <div class="list">${av.map(v => { const d = isoDate(v.fecha);
+      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : '<span class="due">Avisaste tarde: no se recupera</span>'}</span></span></div>`; }).join("")}</div>
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">¿Al final podés venir? ${wa ? `<a class="wa-link" style="color:#8EE6A8" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${P.a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a> y lo corrige.` : "Avisale a Gabriel y lo corrige."}</p>
+  </section>`;
+}
+function abrirVarias() {
+  const cl = misClases(56).filter(c => c.tipo === "fija" && !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now());
+  const porSemana = {}; cl.forEach(c => { const d = isoDate(c.fecha); const lun = new Date(d); lun.setDate(d.getDate() - ((d.getDay() + 6) % 7)); (porSemana[toISO(lun)] = porSemana[toISO(lun)] || []).push(c); });
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">¿Qué clases no venís?</h2><span class="small muted">Marcá todas las que vas a faltar (próximas 8 semanas). Las que avisás con 24 horas o más te quedan para recuperar.</span></div>
+    <div style="display:grid;gap:12px;max-height:52vh;overflow:auto">${Object.keys(porSemana).sort().map(k => { const d = isoDate(k);
+      return `<div style="display:grid;gap:6px"><span class="flabel">Semana del ${d.getDate()}/${d.getMonth() + 1}</span>${porSemana[k].map(c => { const dd = isoDate(c.fecha); const con = inicioDe(c.fecha, c.hora).getTime() - Date.now() >= DIA_MS;
+        return `<label class="row" style="grid-template-columns:auto 1fr;background:rgba(255,255,255,.6);border:1px solid var(--line-2);border-radius:14px;padding:10px 12px;gap:10px"><input type="checkbox" class="chkVar" data-f="${c.fecha}" data-h="${c.hora}" style="width:20px;height:20px"><span class="main"><span class="name">${DIAS_LARGO[dd.getDay()]} ${dd.getDate()}/${dd.getMonth() + 1} · ${c.hora}</span><span class="meta">${con ? "Te queda para recuperar" : '<span class="due">Menos de 24 h: no se recupera</span>'}</span></span></label>`; }).join("")}</div>`; }).join("") || '<div class="empty">No tenés clases para marcar.</div>'}</div>
+    <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
+    <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="variasOk">Avisar</button></span></div>`);
+}
+async function confirmarVarias(b) {
+  const sel = [...document.querySelectorAll(".chkVar:checked")].map(x => ({ f: x.dataset.f, h: x.dataset.h }));
+  if (!sel.length) { $("#pErr").textContent = "Marcá al menos una clase."; return; }
+  if (P.ocupado) return; P.ocupado = true; b.disabled = true; b.textContent = "Avisando…";
+  const ok = []; let rec = 0, fallo = 0;
+  for (const c of sel) { try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); fallo++; } }
+  P.ocupado = false;
+  const lista = ok.map(c => `${fechaLarga(c.f).toLowerCase()} a las ${c.h}`).join(", ");
+  const msg = `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Te aviso que no voy a poder ir: ${lista}. Lo cargué en la app.`;
+  const url = P.info.telGabriel && ok.length ? waURL(P.info.telGabriel, msg) : "";
+  openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">Listo, avisado</h2><p class="small" style="margin:0">Avisaste ${ok.length} clase${ok.length === 1 ? "" : "s"}${rec ? `: sumaste ${rec} clase${rec === 1 ? "" : "s"} para recuperar` : ""}.${fallo ? ` <span class="due">${fallo} no se pudo${fallo > 1 ? "eron" : ""} avisar, probá de nuevo.</span>` : ""}</p></div>
+    ${url ? `<div class="msg"><span class="small"><b>Último paso:</b> mandale el aviso a Gabriel por WhatsApp. Ya está escrito, solo tocás enviar.</span><div class="bubble">${esc(msg)}</div><a class="cta wa" href="${url}" target="_blank" rel="noopener" data-pa="cerrar" style="justify-self:start">Mandar por WhatsApp <i>→</i></a></div>` : ""}
+    <div class="btns"><span></span><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
+}
