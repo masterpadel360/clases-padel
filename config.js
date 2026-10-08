@@ -11,3 +11,6 @@ window.FIREBASE_CONFIG = {
 
 // Cuenta de Gabriel (dueño). Solo esta cuenta, con el mail confirmado, administra todo.
 window.OWNER_EMAIL = "gabohuppi22@gmail.com";
+
+// Clave pública para notificaciones (Firebase → Configuración → Cloud Messaging → Certificados push web).
+window.VAPID_KEY = null;

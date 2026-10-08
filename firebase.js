@@ -159,4 +159,52 @@ async function iniciarStaff(perfil, u) {
   }
   db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; publicarTurnos(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
   db.doc("config/general").onSnapshot(d => { S.cfg = d.exists ? d.data() : {}; publicarInfo(); }, () => {});
+  refrescarNotif({ rol: perfil.rol });
+}
+
+/* ---------- Notificaciones ---------- */
+const NOTIF = {
+  soportado: () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window,
+  esIOS: () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+  instalada: () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true,
+  activas: () => NOTIF.soportado() && Notification.permission === "granted" && localStorage.getItem("notifOK") === "1",
+};
+function estadoNotif() {
+  if (!window.VAPID_KEY) return "off";
+  if (NOTIF.activas()) return "activas";
+  if (NOTIF.esIOS() && !NOTIF.instalada()) return "instalar";
+  if (!NOTIF.soportado()) return "nosoporta";
+  if (Notification.permission === "denied") return "bloqueadas";
+  return "pedir";
+}
+async function activarNotificaciones(datos) {
+  const reg = await navigator.serviceWorker.register("firebase-messaging-sw.js");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") throw { code: "denegado" };
+  const token = await firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg });
+  if (!token) throw { code: "sin-token" };
+  await fdb.doc("tokens/" + fauth.currentUser.uid).set({ ...datos, tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  try { localStorage.setItem("notifOK", "1"); } catch (e) {}
+  escucharEnPrimerPlano();
+}
+let escuchando = false;
+function escucharEnPrimerPlano() {
+  if (escuchando || !NOTIF.activas() || !window.VAPID_KEY) return; escuchando = true;
+  try { firebase.messaging().onMessage(m => { const d = m.data || m.notification || {}; toast(`${d.title || ""}${d.body ? ": " + d.body : ""}`); }); } catch (e) {}
+}
+// Tarjeta para activar (alumno y Gabriel). "quien" decide el texto.
+// Si ya estaban activas, renovamos el token en silencio (Firebase lo cambia cada tanto).
+async function refrescarNotif(datos) {
+  if (!NOTIF.activas() || !window.VAPID_KEY) return;
+  try { await activarNotificaciones(datos); } catch (e) {}
+}
+function tarjetaNotif(quien) {
+  const st = estadoNotif(); if (st === "off" || st === "activas") return "";
+  const para = quien === "alumno" ? "Te avisamos 3 horas antes de cada clase." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
+  if (st === "instalar") return `<div class="msg notif-card" style="gap:8px"><div class="msg-k"><b>Activá las notificaciones</b></div>
+    <span class="small">${para} En iPhone primero hay que instalar la app:</span>
+    <ol class="small" style="margin:0;padding-left:18px;line-height:1.6"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b> acá</li></ol></div>`;
+  if (st === "nosoporta") return "";
+  if (st === "bloqueadas") return `<div class="msg notif-card"><span class="small">Las notificaciones están bloqueadas. Activalas desde los ajustes del celu para esta app.</span></div>`;
+  return `<div class="msg notif-card" style="gap:10px"><div class="msg-k"><b>Activá las notificaciones</b></div><span class="small">${para}</span><button class="cta" ${quien === "alumno" ? 'data-pa="notif"' : 'data-act="notif"'} style="justify-self:start;padding:6px 6px 6px 14px;font-size:13px">Activar <i>🔔</i></button></div>`;
 }

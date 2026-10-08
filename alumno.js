@@ -12,6 +12,7 @@ function iniciarPortal(perfil, u) {
   const id = perfil.alumnoId; const pr = () => { if ($("#overlay").hidden) renderPortal(); };
   renderPortal();
   fdb.doc("alumnos/" + id).onSnapshot(d => { P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
+  refrescarNotif({ rol: "alumno", alumnoId: id });
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
   fdb.collection("cupos").where("fecha", ">=", hoyISO).onSnapshot(s => { P.cupos = {}; s.docs.forEach(d => P.cupos[d.id] = d.data()); pr(); }, () => {});
@@ -101,6 +102,7 @@ function renderPortal() {
       <div class="stat"><div class="val num">${vino}</div><div class="lbl">Clases en ${mesSolo(mes)}</div></div>
     </div>
   </section>
+  ${tarjetaNotif("alumno")}
 
   ${mesesCl.map((mk, mi) => { const cm = cl.filter(c => c.fecha.startsWith(mk)); return `
   <section class="sec"><div class="sec-head"><h3>Tus clases de ${mesSolo(mk)}</h3><span class="small muted">${cm.length} clase${cm.length === 1 ? "" : "s"}</span></div>
@@ -205,6 +207,7 @@ document.addEventListener("click", async e => {
     return;
   }
   if (pa === "varias") { abrirVarias(); return; }
+  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.a.id }); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : "No se pudo activar. Probá de nuevo."); } renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {

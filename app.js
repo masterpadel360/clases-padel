@@ -158,6 +158,7 @@ function vHoy(){
     <div class="bar" aria-label="${pct}% cobrado"><i style="width:${pct}%"></i></div>
     <div class="hero-foot num"><span>Cobrado <b>${money(cobrado)}</b></span><span>Falta <b style="color:var(--sun)">${money(pend)}</b></span></div>
   </section>
+  ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño"):""}
   ${avisosHoyHTML()}
 
   ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:""}
