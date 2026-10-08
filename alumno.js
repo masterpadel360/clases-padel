@@ -28,11 +28,13 @@ function misClases(dias = 14) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d);
     (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: a.club, nivel: h.nivel || a.categoria || "", tipo: "fija" }));
   }
-  P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= hoyISO).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
+  P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= hoyISO && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
   return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte)
-    .map(c => ({ ...c, aus: P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }))
+    .map(c => { const vuelve = esVuelta(c.fecha, c.hora); return { ...c, vuelve, aus: vuelve ? null : P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }; })
     .sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
 }
+// "Al final voy": un aviso de ausencia + una reserva en ese mismo turno. Queda fijo, no se puede volver a cambiar.
+function esVuelta(fecha, hora) { return P.avisos.some(v => v.tipo === "ausencia" && v.fecha === fecha && v.hora === hora) && P.avisos.some(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora); }
 function libresDe(club, fecha, hora) {
   const d = isoDate(fecha); const t = P.turnos[`${club}|${d.getDay()}|${hora}`]; if (!t) return 0;
   const c = P.cupos[cupoId(club, fecha, hora)] || {}; const cupo = P.info.cupo || CUPO;
@@ -96,8 +98,8 @@ function renderPortal() {
       return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
         <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${c.club === "ESPACIO" ? "Espacio" : "Jump"}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
-          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}</div>
-        ${c.aus || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
+          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}</div>
+        ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
       : `<div class="empty">No tenés clases en las próximas dos semanas.</div>`}
     <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
     <button class="mini" data-pa="varias" style="justify-self:start">Avisar varias fechas (viaje, trabajo…)</button>
@@ -162,7 +164,7 @@ async function reservarRec(fecha, hora) {
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   });
 }
-const ERR_AL = { ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo." };
+const ERR_AL = { ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo." };
 document.addEventListener("click", async e => {
   if (window.MODO_STAFF) return;
   const b = e.target.closest("[data-pa]"); if (!b) return;
@@ -193,6 +195,14 @@ document.addEventListener("click", async e => {
     return;
   }
   if (pa === "varias") { abrirVarias(); return; }
+  if (pa === "vuelvo") {
+    const { f, h } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
+    confirmar(`¿Al final venís ${cuando}?`, '<b style="color:var(--warn)">Ojo: esto se puede hacer una sola vez.</b> Volvés a tu lugar, se te descuenta la clase para recuperar que te había quedado, y <b>ya no vas a poder avisar que no venís a esta clase</b>: si después faltás, la perdés.', "Sí, voy", async () => {
+      try { await reservarRec(f, h); } catch (x) { if (x && x.code === "lleno") throw { code: "ocupado" }; throw x; }
+      return { titulo: "¡Listo, te esperamos!", texto: `Volviste a tu clase ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Al final sí voy ${cuando}. Lo cambié en la app.` };
+    });
+    return;
+  }
   if (pa === "variasOk") { await confirmarVarias(b); return; }
   if (pa === "ok") {
     if (P.ocupado || !P.accion) return; P.ocupado = true; b.disabled = true; b.textContent = "Un segundo…";
@@ -210,16 +220,19 @@ new MutationObserver(() => { if (!window.MODO_STAFF && P.perfil && $("#overlay")
 
 /* ---- Clases avisadas y ausencias programadas ---- */
 function avisadasHTML(wa) {
-  const av = P.avisos.filter(v => v.tipo === "ausencia" && v.fecha >= hoyISO).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+  const av = P.avisos.filter(v => v.tipo === "ausencia" && v.fecha >= hoyISO && !esVuelta(v.fecha, v.hora) && inicioDe(v.fecha, v.hora).getTime() > Date.now()).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
   if (!av.length) return "";
   return `<section class="sec"><div class="sec-head"><h3>Avisaste que no venís</h3><span class="small muted">${av.length}</span></div>
     <div class="list">${av.map(v => { const d = isoDate(v.fecha);
-      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : '<span class="due">Avisaste tarde: no se recupera</span>'}</span></span></div>`; }).join("")}</div>
-    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">¿Al final podés venir? ${wa ? `<a class="wa-link" style="color:#8EE6A8" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${P.a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a> y lo corrige.` : "Avisale a Gabriel y lo corrige."}</p>
+      const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (P.a.recuperar || 0) >= 1;
+      const puede = v.conRecupero && a24 && lugar && tiene;
+      const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona: hablá con Gabriel" : !tiene ? "Ya usaste esa clase para recuperar" : "";
+      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : '<span class="due">Avisaste tarde: no se recupera</span>'}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Podés volver atrás <b>una sola vez</b>, hasta 24 horas antes y si tu lugar sigue libre. Después ya no se puede cambiar. ¿Otro caso? ${wa ? `<a class="wa-link" style="color:#8EE6A8" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${P.a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a> y lo corrige.` : "Avisale a Gabriel y lo corrige."}</p>
   </section>`;
 }
 function abrirVarias() {
-  const cl = misClases(56).filter(c => c.tipo === "fija" && !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now());
+  const cl = misClases(56).filter(c => c.tipo === "fija" && !c.aus && !c.vuelve && inicioDe(c.fecha, c.hora).getTime() > Date.now());
   const porSemana = {}; cl.forEach(c => { const d = isoDate(c.fecha); const lun = new Date(d); lun.setDate(d.getDate() - ((d.getDay() + 6) % 7)); (porSemana[toISO(lun)] = porSemana[toISO(lun)] || []).push(c); });
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">¿Qué clases no venís?</h2><span class="small muted">Marcá todas las que vas a faltar (próximas 8 semanas). Las que avisás con 24 horas o más te quedan para recuperar.</span></div>
     <div style="display:grid;gap:12px;max-height:52vh;overflow:auto">${Object.keys(porSemana).sort().map(k => { const d = isoDate(k);

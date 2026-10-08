@@ -1,19 +1,23 @@
 /* ---------- Lo nuevo del lado de Gabriel: avisos de alumnos, accesos, importar ---------- */
 const hhmmDe = h => String(h || "").replace(":", "");
+// Un alumno que avisó "no voy" y después "al final voy" tiene los dos avisos en el mismo turno: cuenta como presente.
+function vuelveApp(aid, fecha, hora) { return S.avisos.some(v => v.alumnoId === aid && v.fecha === fecha && v.hora === hora && v.tipo === "ausencia") && S.avisos.some(v => v.alumnoId === aid && v.fecha === fecha && v.hora === hora && v.tipo === "recupera"); }
 function avisoApp(aid, fecha, hora, tipo) { return S.avisos.find(v => v.alumnoId === aid && v.fecha === fecha && v.hora === hora && v.tipo === tipo); }
 function ajusteTurno(t, fecha) {
   const aus = new Set(), rec = [];
   S.avisos.forEach(v => { if (v.club !== t.club || v.fecha !== fecha || v.hora !== t.hora) return;
+    if (vuelveApp(v.alumnoId, fecha, t.hora)) return;
     if (v.tipo === "ausencia") aus.add(v.alumnoId);
     else if (v.tipo === "recupera") { const a = S.alumnos.find(x => x.id === v.alumnoId); if (a) rec.push(a); } });
   return { aus, rec };
 }
 function tagAviso(aid, fecha, hora) {
   const v = avisoApp(aid, fecha, hora, "ausencia"); if (!v) return "";
+  if (vuelveApp(aid, fecha, hora)) return ` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">Avisó y al final viene</span>`;
   return ` <span class="tag rec">${v.conRecupero ? "Avisó por la app · recupera" : "Avisó tarde por la app"}</span>`;
 }
 function reservasAsistHTML(club, fecha, hora) {
-  const rs = S.avisos.filter(v => v.tipo === "recupera" && v.club === club && v.fecha === fecha && v.hora === hora && !S.asMarcas[`${v.alumnoId}|${hora}`]);
+  const rs = S.avisos.filter(v => v.tipo === "recupera" && v.club === club && v.fecha === fecha && v.hora === hora && !S.asMarcas[`${v.alumnoId}|${hora}`] && !vuelveApp(v.alumnoId, fecha, hora));
   return rs.map(v => { const a = S.alumnos.find(x => x.id === v.alumnoId); if (!a) return "";
     return `<div class="row"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta"><span class="tag rec">Reservó por la app para recuperar</span></span></span><button class="mini go" data-act="asRecApp" data-id="${a.id}" data-hora="${hora}">Vino</button></div>`; }).join("");
 }
@@ -21,6 +25,7 @@ const fechaCorta = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]
 function textoAviso(v) {
   const n = v.nombre || (S.alumnos.find(a => a.id === v.alumnoId) || {}).nombre || "Un alumno";
   if (v.tipo === "ausencia") return `<b>${esc(n)}</b> no va el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> · ${v.conRecupero ? '<span style="color:var(--sun)">queda para recuperar</span>' : '<span class="due">avisó con menos de 24 h, no recupera</span>'}`;
+  if (vuelveApp(v.alumnoId, v.fecha, v.hora)) return `<b>${esc(n)}</b> <span style="color:var(--ok)">al final sí va</span> el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> (había avisado que no)`;
   return `<b>${esc(n)}</b> reservó recuperar el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b>${v.nivel ? ` (${esc(v.nivel)})` : ""}`;
 }
 function avisosHoyHTML() {
@@ -156,7 +161,9 @@ async function deshacerAviso(id) {
       const cRef = fdb.doc(`cupos/${d.club}_${d.fecha}_${d.hhmm}`); const aRef = fdb.doc("alumnos/" + d.alumnoId);
       const cS = await tx.get(cRef); const aS = await tx.get(aRef);
       const c = cS.exists ? cS.data() : {}; const rec = (aS.data() || {}).recuperar || 0;
-      if (d.tipo === "ausencia") { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1) }, { merge: true }); if (d.conRecupero) tx.update(aRef, { recuperar: Math.max(0, rec - 1) }); }
+      const otroRef = fdb.doc(`avisos/${d.alumnoId}_${d.fecha}_${d.hhmm}_${d.tipo === "ausencia" ? "recupera" : "ausencia"}`); const oS = await tx.get(otroRef);
+      if (d.tipo === "ausencia" && oS.exists) { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1), rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.delete(otroRef); }
+      else if (d.tipo === "ausencia") { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1) }, { merge: true }); if (d.conRecupero) tx.update(aRef, { recuperar: Math.max(0, rec - 1) }); }
       else { tx.set(cRef, { rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.update(aRef, { recuperar: rec + 1 }); }
       tx.delete(vRef);
     });

@@ -499,7 +499,7 @@ async function marcar(a,hora,estado){
   S.asQuien=S.asQuien||{}; delete S.asQuien[`${a.id}|${hora}`];
   const k=`${a.id}|${hora}`; const prev=S.asMarcas[k]; const nuevo= prev===estado?null:estado;
   let delta=(nuevo==="recupera"?1:0)-(prev==="recupera"?1:0);
-  const avA=avisoApp(a.id,S.asFecha,hora,"ausencia"); if(avA&&avA.conRecupero) delta=0;
+  const avA=avisoApp(a.id,S.asFecha,hora,"ausencia"); if(avA&&avA.conRecupero&&!vuelveApp(a.id,S.asFecha,hora)) delta=0;
   if(nuevo) S.asMarcas[k]=nuevo; else delete S.asMarcas[k];
   render();
   if(await guardarAsist() && delta) await setRec(a,(a.recuperar||0)+delta);
