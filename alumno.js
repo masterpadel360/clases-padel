@@ -6,6 +6,25 @@ const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
 const fechaLarga = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()}`; };
 const fechaRel = f => { const ayer = new Date(now); ayer.setDate(ayer.getDate() - 1); if (f === toISO(ayer)) return "Ayer"; const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };
 
+// Cada vez que el alumno abre la app y no tiene las notificaciones activas, le pedimos que las active.
+function pedirNotifAlEntrar() {
+  const st = estadoNotif(); if (!["pedir", "instalar", "bloqueadas"].includes(st)) return;
+  try { if (sessionStorage.getItem("notifPedida") === "1") return; sessionStorage.setItem("notifPedida", "1"); } catch (e) {}
+  if (!$("#overlay").hidden) return;
+  const cab = `<div id="notifSheet" style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🔔</div><h2 class="disp" style="margin:0">Activá las notificaciones</h2>
+    <p class="small" style="margin:0">Así te avisamos <b>el día de tu clase</b> para que no te olvides, y te enterás si hay cambios.</p></div>`;
+  let cuerpo;
+  if (st === "instalar") cuerpo = `<p class="small" style="margin:0"><b>En iPhone hay que instalar la app primero</b> (es gratis y tarda 10 segundos):</p>
+    <ol class="small" style="margin:0;padding-left:18px;line-height:1.7;text-align:left"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b></li></ol>
+    <button class="btn pri" data-pa="cerrar" style="width:100%">Entendido</button>`;
+  else if (st === "bloqueadas") cuerpo = `<p class="small" style="margin:0">Están bloqueadas en tu celu. Entrá a <b>Ajustes</b> del celu → esta app → <b>Notificaciones</b> y activalas.</p>
+    <button class="btn pri" data-pa="cerrar" style="width:100%">Entendido</button>`;
+  else cuerpo = `<button class="btn pri" data-pa="notif" style="width:100%;font-size:16px;padding:14px">Activar notificaciones</button>
+    <p class="small muted" style="margin:0;text-align:center">Cuando el celu pregunte, tocá <b>Permitir</b>.</p>
+    <button class="linkish" data-pa="cerrar" style="justify-self:center;font-size:12px;opacity:.7">Ahora no</button>`;
+  openSheet(`${cab}<div style="display:grid;gap:12px">${cuerpo}</div>`);
+}
+
 function iniciarPortal(perfil, u) {
   P.perfil = perfil; P.uid = u.uid;
   document.getElementById("login").hidden = true; document.getElementById("portal").hidden = false;
@@ -13,6 +32,7 @@ function iniciarPortal(perfil, u) {
   renderPortal();
   fdb.doc("alumnos/" + id).onSnapshot(d => { P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
   refrescarNotif({ rol: "alumno", alumnoId: id });
+  setTimeout(pedirNotifAlEntrar, 700);
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
   fdb.collection("cupos").where("fecha", ">=", hoyISO).onSnapshot(s => { P.cupos = {}; s.docs.forEach(d => P.cupos[d.id] = d.data()); pr(); }, () => {});
@@ -207,7 +227,7 @@ document.addEventListener("click", async e => {
     return;
   }
   if (pa === "varias") { abrirVarias(); return; }
-  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.a.id }); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } renderPortal(); return; }
+  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.perfil.alumnoId }); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {
