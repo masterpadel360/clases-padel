@@ -131,7 +131,7 @@ function claseHTML(c, marcas) { const d = isoDate(c.fecha); const pasada = inici
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
           ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}</div>
         ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }
-function marcasDe(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
+function marcasAl(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
 
 function vInicio(a, wa) {
   const rg = rangoMes(); const cl = misClases(0, rg); const prox = misClases(70).find(c => !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now());
@@ -177,7 +177,7 @@ function vInicio(a, wa) {
 function vAusencias(a, wa) {
   const asis = misAsistencias(); const mes = mesKey(now);
   const vino = asis.filter(x => x.fecha.startsWith(mes) && (x.estado === "vino" || x.estado === "recuperando")).length;
-  const prox = misClases(21).filter(c => inicioDe(c.fecha, c.hora).getTime() > Date.now()); const marcas = marcasDe(a);
+  const prox = misClases(21).filter(c => inicioDe(c.fecha, c.hora).getTime() > Date.now()); const marcas = marcasAl(a);
   return `
   <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>¿No podés venir a una clase?</h3></div>
     ${prox.length ? `<div class="list">${prox.map(c => claseHTML(c, marcas)).join("")}</div>` : `<div class="empty">No tenés clases en las próximas 3 semanas.</div>`}

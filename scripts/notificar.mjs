@@ -2,8 +2,9 @@
 // 1) Le avisa a Gabriel cuando un alumno cancela, reserva o vuelve a su clase (respaldo del aviso al instante).
 // 2) Ordena las clases para recuperar por vencimiento y borra las vencidas.
 // 3) Al alumno: recordatorio el día antes y 3 horas antes, avisos de lugar para recuperar y de vencimiento.
+// 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
 import admin from "firebase-admin";
-import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm } from "./logica.mjs";
+import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm, clubH } from "./logica.mjs";
 
 if (!process.env.FIREBASE_SA) { console.log("Falta el secreto FIREBASE_SA: no se envía nada."); process.exit(0); }
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SA)) });
@@ -166,5 +167,35 @@ if (alumnosConApp.length) {
     await mandar(idHoy, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, hoy hay lugar a las ${lista} en ${clubs.join(" y ")}. Recuperá antes del ${diaDM(vences[0])}: reservá en la app.`, tag: "recuperar" });
   }
   console.log(`Avisos a alumnos: ${enviados}`);
+}
+
+/* ---------- 4) Recordatorio al profe de Jump: lo que le falta cargar ---------- */
+{
+  const INICIO_PROFE = "2026-10-07";
+  const profes = Object.entries(tokens).filter(([, t]) => t.rol === "profe" && t.tokens && t.tokens.length).map(([uid]) => uid);
+  const horaAR = ar.getUTCHours(), minAR = ar.getUTCMinutes();
+  // A la noche (desde las 21:30) revisa hoy; a la mañana (desde las 10) revisa ayer.
+  const revisar = [];
+  if (horaAR > 21 || (horaAR === 21 && minAR >= 30)) revisar.push({ f: hoy, id: "noche", cuando: "hoy" });
+  if (horaAR >= 10 && horaAR < 20) revisar.push({ f: sumarDias(hoy, -1), id: "manana", cuando: "ayer" });
+  if (profes.length && revisar.length) {
+    let alumnos = null;
+    for (const uid of profes) for (const r of revisar) {
+      if (r.f < INICIO_PROFE) continue;
+      const ref = db.doc(`recordatorios/profe_${uid}_${r.f}_${r.id}`); if ((await ref.get()).exists) continue;
+      if (!alumnos) alumnos = (await db.collection("alumnos").get()).docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.activo !== false);
+      const dow = diaSemana(r.f); const turnos = {};
+      alumnos.forEach(a => (a.horarios || []).forEach(h => { if (h.dia === dow && clubH(a, h) === "JUMP") (turnos[h.hora] = turnos[h.hora] || []).push(a.id); }));
+      const horas = Object.keys(turnos).sort(); if (!horas.length) continue;
+      const marcas = ((await db.doc(`asistencia/${r.f}_JUMP`).get()).data() || {}).marcas || {};
+      const sinAsist = horas.filter(h => turnos[h].some(id => !marcas[`${id}|${h}`]));
+      const sinHoras = !((((await db.doc("horas/" + uid).get()).data() || {}).dias || {})[r.f]);
+      if (!sinAsist.length && !sinHoras) { await ref.set({ enviado: admin.firestore.FieldValue.serverTimestamp(), nada: true }); continue; }
+      const falta = [sinAsist.length ? `la asistencia de ${sinAsist.length > 1 ? sinAsist.slice(0, -1).join(", ") + " y " + sinAsist[sinAsist.length - 1] : sinAsist[0]}` : "", sinHoras ? "las horas" : ""].filter(Boolean).join(" y ");
+      const ok = await enviar(uid, { title: r.id === "noche" ? "Te falta cargar lo de hoy 📋" : "Te quedó sin cargar lo de ayer 📋", body: `Te falta cargar ${falta} de ${r.cuando}. Hacelo en la app así no se pierde.`, tag: "profe-" + r.f });
+      await ref.set({ enviado: admin.firestore.FieldValue.serverTimestamp(), ok });
+      console.log(`Recordatorio al profe (${r.cuando}): ${falta}`);
+    }
+  }
 }
 console.log("Listo");
