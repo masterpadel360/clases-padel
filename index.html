@@ -296,10 +296,34 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
-<script src="config.js?v=20261009d"></script>
-<script src="app.js?v=20261009d"></script>
-<script src="staff-extra.js?v=20261009d"></script>
-<script src="alumno.js?v=20261009d"></script>
-<script src="firebase.js?v=20261009d"></script>
+<script>
+/* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
+window.APP_V = "20261009e";
+(function () {
+  let avisado = false;
+  function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
+  async function revisar(alAbrir) {
+    try {
+      const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return;
+      const nv = (await r.json()).v; if (!nv || nv === window.APP_V) return;
+      const ocupado = !document.getElementById("overlay") || !document.getElementById("overlay").hidden;
+      if (alAbrir && !ocupado) { recargar(nv); return; }
+      if (avisado) return; avisado = true;
+      const b = document.createElement("button");
+      b.textContent = "Hay una versión nueva · Tocá para actualizar";
+      b.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 10px);z-index:99;border:0;border-radius:999px;padding:10px 16px;font:600 13px system-ui,sans-serif;background:#1e1712;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.35)";
+      b.onclick = () => recargar(nv); document.body.appendChild(b);
+    } catch (e) {}
+  }
+  window.addEventListener("load", () => revisar(true));
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") revisar(true); });
+  setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
+})();
+</script>
+<script src="config.js?v=20261009e"></script>
+<script src="app.js?v=20261009e"></script>
+<script src="staff-extra.js?v=20261009e"></script>
+<script src="alumno.js?v=20261009e"></script>
+<script src="firebase.js?v=20261009e"></script>
 </body>
 </html>
