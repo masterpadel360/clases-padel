@@ -1,5 +1,5 @@
 /* ---------- App del alumno ---------- */
-const P = { perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], cargado: false, ocupado: false };
+const P = { tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], cargado: false, ocupado: false };
 const DIA_MS = 86400000;
 const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
 const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
@@ -57,7 +57,7 @@ function misClases(dias = 14, rango = null) {
   const n = rango ? Math.round((rango.hasta - rango.desde) / DIA_MS) + 1 : dias;
   for (let i = 0; i < n; i++) {
     const d = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i); const f = toISO(d);
-    (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: a.club, nivel: h.nivel || a.categoria || "", tipo: "fija" }));
+    (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: clubH(a, h), nivel: h.nivel || a.categoria || "", tipo: "fija" }));
   }
   P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= toISO(ini) && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
   return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte)
@@ -71,15 +71,18 @@ function libresDe(club, fecha, hora) {
   const c = P.cupos[cupoId(club, fecha, hora)] || {}; const cupo = P.info.cupo || CUPO;
   return cupo - (t.n || 0) + (c.aus || 0) - (c.rec || 0);
 }
+// Clases para recuperar del alumno, con hasta cuándo valen (incluye las que acaba de avisar).
+function recAl() { return P.a ? recBuckets(P.a) : []; }
 function opcionesRec() {
   const a = P.a; if (!a) return [];
-  const mios = new Set((a.horarios || []).map(h => `${h.dia}|${h.hora}`)); const cats = catsDe(a);
+  const bk = recAl(); if (!bk.length) return []; const hasta = bk[bk.length - 1].vence;
+  const mios = new Set((a.horarios || []).map(h => `${clubH(a, h)}|${h.dia}|${h.hora}`)); const cats = catsDe(a); const cl = clubsDe(a);
   const limite = Date.now() + 30 * 60 * 1000; const out = [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d);
+  for (let i = 0; i < 40; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d); if (f > hasta) break;
     Object.entries(P.turnos).forEach(([k, t]) => {
       const [club, dia, hora] = k.split("|");
-      if (club !== a.club || Number(dia) !== d.getDay() || mios.has(`${dia}|${hora}`)) return;
+      if (!cl.has(club) || Number(dia) !== d.getDay() || mios.has(`${club}|${dia}|${hora}`)) return;
       if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
       if (inicioDe(f, hora).getTime() < limite) return;
       if (P.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
@@ -100,66 +103,104 @@ function mesesPago() {
   return [...set].sort().reverse();
 }
 
-/* ---- Vista ---- */
+/* ---- Vista: tres pestañas (Inicio · Ausencias · Pagos) ---- */
 const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"] };
+const P_TABS = [
+  ["inicio", "Inicio", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M5 9c4 2 10 2 14 0M5 15c4-2 10-2 14 0"/></svg>'],
+  ["ausencias", "Ausencias", '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M10 13l4 4M14 13l-4 4"/></svg>'],
+  ["pagos", "Pagos", '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>']];
+function renderPTabs() {
+  const nav = $("#pTabs"); if (!nav) return; nav.hidden = !P.a;
+  nav.innerHTML = P_TABS.map(([k, l, i]) => `<button class="tab" role="tab" data-pa="ptab" data-t="${k}" aria-selected="${P.tab === k}">${i}${l}</button>`).join("");
+}
 function renderPortal() {
   const v = $("#pView"); if (!v) return;
   const a = P.a;
   $("#pHola").textContent = a ? `Hola, ${nombreCorto(a.nombre)}` : "";
+  renderPTabs();
   if (!P.cargado) { v.innerHTML = `<p class="small" style="color:var(--paper);margin:16px 0">Cargando tus clases…</p>`; return; }
   if (!a) { v.innerHTML = `<div class="notice">No encontramos tu ficha de alumno. Escribile a Gabriel.</div>`; return; }
-  const rg = rangoMes(); const cl = misClases(0, rg); const prox = misClases(70).find(c => !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now()); const rec = a.recuperar || 0;
+  const tel = P.info.telGabriel; const wa = tel ? waURL(tel, `Hola Gabi! Soy ${a.nombre}.`) : "";
+  v.innerHTML = P.tab === "ausencias" ? vAusencias(a, wa) : P.tab === "pagos" ? vPagos(a, wa) : vInicio(a, wa);
+}
+const clubTxt = c => c === "ESPACIO" ? "Espacio" : "Jump";
+
+function vInicio(a, wa) {
+  const rg = rangoMes(); const cl = misClases(0, rg); const prox = misClases(70).find(c => !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now());
+  const bk = recAl(); const rec = bk.reduce((s, x) => s + x.n, 0);
   const marcas = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) marcas[`${x.fecha}|${hora}`] = x.marcas[k]; }));
   const mesesCl = [...new Set(cl.map(c => c.fecha.slice(0, 7)))];
   const mes = mesKey(now); const pagoMes = (a.pagos || {})[mes] || {}; const montoAct = montoMes(a, mes);
-  const ops = rec > 0 ? opcionesRec() : []; const asis = misAsistencias();
-  const asisMes = asis.filter(x => x.fecha.startsWith(mes)); const vino = asisMes.filter(x => x.estado === "vino" || x.estado === "recuperando").length;
-  const tel = P.info.telGabriel; const wa = tel ? waURL(tel, `Hola Gabi! Soy ${a.nombre}.`) : "";
-  v.innerHTML = `
+  const ops = rec > 0 ? opcionesRec() : [];
+  const vino = misAsistencias().filter(x => x.fecha.startsWith(mes) && (x.estado === "vino" || x.estado === "recuperando")).length;
+  return `
   <section class="hero" aria-label="Tu resumen"><span class="hero-glow" aria-hidden="true"></span>
     <span class="pill-date" style="justify-self:start">${prox ? "Tu próxima clase" : "Sin clases próximas"}</span>
-    ${prox ? `<div class="hero-main"><div class="mega num" style="font-size:clamp(64px,22vw,104px)">${prox.hora}</div><div class="spec"><span class="spec-k">${prox.tipo === "recupera" ? "Recuperación" : "Clase"}</span><span style="font-weight:800">${fechaRel(prox.fecha)}</span><span class="small muted" style="text-transform:capitalize">${prox.club === "ESPACIO" ? "Espacio" : "Jump"}${prox.nivel ? " · " + esc(prox.nivel) : ""}</span></div></div>` : ""}
+    ${prox ? `<div class="hero-main"><div class="mega num" style="font-size:clamp(64px,22vw,104px)">${prox.hora}</div><div class="spec"><span class="spec-k">${prox.tipo === "recupera" ? "Recuperación" : "Clase"}</span><span style="font-weight:800">${fechaRel(prox.fecha)}</span><span class="small muted" style="text-transform:capitalize">${clubTxt(prox.club)}${prox.nivel ? " · " + esc(prox.nivel) : ""}</span></div></div>` : ""}
     <div class="hero-stats">
-      <div class="stat"><div class="val num">${rec}</div><div class="lbl">Para recuperar</div></div>
+      <button class="stat" data-pa="irRec" style="background:none;border:0;padding:0;text-align:left;color:inherit"><div class="val num" style="${rec ? "color:var(--sun)" : ""}">${rec}</div><div class="lbl">Para recuperar${rec ? " ›" : ""}</div></button>
       <div class="stat"><div class="val num" style="font-size:24px;color:${pagoMes.pagado ? "var(--ok)" : "var(--sun)"}">${pagoMes.pagado ? "Pagado" : montoAct ? money(montoAct).replace("$ ", "$") : "—"}</div><div class="lbl">${pagoMes.pagado ? mesSolo(mes) : "A pagar " + mesSolo(mes)}</div></div>
       <div class="stat"><div class="val num">${vino}</div><div class="lbl">Clases en ${mesSolo(mes)}</div></div>
     </div>
   </section>
   ${tarjetaNotif("alumno")}
 
+  <section class="sec" id="secRec"><div class="sec-head"><h3>Recuperar</h3>${rec ? `<span class="small muted">${rec} clase${rec > 1 ? "s" : ""}</span>` : ""}</div>
+    ${rec ? `<div class="list rec-box">
+      <div class="rec-top"><div class="big-num num">${rec}</div><div style="display:grid;gap:2px"><b>${rec === 1 ? "clase para recuperar" : "clases para recuperar"}</b>
+        ${bk.map(x => `<span class="small">${bk.length > 1 ? `${x.n} ` : ""}${bk.length > 1 ? "hasta el" : "Tenés tiempo hasta el"} <b style="color:var(--warn)">${DIAS_LARGO[isoDate(x.vence).getDay()].toLowerCase()} ${fechaDM(x.vence)}</b></span>`).join("")}</div></div>
+      <p class="small" style="margin:0;line-height:1.5"><b>Las clases se recuperan dentro del mes.</b> Si faltás la última semana, tenés hasta el 7 del mes siguiente. Si no la recuperás a tiempo, <b>se pierde</b>.</p>
+    </div>
+    ${ops.length ? `<div class="list">${ops.slice(0, 12).map(o => `<div class="row"><span class="main"><span class="name">${fechaRel(o.fecha)} · ${o.hora}</span><span class="meta">${o.fecha === hoyISO || fechaRel(o.fecha) === "Mañana" ? `${DIAS_LARGO[o.dia]} ${isoDate(o.fecha).getDate()} · ` : ""}${clubsDe(a).size > 1 ? clubTxt(o.club) + " · " : ""}${esc(o.nivel || "")} · <span class="free">${o.libres} lugar${o.libres > 1 ? "es" : ""}</span></span></span><button class="mini go" data-pa="reservar" data-f="${o.fecha}" data-h="${o.hora}" data-c="${o.club}">Reservar</button></div>`).join("")}</div>`
+      : `<div class="empty">Por ahora no hay lugares libres de tu categoría antes de que venzan. Te avisamos cuando se libere uno. ${wa ? `<a class="wa-link" href="${wa}" target="_blank" rel="noopener">Escribile a Gabriel</a>` : ""}</div>`}`
+    : `<div class="empty">No tenés clases para recuperar.</div>`}
+  </section>
+
   ${mesesCl.map((mk, mi) => { const cm = cl.filter(c => c.fecha.startsWith(mk)); return `
   <section class="sec"><div class="sec-head"><h3>Tus clases de ${mesSolo(mk)}</h3><span class="small muted">${cm.length} clase${cm.length === 1 ? "" : "s"}</span></div>
     ${cm.length ? `<div class="list">${cm.map(c => { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now(); const est = marcas[`${c.fecha}|${c.hora}`]; const e = est && EST_AL[est];
       return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center;${pasada ? "opacity:.6" : ""}"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
         <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
-          <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${c.club === "ESPACIO" ? "Espacio" : "Jump"}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
+          <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
           ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}</div>
         ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
       : `<div class="empty">No tenés clases este mes.</div>`}
     ${mi === mesesCl.length - 1 ? `<p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-pa="varias">Avisar varias fechas (viaje, trabajo…)</button><button class="mini" data-pa="calendario">Recordatorios en mi calendario</button></div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-pa="ptab" data-t="ausencias">¿Te vas de viaje? Avisá acá</button><button class="mini" data-pa="calendario">Recordatorios en mi calendario</button></div>` : ""}
   </section>`; }).join("")}
-  ${avisadasHTML(wa)}
+  ${wa ? `<a class="cta wa" href="${wa}" target="_blank" rel="noopener" style="margin-top:22px;justify-self:start">Escribirle a Gabriel <i>→</i></a>` : ""}`;
+}
 
-  <section class="sec"><div class="sec-head"><h3>Recuperar</h3>${rec ? `<span class="small muted">${rec} clase${rec > 1 ? "s" : ""}</span>` : ""}</div>
-    ${!rec ? `<div class="empty">No tenés clases para recuperar.</div>`
-      : ops.length ? `<div class="list">${ops.slice(0, 12).map(o => `<div class="row"><span class="main"><span class="name">${fechaRel(o.fecha)} · ${o.hora}</span><span class="meta">${o.fecha === hoyISO || fechaRel(o.fecha) === "Mañana" ? `${DIAS_LARGO[o.dia]} ${isoDate(o.fecha).getDate()} · ` : ""}${esc(o.nivel || "")} · <span class="free">${o.libres} lugar${o.libres > 1 ? "es" : ""}</span></span></span><button class="mini go" data-pa="reservar" data-f="${o.fecha}" data-h="${o.hora}">Reservar</button></div>`).join("")}</div>`
-      : `<div class="empty">Por ahora no hay lugares libres de tu categoría en las próximas dos semanas. ${wa ? `<a class="wa-link" href="${wa}" target="_blank" rel="noopener">Escribile a Gabriel</a>` : "Consultale a Gabriel."}</div>`}
+function vAusencias(a, wa) {
+  const asis = misAsistencias(); const mes = mesKey(now);
+  const vino = asis.filter(x => x.fecha.startsWith(mes) && (x.estado === "vino" || x.estado === "recuperando")).length;
+  return `
+  <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Ausencias programadas</h3></div>
+    <div class="list" style="padding:16px;display:grid;gap:12px">
+      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">✈️</span><div style="display:grid;gap:2px"><b>¿Te vas de viaje o no podés venir por un tiempo?</b><span class="small muted">Elegí desde y hasta qué día y avisamos todas tus clases de una vez.</span></div></div>
+      <button class="btn pri" data-pa="viaje" style="width:100%">Me voy de viaje</button>
+      <button class="linkish" data-pa="varias" style="justify-self:center">Prefiero elegir clase por clase</button>
+    </div>
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Las que avisás con <b>24 horas o más</b> te quedan para recuperar, dentro del mes de cada clase.</p>
   </section>
+  ${avisadasHTML(wa) || `<section class="sec"><div class="sec-head"><h3>Avisaste que no venís</h3></div><div class="empty">No tenés ausencias avisadas.</div></section>`}
+  <section class="sec"><div class="sec-head"><h3>Tu asistencia</h3><span class="small muted">${vino} en ${mesSolo(mes)}</span></div>
+    ${asis.length ? `<div class="list">${asis.slice(0, 20).map(x => { const d = isoDate(x.fecha); const e = EST_AL[x.estado] || [x.estado, "var(--muted)"];
+      return `<div class="row"><span class="name">${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${x.hora}</span><span class="small" style="font-weight:800;color:${e[1]}">${e[0]}</span></div>`; }).join("")}</div>`
+      : `<div class="empty">Todavía no hay asistencias cargadas.</div>`}
+  </section>`;
+}
 
-  <section class="sec"><div class="sec-head"><h3>Pagos</h3></div>
+function vPagos(a, wa) {
+  const mes = mesKey(now); const pagoMes = (a.pagos || {})[mes] || {};
+  return `
+  <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Pagos</h3></div>
     <div class="list">${mesesPago().map(m => { const p = (a.pagos || {})[m] || {}; const n = clasesMes(a, m); const tot = montoMes(a, m); const aj = ajusteDe(a, m) !== null; const ex = extraDias(a, m).length;
       return `<div class="row"><span class="main"><span class="name" style="text-transform:capitalize">${mesLbl(m)}</span><span class="meta">${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases x ${money(a.precioClase)}${ex ? " · incluye clase extra" : ""}`}</span></span>
         <span style="display:grid;justify-items:end;gap:2px"><b class="num">${money(tot)}</b><span class="tag" style="background:${p.pagado ? "var(--ok-soft)" : "var(--warn-soft)"};color:${p.pagado ? "var(--ok)" : "var(--warn)"}">${p.pagado ? "PAGADO" : "PENDIENTE"}</span></span></div>`; }).join("")}</div>
     ${P.info.alias && !pagoMes.pagado ? `<div class="msg" style="gap:8px"><span class="small">Podés transferir al alias <b>${esc(P.info.alias)}</b></span><button class="mini" data-pa="alias" style="justify-self:start">Copiar alias</button></div>` : ""}
   </section>
-
-  <section class="sec"><div class="sec-head"><h3>Tu asistencia</h3><span class="small muted">${vino} en ${mesSolo(mes)}</span></div>
-    ${asis.length ? `<div class="list">${asis.slice(0, 20).map(x => { const d = isoDate(x.fecha); const e = EST_AL[x.estado] || [x.estado, "var(--muted)"];
-      return `<div class="row"><span class="name">${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${x.hora}</span><span class="small" style="font-weight:800;color:${e[1]}">${e[0]}</span></div>`; }).join("")}</div>`
-      : `<div class="empty">Todavía no hay asistencias cargadas.</div>`}
-  </section>
-  ${wa ? `<a class="cta wa" href="${wa}" target="_blank" rel="noopener" style="margin-top:22px;justify-self:start">Escribirle a Gabriel <i>→</i></a>` : ""}`;
+  ${wa ? `<a class="cta wa" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Te paso el comprobante de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener" style="margin-top:22px;justify-self:start">Mandar comprobante <i>→</i></a>` : ""}`;
 }
 
 /* ---- Acciones ---- */
@@ -171,31 +212,32 @@ function confirmar(titulo, texto, boton, accion) {
 }
 async function avisarNoVoy(fecha, hora, tipo) {
   const a = P.a; const ini = inicioDe(fecha, hora); const con = tipo === "fija" && ini.getTime() - Date.now() >= DIA_MS;
-  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || a.club) : a.club;
-  const cid = cupoId(club, fecha, hora); const d = isoDate(fecha);
+  const d = isoDate(fecha); const hFija = (a.horarios || []).find(x => x.dia === d.getDay() && x.hora === hora);
+  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
+  const cid = cupoId(club, fecha, hora);
   await fdb.runTransaction(async tx => {
     const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId);
     if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
     const [aS, cS] = [await tx.get(aRef), await tx.get(cRef)];
     const c = cS.exists ? cS.data() : {};
-    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: con, inicio: firebase.firestore.Timestamp.fromDate(ini), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false });
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: con, inicio: firebase.firestore.Timestamp.fromDate(ini), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: avId });
     if (con) tx.update(aRef, { recuperar: ((aS.data() || {}).recuperar || 0) + 1, ultimoAviso: avId });
   });
   return con;
 }
-async function reservarRec(fecha, hora) {
-  const a = P.a; const d = isoDate(fecha); const t = P.turnos[`${a.club}|${d.getDay()}|${hora}`] || {};
-  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(a.club, fecha, hora); const cupo = P.info.cupo || CUPO;
+async function reservarRec(fecha, hora, clubElegido) {
+  const a = P.a; const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
+  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(club, fecha, hora); const cupo = P.info.cupo || CUPO;
   await fdb.runTransaction(async tx => {
     const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId), tRef = fdb.doc("publico/turnos");
     if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
     const [aS, cS, tS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(tRef)];
     const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
-    const base = ((tS.data() || {}).t || {})[`${a.club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
+    const base = ((tS.data() || {}).t || {})[`${club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
     if (!base || cupo - base.n + (c.aus || 0) - (c.rec || 0) < 1) throw { code: "lleno" };
-    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club: a.club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false });
-    tx.set(cRef, { club: a.club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId });
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
+    tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId });
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   });
 }
@@ -216,27 +258,31 @@ document.addEventListener("click", async e => {
         : '<b style="color:var(--warn)">Faltan menos de 24 horas: si no venís, esta clase se pierde y no se recupera.</b> Podés avisar igual.',
       con ? "Avisar que no voy" : "Avisar igual", async () => {
         const r = await avisarNoVoy(f, h, t);
-        return { titulo: "Listo, avisado", texto: r ? "Te quedó una clase para recuperar. Podés reservarla en <b>Recuperar</b>." : "Quedó registrado que no venís.",
+        return { titulo: "Listo, avisado", texto: r ? `Te quedó una clase para recuperar <b>hasta el ${fechaDM(venceDe(f))}</b>. Reservala en <b>Inicio</b>, donde dice <b>Recuperar</b>.` : "Quedó registrado que no venís.",
           msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. No voy a ir ${cuando}${r ? ". Avisé por la app, me queda para recuperar." : ". Avisé por la app."}` };
       });
     return;
   }
   if (pa === "reservar") {
-    const { f, h } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
+    const { f, h, c } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     confirmar(`¿Recuperás ${cuando}?`, "Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.", "Reservar", async () => {
-      await reservarRec(f, h);
+      await reservarRec(f, h, c);
       return { titulo: "¡Reservado!", texto: `Te esperamos ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}.` };
     });
     return;
   }
   if (pa === "varias") { abrirVarias(); return; }
+  if (pa === "irRec") { const el = document.getElementById("secRec"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (pa === "ptab") { P.tab = b.dataset.t; renderPortal(); scrollTo(0, 0); return; }
+  if (pa === "viaje") { abrirViaje(); return; }
+  if (pa === "viajeOk") { const sel = clasesViaje().map(c => ({ f: c.fecha, h: c.hora })); if (!sel.length) return; await avisarLista(b, sel); return; }
   if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.perfil.alumnoId }); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {
-    const { f, h } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
+    const { f, h, c } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     confirmar(`¿Al final venís ${cuando}?`, '<b style="color:var(--warn)">Ojo: esto se puede hacer una sola vez.</b> Volvés a tu lugar, se te descuenta la clase para recuperar que te había quedado, y <b>ya no vas a poder avisar que no venís a esta clase</b>: si después faltás, la perdés.', "Sí, voy", async () => {
-      try { await reservarRec(f, h); } catch (x) { if (x && x.code === "lleno") throw { code: "ocupado" }; throw x; }
+      try { await reservarRec(f, h, c); } catch (x) { if (x && x.code === "lleno") throw { code: "ocupado" }; throw x; }
       return { titulo: "¡Listo, te esperamos!", texto: `Volviste a tu clase ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Al final sí voy ${cuando}. Lo cambié en la app.` };
     });
     return;
@@ -265,7 +311,7 @@ function avisadasHTML(wa) {
       const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (P.a.recuperar || 0) >= 1;
       const puede = v.conRecupero && a24 && lugar && tiene;
       const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona: hablá con Gabriel" : !tiene ? "Ya usaste esa clase para recuperar" : "";
-      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : '<span class="due">Avisaste tarde: no se recupera</span>'}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
+      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : '<span class="due">Avisaste tarde: no se recupera</span>'}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
     <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Podés volver atrás <b>una sola vez</b>, hasta 24 horas antes y si tu lugar sigue libre. Después ya no se puede cambiar. ¿Otro caso? ${wa ? `<a class="wa-link" style="color:#8EE6A8" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${P.a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a> y lo corrige.` : "Avisale a Gabriel y lo corrige."}</p>
   </section>`;
 }
@@ -282,6 +328,9 @@ function abrirVarias() {
 async function confirmarVarias(b) {
   const sel = [...document.querySelectorAll(".chkVar:checked")].map(x => ({ f: x.dataset.f, h: x.dataset.h }));
   if (!sel.length) { $("#pErr").textContent = "Marcá al menos una clase."; return; }
+  await avisarLista(b, sel);
+}
+async function avisarLista(b, sel) {
   if (P.ocupado) return; P.ocupado = true; b.disabled = true; b.textContent = "Avisando…";
   const ok = []; let rec = 0, fallo = 0;
   for (const c of sel) { try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); fallo++; } }
@@ -298,10 +347,10 @@ async function confirmarVarias(b) {
 function descargarCalendario() {
   const a = P.a; if (!a) return;
   const p2 = n => String(n).padStart(2, "0");
-  const lugar = a.club === "ESPACIO" ? "Espacio La 10" : "Jump";
   const DIAS_ICS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
   const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
   const ev = (a.horarios || []).map((h, i) => {
+    const lugar = clubH(a, h) === "ESPACIO" ? "Espacio La 10" : "Jump";
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); while (d.getDay() !== h.dia) d.setDate(d.getDate() + 1);
     const [hh, mm] = h.hora.split(":").map(Number); const ini = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(hh)}${p2(mm)}00`;
     const fin = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(Math.min(hh + 1, 23))}${p2(hh + 1 > 23 ? 59 : mm)}00`;
@@ -319,3 +368,30 @@ function abrirCalendario() {
     <p class="small muted" style="margin:0">Al tocar el botón, el celu te pregunta si querés agregarlas: tocá <b>Agregar todo</b>. Si cambiás de horario, volvé a hacerlo.</p></div>
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="calOk">Agregar al calendario</button></span></div>`);
 }
+
+/* ---- Me voy de viaje: avisa todas las clases entre dos fechas ---- */
+function abrirViaje() {
+  const man = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const d1 = toISO(man), d2 = toISO(new Date(man.getFullYear(), man.getMonth(), man.getDate() + 6));
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Me voy de viaje</h2><span class="small muted">Elegí desde y hasta qué día no venís. Avisamos todas tus clases de esas fechas.</span></div>
+    <div class="two"><div class="field"><label for="vjD">Desde</label><input id="vjD" type="date" min="${hoyISO}" value="${d1}"></div><div class="field"><label for="vjH">Hasta</label><input id="vjH" type="date" min="${hoyISO}" value="${d2}"></div></div>
+    <div id="vjPrev" style="display:grid;gap:8px"></div>
+    <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
+    <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="viajeOk" id="vjBtn">Avisar</button></span></div>`);
+  viajePrev();
+}
+function clasesViaje() {
+  const d = ($("#vjD") || {}).value, h = ($("#vjH") || {}).value; if (!d || !h || h < d) return [];
+  return misClases(130).filter(c => c.tipo === "fija" && !c.aus && !c.vuelve && c.fecha >= d && c.fecha <= h && inicioDe(c.fecha, c.hora).getTime() > Date.now());
+}
+function viajePrev() {
+  const el = $("#vjPrev"), btn = $("#vjBtn"); if (!el || !btn) return;
+  const d = $("#vjD").value, h = $("#vjH").value;
+  if (d && h && h < d) { el.innerHTML = '<span class="small due">La fecha "hasta" tiene que ser igual o posterior a "desde".</span>'; btn.disabled = true; btn.textContent = "Avisar"; return; }
+  const cl = clasesViaje(); const con = cl.filter(c => inicioDe(c.fecha, c.hora).getTime() - Date.now() >= DIA_MS).length; const sin = cl.length - con;
+  btn.disabled = !cl.length; btn.textContent = cl.length ? `Avisar ${cl.length} clase${cl.length === 1 ? "" : "s"}` : "Avisar";
+  el.innerHTML = cl.length ? `<div class="list" style="max-height:38vh;overflow:auto">${cl.map(c => { const dd = isoDate(c.fecha); return `<div class="row"><span class="name">${DIAS_LARGO[dd.getDay()]} ${dd.getDate()}/${dd.getMonth() + 1} · ${c.hora}</span><span class="small muted">${clubTxt(c.club)}</span></div>`; }).join("")}</div>
+    <p class="small" style="margin:0">${con ? `<b>${con}</b> te ${con === 1 ? "queda" : "quedan"} para recuperar, dentro del mes de cada clase.` : ""}${sin ? ` <span class="due">${sin} con menos de 24 h: no se recupera${sin > 1 ? "n" : ""}.</span>` : ""}</p>`
+    : '<div class="empty">No tenés clases en esas fechas.</div>';
+}
+["input", "change"].forEach(ev => document.addEventListener(ev, e => { if (!window.MODO_STAFF && e.target && (e.target.id === "vjD" || e.target.id === "vjH")) viajePrev(); }));

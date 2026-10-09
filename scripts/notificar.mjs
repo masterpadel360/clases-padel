@@ -1,7 +1,9 @@
 // Corre cada 10 minutos en GitHub Actions.
-// 1) Le avisa a Gabriel cuando un alumno cancela, reserva o vuelve a su clase.
-// 2) Le recuerda al alumno su clase de hoy, 3 horas antes.
+// 1) Le avisa a Gabriel cuando un alumno cancela, reserva o vuelve a su clase (respaldo del aviso al instante).
+// 2) Ordena las clases para recuperar por vencimiento y borra las vencidas.
+// 3) Al alumno: recordatorio el día antes y 3 horas antes, avisos de lugar para recuperar y de vencimiento.
 import admin from "firebase-admin";
+import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm } from "./logica.mjs";
 
 if (!process.env.FIREBASE_SA) { console.log("Falta el secreto FIREBASE_SA: no se envía nada."); process.exit(0); }
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SA)) });
@@ -66,28 +68,103 @@ if (nuevos.length) {
   console.log(`Avisos notificados: ${nuevos.length}`);
 }
 
-/* ---------- 2) Recordatorio 3 horas antes ---------- */
+/* ---------- 2) Clases para recuperar: cada una con su vencimiento ---------- */
+const fechaDM = f => { const [, m, d] = f.split("-").map(Number); return `${d}/${m}`; };
+const diaDM = f => `${DIAS[diaSemana(f)]} ${fechaDM(f)}`;
+// a) Faltas y reservas nuevas desde la app: ubicar cada falta en su mes.
+{
+  const sinContar = (await db.collection("avisos").where("contado", "==", false).get()).docs;
+  const porAl = {}; sinContar.forEach(d => { const v = d.data(); (porAl[v.alumnoId] = porAl[v.alumnoId] || []).push(d); });
+  for (const [aid, docs] of Object.entries(porAl)) {
+    try {
+      await db.runTransaction(async tx => {
+        const aRef = db.doc("alumnos/" + aid); const aS = await tx.get(aRef); if (!aS.exists) return;
+        const pend = [], marcar = [];
+        for (const d of docs) { const s = await tx.get(d.ref); if (!s.exists || s.data().contado !== false) continue; marcar.push(d.ref);
+          const v = s.data(); if (v.tipo !== "ausencia" || !v.conRecupero) continue;
+          const vuelta = await tx.get(db.doc(`avisos/${aid}_${v.fecha}_${v.hhmm}_recupera`)); if (!vuelta.exists) pend.push(v.fecha); }
+        const n = normalizar(aS.data(), hoy, pend);
+        if (!igualRec(aS.data(), n)) tx.update(aRef, n);
+        marcar.forEach(r => tx.update(r, { contado: true }));
+      });
+    } catch (e) { console.log("No se pudo ordenar", aid, e.message); }
+  }
+  if (sinContar.length) console.log(`Avisos ubicados por vencimiento: ${sinContar.length}`);
+}
+// b) Una vez por hora: vencer las que pasaron de fecha y ordenar las que no tenían fecha.
+{
+  const estRef = db.doc("recordatorios/_estado"); const est = (await estRef.get()).data() || {};
+  if (!est.repaso || ahora.getTime() - est.repaso.toMillis() > 55 * 60e3) {
+    const conRec = (await db.collection("alumnos").where("recuperar", ">", 0).get()).docs;
+    let cambios = 0, vencidas = 0;
+    for (const d of conRec) {
+      try {
+        await db.runTransaction(async tx => { const s = await tx.get(d.ref); const a = s.data(); const n = normalizar(a, hoy);
+          if (!igualRec(a, n)) { vencidas += Math.max(0, (a.recuperar || 0) - n.recuperar); cambios++; tx.update(d.ref, n); } });
+      } catch (e) { console.log("Repaso", d.id, e.message); }
+    }
+    await estRef.set({ repaso: admin.firestore.Timestamp.fromDate(ahora) }, { merge: true });
+    console.log(`Repaso de recuperaciones: ${cambios} alumnos ordenados, ${vencidas} clases vencidas`);
+  }
+}
+
+/* ---------- 3) Avisos para los alumnos ---------- */
 const alumnosConApp = Object.entries(tokens).filter(([, t]) => t.rol === "alumno" && t.alumnoId && t.tokens && t.tokens.length);
 if (alumnosConApp.length) {
-  const avisosHoy = (await db.collection("avisos").where("fecha", "==", hoy).get()).docs.map(d => d.data());
-  const diaHoy = ar.getUTCDay(); let enviados = 0;
+  const manana = sumarDias(hoy, 1); const horaAR = ar.getUTCHours();
+  const avisos = (await db.collection("avisos").where("fecha", "in", [hoy, manana]).get()).docs.map(d => d.data());
+  const turnos = ((await db.doc("publico/turnos").get()).data() || {}).t || {};
+  const cupo = ((await db.doc("publico/info").get()).data() || {}).cupo || 4;
+  const cupos = {}; (await db.collection("cupos").where("fecha", "in", [hoy, manana]).get()).docs.forEach(d => { cupos[d.id] = d.data(); });
+  const yaEnviado = async id => (await db.doc("recordatorios/" + id).get()).exists;
+  const marcar = (id, extra = {}) => db.doc("recordatorios/" + id).set({ enviado: admin.firestore.FieldValue.serverTimestamp(), ...extra });
+  const lugarTxt = c => CLUB[c] || c;
+  const lunes = sumarDias(hoy, -((diaSemana(hoy) + 6) % 7));
+  let enviados = 0;
   for (const [uid, t] of alumnosConApp) {
-    const aS = await db.doc("alumnos/" + t.alumnoId).get(); if (!aS.exists) continue; const a = aS.data(); if (a.activo === false) continue;
-    const mios = avisosHoy.filter(v => v.alumnoId === t.alumnoId);
-    const clases = (a.horarios || []).filter(h => h.dia === diaHoy).map(h => ({ hora: h.hora, club: a.club }));
-    mios.filter(v => v.tipo === "recupera" && !clases.some(c => c.hora === v.hora)).forEach(v => clases.push({ hora: v.hora, club: v.club, recupera: true }));
-    for (const c of clases) {
+    const aS = await db.doc("alumnos/" + t.alumnoId).get(); if (!aS.exists) continue;
+    const a = { id: aS.id, ...aS.data() }; if (a.activo === false) continue;
+    const nombre = primerNombre(a.nombre);
+    const rec = normalizar(a, hoy); const nRec = rec.recuperar; const vences = Object.keys(rec.recVence);
+    const mandar = async (id, msg, extra) => { const ok = await enviar(uid, msg); await marcar(id, { ok, ...extra }); enviados++; };
+
+    // El día antes (unas 26 h antes): "mañana tenés clase; si no podés, avisá ahora y la recuperás".
+    for (const f of [hoy, manana]) for (const c of clasesDelDia(a, f, avisos)) {
+      const falta = (inicioDe(f, c.hora) - ahora) / 60000;
+      if (falta <= 1450 || falta > 1620) continue;
+      const id = `${a.id}_${f}_${hhmm(c.hora)}_dia`; if (await yaEnviado(id)) continue;
+      await mandar(id, { title: "Mañana tenés pádel 🎾", body: c.tipo === "recupera"
+        ? `${nombre}, mañana a las ${c.hora} recuperás en ${lugarTxt(c.club)}. Si no venís, la perdés.`
+        : `${nombre}, mañana a las ${c.hora} en ${lugarTxt(c.club)}. Si no podés venir, avisá ahora en la app y la recuperás.`, tag: "dia-antes" });
+    }
+    // El mismo día, 3 horas antes. Si tiene clases para recuperar y hay lugar en la hora siguiente, se lo ofrece.
+    for (const c of clasesDelDia(a, hoy, avisos)) {
       const falta = (inicioDe(hoy, c.hora) - ahora) / 60000;
       if (falta <= 0 || falta > 180) continue;
-      const aus = mios.some(v => v.tipo === "ausencia" && v.hora === c.hora) && !mios.some(v => v.tipo === "recupera" && v.hora === c.hora);
-      if (aus) continue;
-      const ref = db.doc(`recordatorios/${t.alumnoId}_${hoy}_${c.hora.replace(":", "")}`);
-      if ((await ref.get()).exists) continue;
-      const ok = await enviar(uid, { title: "Hoy tenés pádel 🎾", body: `${primerNombre(a.nombre)}, te esperamos a las ${c.hora} en ${CLUB[c.club] || c.club}${c.recupera ? " (recuperación)" : ""}. Si no podés venir, avisá en la app.`, tag: "recordatorio" });
-      await ref.set({ enviado: admin.firestore.FieldValue.serverTimestamp(), ok });
-      enviados++;
+      const id = `${a.id}_${hoy}_${hhmm(c.hora)}`; if (await yaEnviado(id)) continue;
+      let extra = "";
+      const sig = masUnaHora(c.hora); const ts = sig && turnos[`${c.club}|${diaSemana(hoy)}|${sig}`]; const cats = catsDe(a);
+      if (nRec > 0 && ts && (!cats.size || (ts.nivel && cats.has(catNorm(ts.nivel)))) && libres(turnos, cupos, cupo, c.club, hoy, sig) > 0 && !(a.horarios || []).some(h => h.hora === sig && h.dia === diaSemana(hoy)))
+        extra = ` ¿Te quedás? A las ${sig} hay lugar para recuperar una clase: reservalo en la app.`;
+      await mandar(id, { title: "Hoy tenés pádel 🎾", body: `${nombre}, te esperamos a las ${c.hora} en ${lugarTxt(c.club)}${c.tipo === "recupera" ? " (recuperación)" : ""}.${extra}`, tag: "recordatorio" });
     }
+    if (!nRec || horaAR < 10 || horaAR >= 20) continue;
+    // Se le vencen en 3 días o menos (una vez por fecha de vencimiento).
+    const proxV = vences.find(k => k <= sumarDias(hoy, 3));
+    if (proxV) { const id = `venc_${a.id}_${proxV}`;
+      if (!(await yaEnviado(id))) await mandar(id, { title: "Se te vencen clases para recuperar ⏳", body: `${nombre}, tenés ${rec.recVence[proxV]} clase${rec.recVence[proxV] > 1 ? "s" : ""} para recuperar hasta el ${diaDM(proxV)}. Después se pierde${rec.recVence[proxV] > 1 ? "n" : ""}: reservá en la app.`, tag: "recuperar" }); }
+    // Días que no entrena: si hoy hay lugar para recuperar, avisarle (máximo 3 por semana).
+    if ((a.horarios || []).some(h => h.dia === diaSemana(hoy))) continue;
+    const idHoy = `rec_${a.id}_${hoy}`; if (await yaEnviado(idHoy)) continue;
+    const ops = opcionesDelDia(a, hoy, turnos, cupos, cupo, avisos, ahora.getTime() + 90 * 60e3);
+    if (!ops.length) continue;
+    const semana = []; for (let f = lunes; f < hoy; f = sumarDias(f, 1)) semana.push(db.doc(`recordatorios/rec_${a.id}_${f}`));
+    const yaSemana = semana.length ? (await db.getAll(...semana)).filter(x => x.exists).length : 0;
+    if (yaSemana >= 3) continue;
+    const horas = [...new Set(ops.map(o => o.hora))].slice(0, 3); const clubs = [...new Set(ops.map(o => lugarTxt(o.club)))];
+    const lista = horas.length > 1 ? horas.slice(0, -1).join(", ") + " y " + horas[horas.length - 1] : horas[0];
+    await mandar(idHoy, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, hoy hay lugar a las ${lista} en ${clubs.join(" y ")}. Recuperá antes del ${diaDM(vences[0])}: reservá en la app.`, tag: "recuperar" });
   }
-  console.log(`Recordatorios: ${enviados}`);
+  console.log(`Avisos a alumnos: ${enviados}`);
 }
 console.log("Listo");

@@ -169,8 +169,8 @@ a.wa-link{color:var(--wa);font-weight:700;text-decoration:none}
 .field label,.flabel{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .field input,.field select,.field textarea{padding:11px 14px;border-radius:14px;border:1px solid var(--line-2);background:rgba(255,255,255,.7);width:100%;min-width:0}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.hrow{display:grid;grid-template-columns:1fr 1fr 40px;gap:8px}
-.hrow select,.hrow input{padding:10px 12px;border-radius:14px;border:1px solid var(--line-2);background:rgba(255,255,255,.7)}
+.hrow{display:grid;grid-template-columns:1.25fr 1fr 1fr 36px;gap:6px}
+.hrow select,.hrow input{padding:10px 8px;min-width:0;font-size:14px;border-radius:14px;border:1px solid var(--line-2);background:rgba(255,255,255,.7)}
 .x{border:1px solid var(--line-2);background:rgba(255,255,255,.7);border-radius:14px}
 .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
 .btn{border:0;border-radius:999px;padding:12px 20px;font-weight:700}
@@ -248,6 +248,10 @@ html{background:#10131F}
 #portal .hero .spec,#portal .hero .spec .small{color:var(--ink)!important}
 #portal .hero .spec-k,#portal .hero .stat .lbl{color:#4A413B!important}
 label.mini input[type=file]{display:none}
+.tabs[hidden]{display:none}
+.rec-box{padding:16px;display:grid;gap:10px;border:2px solid var(--sun)!important}
+.rec-top{display:flex;gap:14px;align-items:center}
+.rec-top .big-num{font-size:60px;color:var(--warn)}
 
 </style>
 </head>
@@ -286,6 +290,7 @@ label.mini input[type=file]{display:none}
   </header>
   <main id="pView" style="display:grid"></main>
 </div>
+<nav class="tabs" role="tablist" id="pTabs" style="grid-template-columns:repeat(3,1fr)" hidden></nav>
 </div>
 
 <div class="overlay" id="overlay" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
@@ -298,7 +303,7 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script>
 /* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
-window.APP_V = "202610091723";
+window.APP_V = "202610091954";
 (function () {
   let avisado = false;
   function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
@@ -320,10 +325,10 @@ window.APP_V = "202610091723";
   setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
 })();
 </script>
-<script src="config.js?v=202610091723"></script>
-<script src="app.js?v=202610091723"></script>
-<script src="staff-extra.js?v=202610091723"></script>
-<script src="alumno.js?v=202610091723"></script>
-<script src="firebase.js?v=202610091723"></script>
+<script src="config.js?v=202610091954"></script>
+<script src="app.js?v=202610091954"></script>
+<script src="staff-extra.js?v=202610091954"></script>
+<script src="alumno.js?v=202610091954"></script>
+<script src="firebase.js?v=202610091954"></script>
 </body>
 </html>

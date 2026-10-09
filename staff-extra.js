@@ -153,7 +153,7 @@ async function deshacerAviso(id) {
   const v = S.avisos.find(x => x.id === id); if (!v) return;
   const a = S.alumnos.find(x => x.id === v.alumnoId) || {}; const n = a.nombre || v.nombre || "el alumno";
   const txt = v.tipo === "ausencia"
-    ? `${n} vuelve a estar en la clase del ${fechaCorta(v.fecha)} a las ${v.hora}.${v.conRecupero ? ((a.recuperar || 0) > 0 ? " Se le descuenta la clase para recuperar que le había quedado." : " Ojo: ya usó esa clase para recuperar, queda en 0.") : ""}`
+    ? `${n} vuelve a estar en la clase del ${fechaCorta(v.fecha)} a las ${v.hora}.${v.conRecupero ? (recN(a) > 0 ? " Se le descuenta la clase para recuperar que le había quedado." : " Ojo: ya usó esa clase para recuperar, queda en 0.") : ""}`
     : `Se cancela la recuperación de ${n} del ${fechaCorta(v.fecha)} a las ${v.hora} y le vuelve la clase para recuperar.`;
   if (!confirm(txt + "\n\n¿Deshacer el aviso?")) return;
   try {
@@ -161,11 +161,12 @@ async function deshacerAviso(id) {
       const vRef = fdb.doc("avisos/" + id); const vS = await tx.get(vRef); if (!vS.exists) return; const d = vS.data();
       const cRef = fdb.doc(`cupos/${d.club}_${d.fecha}_${d.hhmm}`); const aRef = fdb.doc("alumnos/" + d.alumnoId);
       const cS = await tx.get(cRef); const aS = await tx.get(aRef);
-      const c = cS.exists ? cS.data() : {}; const rec = (aS.data() || {}).recuperar || 0;
+      const c = cS.exists ? cS.data() : {}; const ad = { ...(aS.data() || {}), id: d.alumnoId };
+      recPendAvisos(ad).forEach(x => { if (x.id !== id) tx.update(fdb.doc("avisos/" + x.id), { contado: true }); });
       const otroRef = fdb.doc(`avisos/${d.alumnoId}_${d.fecha}_${d.hhmm}_${d.tipo === "ausencia" ? "recupera" : "ausencia"}`); const oS = await tx.get(otroRef);
       if (d.tipo === "ausencia" && oS.exists) { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1), rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.delete(otroRef); }
-      else if (d.tipo === "ausencia") { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1) }, { merge: true }); if (d.conRecupero) tx.update(aRef, { recuperar: Math.max(0, rec - 1) }); }
-      else { tx.set(cRef, { rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.update(aRef, { recuperar: rec + 1 }); }
+      else if (d.tipo === "ausencia") { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1) }, { merge: true }); if (d.conRecupero) tx.update(aRef, recCambio(ad, -1, hoyISO, venceDe(d.fecha))); }
+      else { tx.set(cRef, { rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.update(aRef, recCambio(ad, 1, hoyISO)); }
       tx.delete(vRef);
     });
     toast("Aviso deshecho"); if (!$("#overlay").hidden && $("#fA")) closeSheet();

@@ -11,7 +11,7 @@ const CUPO = 4;
 const TPL_DEF = {
   cobro: "Hola {nombre}, ¿cómo estás? Te paso lo de {mes}: {precio} x {clases} clases = {total}{extra}.{alias}",
   lluvia: "Hola {nombre}, ¿cómo estás? Hoy se suspende la clase de las {hora} por lluvia. La recuperamos, en estos días te paso opciones.",
-  recupera: "Hola {nombre}, ¿cómo estás? Te quedó {pendientes} para recuperar. Tengo lugar {opciones}. ¿Cuál te sirve?"
+  recupera: "Hola {nombre}, ¿cómo estás? Te quedó {pendientes} para recuperar (hasta el {vence}). Tengo lugar {opciones}. ¿Cuál te sirve?"
 };
 const WA_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2A9.8 9.8 0 0 0 3.6 17l-1.3 4.8 4.9-1.3A9.8 9.8 0 1 0 12 2.2zm0 17.8a8 8 0 0 1-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1 1 12 20zm4.4-6c-.2-.1-1.4-.7-1.7-.8-.2-.1-.4-.1-.5.1l-.8.9c-.1.2-.3.2-.5.1a6.5 6.5 0 0 1-3.2-2.8c-.2-.4.2-.4.7-1.3.1-.1 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a.9.9 0 0 0-.6.3 2.7 2.7 0 0 0-.9 2c0 1.2.9 2.3 1 2.5.1.1 1.7 2.6 4.1 3.7 1.5.7 2.1.7 2.9.6.5-.1 1.4-.6 1.6-1.2.2-.6.2-1.1.1-1.2l-.4-.2z"/></svg>';
 
@@ -32,7 +32,7 @@ const S = { tab:"hoy", club:"", mes:mesKey(now), q:"", dia:now.getDay(), fecha:h
 
 $("#todayLbl").textContent = now.toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});
 
-function byClub(list){ return S.club ? list.filter(x=>x.club===S.club) : list; }
+function byClub(list){ return S.club ? list.filter(x=>enClub(x,S.club)) : list; }
 function activos(){ return byClub(S.alumnos.filter(a=>a.activo!==false)); }
 function pago(a,m=S.mes){ return a.pagos && a.pagos[m] && a.pagos[m].pagado; }
 function ocurrencias(dia,m){ const [y,mm]=m.split("-").map(Number); let n=0; const last=new Date(y,mm,0).getDate(); for(let d=1;d<=last;d++) if(new Date(y,mm-1,d).getDay()===dia) n++; return n; }
@@ -43,13 +43,54 @@ function extraDias(a,m=S.mes){ return diasDe(a).filter(d=>ocurrencias(d,m)===5);
 function ajusteDe(a,m=S.mes){ const p=a.pagos&&a.pagos[m]; return p&&typeof p.ajuste==="number"?p.ajuste:null; }
 function montoMes(a,m=S.mes){ const aj=ajusteDe(a,m); return aj!==null?aj:cuotaMes(a,m); }
 function cobradoDe(a,m=S.mes){ const p=a.pagos[m]; const aj=ajusteDe(a,m); return aj!==null?aj:(p.monto||cuotaMes(a,m)); }
-function horarioTxt(a){ return (a.horarios||[]).map(h=>`${DIAS[h.dia]} ${h.hora}`).join(" · ") || "Sin horario"; }
+function horarioTxt(a){ const dos=clubsDe(a).size>1; return (a.horarios||[]).map(h=>`${DIAS[h.dia]} ${h.hora}${dos?` (${CLUB_LBL[clubH(a,h)]})`:""}`).join(" · ") || "Sin horario"; }
+
+/* ---------- Clubes: cada horario tiene su club (hay alumnos que van a los dos) ---------- */
+const CLUB_LBL={JUMP:"Jump",ESPACIO:"Espacio"};
+function clubH(a,h){ return (h&&h.club)||a.club||"JUMP"; }
+function clubsDe(a){ const s=new Set((a.horarios||[]).map(h=>clubH(a,h))); if(!s.size&&a.club) s.add(a.club); return s; }
+function enClub(a,club){ return !club||clubsDe(a).has(club); }
+function tagsClub(a){ return [...clubsDe(a)].map(c=>`<span class="tag ${c}">${c}</span>`).join(""); }
+// Parte de la cuota que corresponde a un club (para los que van a los dos, según sus horarios).
+function montoClub(a,club,m=S.mes){ const hs=a.horarios||[]; if(!hs.length) return a.club===club?montoMes(a,m):0; return montoMes(a,m)*hs.filter(h=>clubH(a,h)===club).length/hs.length; }
+
+/* ---------- Clases para recuperar, con vencimiento ----------
+   Se recuperan dentro del mes. Si faltó la última semana del mes, tiene hasta el 7 del mes siguiente.
+   recN(a) = cuántas tiene. a.recVence = {"2026-10-31": 2, ...} = hasta cuándo vale cada una. */
+function venceDe(f){ const d=isoDate(f); const fin=new Date(d.getFullYear(),d.getMonth()+1,0); return fin.getDate()-d.getDate()<7 ? toISO(new Date(d.getFullYear(),d.getMonth()+1,7)) : toISO(fin); }
+const fechaDM = f => { const d=isoDate(f); return `${d.getDate()}/${d.getMonth()+1}`; };
+// Faltas avisadas por la app que todavía no se ubicaron en su mes (las ubica el proceso automático o la próxima edición).
+function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P.avisos:S.avisos)||[];
+  return L.filter(v=>v.alumnoId===a.id&&v.tipo==="ausencia"&&v.conRecupero&&v.contado===false&&!L.some(x=>x.alumnoId===a.id&&x.tipo==="recupera"&&x.fecha===v.fecha&&x.hora===v.hora)); }
+// Devuelve las vigentes: [{vence, n}] ordenadas. a.recuperar manda en la cantidad; si tiene menos, se descuentan las que vencen antes.
+function recBuckets(a,pend=recPendAvisos(a).map(v=>v.fecha)){
+  const tot=Math.max(0,a.recuperar||0); const m={};
+  Object.entries(a.recVence||{}).forEach(([k,n])=>{ n=Number(n)||0; if(n>0) m[k]=(m[k]||0)+n; });
+  pend.forEach(f=>{ const k=venceDe(f); m[k]=(m[k]||0)+1; });
+  const sum=Object.values(m).reduce((s,n)=>s+n,0);
+  if(tot>sum){ const k=venceDe(hoyISO); m[k]=(m[k]||0)+tot-sum; }
+  else if(tot<sum){ let r=sum-tot; for(const k of Object.keys(m).sort()){ const q=Math.min(r,m[k]); m[k]-=q; r-=q; if(!m[k]) delete m[k]; if(!r) break; } }
+  return Object.keys(m).filter(k=>k>=hoyISO).sort().map(k=>({vence:k,n:m[k]}));
+}
+function recN(a){ return recBuckets(a).reduce((s,x)=>s+x.n,0); }
+function recVenceTxt(a){ return recBuckets(a).map(x=>`${x.n} hasta el ${fechaDM(x.vence)}`).join(" · "); }
+// Suma (delta>0, por una falta del día "fecha") o descuenta (delta<0, primero las que vencen antes) y devuelve lo que hay que guardar.
+function recCambio(a,delta,fecha=hoyISO,quitarDe=null){
+  const m={}; recBuckets(a).forEach(x=>m[x.vence]=x.n);
+  if(delta>0){ const k=venceDe(fecha); m[k]=(m[k]||0)+delta; }
+  else if(delta<0){ let r=-delta; const ks=Object.keys(m).sort(); if(quitarDe&&m[quitarDe]) ks.unshift(quitarDe);
+    for(const k of ks){ if(!r) break; const q=Math.min(r,m[k]||0); if(!q) continue; m[k]-=q; r-=q; if(!m[k]) delete m[k]; } }
+  // Las fechas que ya no corresponden se guardan en 0 (la app guarda mezclando campos, no reemplazando).
+  const out={}; Object.keys(a.recVence||{}).forEach(k=>{ out[k]=0; }); Object.assign(out,m);
+  return {recuperar:Object.values(m).reduce((s,n)=>s+n,0), recVence:out};
+}
 
 /* ---------- Turnos y lugares libres ---------- */
 function turnos(club){
   const map={};
-  S.alumnos.filter(a=>a.activo!==false && (!club||a.club===club)).forEach(a=>(a.horarios||[]).forEach(h=>{
-    const k=`${a.club}|${h.dia}|${h.hora}`; const t=map[k]||(map[k]={club:a.club,dia:h.dia,hora:h.hora,nivel:"",al:[]});
+  S.alumnos.filter(a=>a.activo!==false).forEach(a=>(a.horarios||[]).forEach(h=>{
+    const c=clubH(a,h); if(club&&c!==club) return;
+    const k=`${c}|${h.dia}|${h.hora}`; const t=map[k]||(map[k]={club:c,dia:h.dia,hora:h.hora,nivel:"",al:[]});
     t.al.push(a); if(h.nivel) t.nivel=h.nivel;
   }));
   return Object.values(map);
@@ -59,8 +100,8 @@ const catNorm = c => String(c||"").trim().toLowerCase().normalize("NFD").replace
 function catsDe(a){ const set=new Set(); String(a.categoria||"").split(",").map(catNorm).filter(Boolean).forEach(c=>set.add(c)); (a.horarios||[]).forEach(h=>h.nivel&&set.add(catNorm(h.nivel))); return set; }
 function ordenSemana(t){ const hoyD=now.getDay()||7; return (((t.dia||7)-hoyD+7)%7)*10000+Number(String(t.hora).replace(":","")); }
 function opcionesRecupera(a,max=3){
-  const mios=new Set((a.horarios||[]).map(h=>`${h.dia}|${h.hora}`)); const cats=catsDe(a);
-  return turnos(a.club).filter(t=>t.al.length<CUPO && !mios.has(`${t.dia}|${t.hora}`) && (cats.size ? (t.nivel && cats.has(catNorm(t.nivel))) : true))
+  const mios=new Set((a.horarios||[]).map(h=>`${clubH(a,h)}|${h.dia}|${h.hora}`)); const cats=catsDe(a); const cl=clubsDe(a);
+  return turnos("").filter(t=>cl.has(t.club) && t.al.length<CUPO && !mios.has(`${t.club}|${t.dia}|${t.hora}`) && (cats.size ? (t.nivel && cats.has(catNorm(t.nivel))) : true))
     .sort((x,y)=>ordenSemana(x)-ordenSemana(y)).slice(0,max);
 }
 
@@ -82,9 +123,9 @@ function msgLluvia(a,hora){
   return fill(tpl("lluvia"),{nombre:nombreCorto(a.nombre),hora:h||"hoy"}).replace("de las hoy","de hoy");
 }
 function msgRecupera(a){
-  const p=a.recuperar||1; const ops=opcionesRecupera(a);
+  const p=recN(a)||1; const ops=opcionesRecupera(a); const bk=recBuckets(a); const vence=fechaDM(bk.length?bk[0].vence:venceDe(hoyISO));
   const txt = ops.length ? ops.map(t=>`el ${DIAS_LARGO[t.dia].toLowerCase()} a las ${t.hora}`).join(", ").replace(/, ([^,]*)$/," o $1") : "esta semana, decime qué día te queda bien";
-  return fill(tpl("recupera"),{nombre:nombreCorto(a.nombre),pendientes:p===1?"una clase":p+" clases",opciones:txt});
+  return fill(tpl("recupera"),{nombre:nombreCorto(a.nombre),pendientes:p===1?"una clase":p+" clases",opciones:txt,vence});
 }
 function msgCard(k,titulo,a,texto,extraBtn=""){
   const url=waURL(a.tel,texto); const key=`${a.id}|${k}`;
@@ -97,21 +138,21 @@ function msgCard(k,titulo,a,texto,extraBtn=""){
 }
 function openMensajes(a){
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Mensajes para</span><h2 class="disp">${esc(a.nombre)}</h2>
-    <span class="small muted">${a.tel?esc(a.tel):"Sin teléfono cargado"} · ${a.club}</span></div>
+    <span class="small muted">${a.tel?esc(a.tel):"Sin teléfono cargado"} · ${[...clubsDe(a)].map(c=>CLUB_LBL[c]).join(" y ")}</span></div>
     ${msgCard("cobro","Cobro de "+mesSolo(S.mes),a,msgCobro(a))}
     ${msgCard("lluvia","Suspensión por lluvia",a,msgLluvia(a),`<button class="mini" data-act="recMas" data-id="${a.id}">Sumar clase a recuperar</button>`)}
     ${msgCard("recupera","Recuperar clase",a,msgRecupera(a))}
     <p class="small muted" style="margin:0">WhatsApp se abre con el mensaje escrito. Solo tocás enviar.</p>
     <div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`);
 }
-function openLluvia(club,dia,hora){
+function openLluvia(club,dia,hora,fecha=hoyISO){
   const t=turnos(club).find(x=>x.dia===dia&&x.hora===hora); if(!t) return;
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Suspender por lluvia · ${club}</span><h2 class="disp">${DIAS_LARGO[dia]} ${hora}</h2>
     <span class="small muted">Tocá cada alumno para mandarle el aviso.</span></div>
     <div class="list">${t.al.map(a=>{const url=waURL(a.tel,msgLluvia(a,hora)); const key=`${a.id}|lluvia`;
-      return `<div class="row"><div class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${S.sent[key]?'<span class="sent">Aviso abierto ✓</span>':(a.tel?"":'<span class="due">Sin teléfono</span>')}${a.recuperar?`<span class="tag rec">Recupera ${a.recuperar}</span>`:""}</span></div>
+      return `<div class="row"><div class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${S.sent[key]?'<span class="sent">Aviso abierto ✓</span>':(a.tel?"":'<span class="due">Sin teléfono</span>')}${recN(a)?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}</span></div>
       ${url?`<a class="cta wa" style="padding:6px 6px 6px 14px;font-size:13px" href="${url}" target="_blank" rel="noopener" data-sent="${key}">Avisar <i>→</i></a>`:""}</div>`}).join("")}</div>
-    <button class="btn pri" data-act="recTurno" data-club="${club}" data-dia="${dia}" data-hora="${hora}">Anotar a todos para recuperar</button>
+    <button class="btn pri" data-act="recTurno" data-club="${club}" data-dia="${dia}" data-hora="${hora}" data-f="${fecha}">Anotar a todos para recuperar</button>
     <div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`);
 }
 function openCfg(){
@@ -124,7 +165,7 @@ function openCfg(){
     <div class="field"><label for="cCobro">Cobro del mes</label><textarea id="cCobro" rows="4">${t("cobro")}</textarea></div>
     <div class="field"><label for="cLluvia">Suspensión por lluvia</label><textarea id="cLluvia" rows="3">${t("lluvia")}</textarea></div>
     <div class="field"><label for="cRec">Recuperar clase</label><textarea id="cRec" rows="3">${t("recupera")}</textarea></div>
-    <p class="legend" style="margin:0">Palabras que se completan solas: <code>{nombre}</code> <code>{mes}</code> <code>{clases}</code> <code>{precio}</code> <code>{total}</code> <code>{extra}</code> (aclara la clase extra) <code>{alias}</code> <code>{hora}</code> <code>{pendientes}</code> <code>{opciones}</code> (turnos con lugar libre).</p>
+    <p class="legend" style="margin:0">Palabras que se completan solas: <code>{nombre}</code> <code>{mes}</code> <code>{clases}</code> <code>{precio}</code> <code>{total}</code> <code>{extra}</code> (aclara la clase extra) <code>{alias}</code> <code>{hora}</code> <code>{pendientes}</code> <code>{vence}</code> (hasta cuándo puede recuperar) <code>{opciones}</code> (turnos con lugar libre).</p>
     <div class="btns"><button type="button" class="btn del" data-act="cfgReset">Volver a los originales</button><span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
   </form>`);
 }
@@ -145,15 +186,15 @@ function vHoy(){
   const pend=deben.reduce((s,a)=>s+montoMes(a),0);
   const pct=al.length?Math.round(pag.length/al.length*100):0;
   const dow=now.getDay(); const clases=S.mes===mesKey(now)?slotsDe(dow):[];
-  const recs=al.filter(a=>a.recuperar>0);
+  const recs=al.filter(a=>recN(a)>0);
   return `
   <section class="hero" aria-label="Resumen del mes">${COURT_SVG}
     <div class="month"><button data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="pill-date">${mesLbl(S.mes)}</span><button data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></div>
-    <div class="hero-main"><div class="mega num">${String(al.length).padStart(2,"0")}</div><div class="spec"><span class="spec-k">Alumnos activos</span><span>${S.club?S.club:`Jump ${S.alumnos.filter(a=>a.activo!==false&&a.club==="JUMP").length} · Espacio ${S.alumnos.filter(a=>a.activo!==false&&a.club==="ESPACIO").length}`}</span><span class="spec-k" style="margin-top:8px">Total del mes</span><span class="num">${money(cobrado+pend)}</span></div></div>
+    <div class="hero-main"><div class="mega num">${String(al.length).padStart(2,"0")}</div><div class="spec"><span class="spec-k">Alumnos activos</span><span>${S.club?S.club:`Jump ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"JUMP")).length} · Espacio ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"ESPACIO")).length}`}</span><span class="spec-k" style="margin-top:8px">Total del mes</span><span class="num">${money(cobrado+pend)}</span></div></div>
     <div class="hero-stats">
       <div class="stat"><div class="val num">${al.length}</div><div class="lbl">Alumnos</div></div>
       <div class="stat"><div class="val num">${pag.length}<small>/${al.length}</small></div><div class="lbl">Pagaron</div></div>
-      <button class="stat" data-act="tab" data-t="recuperar" style="background:none;border:0;padding:0;text-align:left;color:inherit"><div class="val num">${recs.reduce((s,a)=>s+a.recuperar,0)}</div><div class="lbl">A recuperar ›</div></button>
+      <button class="stat" data-act="tab" data-t="recuperar" style="background:none;border:0;padding:0;text-align:left;color:inherit"><div class="val num">${recs.reduce((s,a)=>s+recN(a),0)}</div><div class="lbl">A recuperar ›</div></button>
     </div>
     <div class="bar" aria-label="${pct}% cobrado"><i style="width:${pct}%"></i></div>
     <div class="hero-foot num"><span>Cobrado <b>${money(cobrado)}</b></span><span>Falta <b style="color:var(--sun)">${money(pend)}</b></span></div>
@@ -179,7 +220,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
   return `<div class="row"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta"><span class="tag ${a.club}">${a.club}</span>${a.recuperar>0?`<span class="tag rec">Recupera ${a.recuperar}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}</span>
+    <span class="meta">${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button><button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":"Debe"}</button>`}</div></div>`;
 }
@@ -203,8 +244,8 @@ function esNuevo(a){ if(a.codigo||!a.alta) return false; const d=new Date(now); 
 function slotHTML(t,fecha){
   const aj=fecha?ajusteTurno(t,fecha):{aus:new Set(),rec:[]}; const libres=CUPO-t.al.length+aj.aus.size-aj.rec.length;
   return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}<span class="small muted">${esc(t.nivel)}</span><span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
-    <div style="display:grid;gap:4px;min-width:0"><div class="who">${t.al.map(a=>`<button class="pill ${a.club} ${esNuevo(a)?"nuevo":""} ${aj.aus.has(a.id)?"aus":""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)?' <b class="nuevo-b">Nuevo</b>':""}${aj.aus.has(a.id)?' <b class="aus-b">No viene</b>':""}</button>`).join("")}${aj.rec.map(a=>`<button class="pill rec" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <b class="rec-b">Recupera</b></button>`).join("")}</div>
-    <button class="linkish suspend" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">Suspender por lluvia</button></div></div>`;
+    <div style="display:grid;gap:4px;min-width:0"><div class="who">${t.al.map(a=>`<button class="pill ${t.club} ${esNuevo(a)?"nuevo":""} ${aj.aus.has(a.id)?"aus":""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)?' <b class="nuevo-b">Nuevo</b>':""}${aj.aus.has(a.id)?' <b class="aus-b">No viene</b>':""}</button>`).join("")}${aj.rec.map(a=>`<button class="pill rec" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <b class="rec-b">Recupera</b></button>`).join("")}</div>
+    <button class="linkish suspend" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${fecha||hoyISO}">Suspender por lluvia</button></div></div>`;
 }
 const AGENDA_DESDE="2026-10-07";
 function fechasAgenda(){
@@ -234,7 +275,7 @@ function recRow(a){
   const ops=opcionesRecupera(a); const url=waURL(a.tel,msgRecupera(a)); const key=`${a.id}|recupera`;
   return `<div class="row" style="grid-template-columns:1fr"><div class="main" style="gap:6px">
     <button style="background:none;border:0;text-align:left;padding:0;display:grid;gap:3px" data-act="editA" data-id="${a.id}"><span class="name">${esc(a.nombre)}</span>
-      <span class="meta"><span class="tag ${a.club}">${a.club}</span>${a.categoria?`<span>${esc(a.categoria)}</span>`:""}<span class="tag rec">Recupera ${a.recuperar}</span>${S.sent[key]?'<span class="sent">Mensaje abierto ✓</span>':""}</span></button>
+      <span class="meta">${tagsClub(a)}${a.categoria?`<span>${esc(a.categoria)}</span>`:""}<span class="tag rec">Recupera ${recN(a)}</span>${S.sent[key]?'<span class="sent">Mensaje abierto ✓</span>':""}</span><span class="small" style="color:var(--sun);font-weight:700">Vence: ${recVenceTxt(a)}</span></button>
     <span class="small">${ops.length?`<span class="muted">Lugares:</span> ${ops.map(t=>`<b class="free">${DIAS[t.dia]} ${t.hora}</b>`).join(" · ")}`:`<span class="due">Sin lugar libre en su categoría</span>`}</span>
     <div class="row-act" style="flex-wrap:wrap">
       ${url?`<a class="cta wa" style="padding:6px 6px 6px 14px;font-size:13px" href="${url}" target="_blank" rel="noopener" data-sent="${key}">Mandar mensaje <i>→</i></a>`:`<span class="small due">Falta el teléfono</span>`}
@@ -242,14 +283,14 @@ function recRow(a){
     </div></div></div>`;
 }
 function vRecuperar(){
-  const recs=activos().filter(a=>a.recuperar>0).sort((x,y)=>(y.recuperar-x.recuperar)||x.nombre.localeCompare(y.nombre));
-  const tot=recs.reduce((s,a)=>s+a.recuperar,0);
+  const recs=activos().filter(a=>recN(a)>0).sort((x,y)=>(recN(y)-recN(x))||x.nombre.localeCompare(y.nombre));
+  const tot=recs.reduce((s,a)=>s+recN(a),0);
   const libres=turnos(S.club).filter(t=>t.al.length<CUPO);
   const grupos={}; libres.forEach(t=>{ const k=`${t.club} · ${t.nivel||"sin categoría"}`; (grupos[k]=grupos[k]||[]).push(t); });
   return `
   <section class="sec" style="margin-top:4px">
     <div class="sec-head"><h2 class="disp">Recuperar</h2><button class="cta" data-act="recAdd" style="padding:6px 6px 6px 14px;font-size:13px">Anotar <i>+</i></button></div>
-    <p class="small muted" style="margin:0">${recs.length?`${recs.length} alumno${recs.length>1?"s":""} · ${tot} clase${tot>1?"s":""} pendiente${tot>1?"s":""}. El mensaje ya le ofrece los lugares libres de su categoría.`:"Acá aparece quién tiene que recuperar."}</p>
+    <p class="small muted" style="margin:0">${recs.length?`${recs.length} alumno${recs.length>1?"s":""} · ${tot} clase${tot>1?"s":""} pendiente${tot>1?"s":""}. El mensaje ya le ofrece los lugares libres de su categoría.`:"Acá aparece quién tiene que recuperar."} Se recuperan dentro del mes; si faltó la última semana, hasta el 7 del mes siguiente. Si no, se pierden solas.</p>
     ${recs.length?`<div class="list">${recs.map(recRow).join("")}</div>`:`<div class="empty">Nadie tiene clases pendientes. Se suman cuando suspendés un turno por lluvia en <b>Agenda</b>, o tocando <b>Anotar +</b> cuando alguien falta.</div>`}
   </section>
   <section class="sec">
@@ -261,7 +302,7 @@ function openRecAdd(q=""){
   const list=activos().filter(a=>!q||a.nombre.toLowerCase().includes(q.toLowerCase())).sort((x,y)=>x.nombre.localeCompare(y.nombre)).slice(0,40);
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Anotar para recuperar</h2><span class="small muted">Tocá quién faltó. Le suma una clase a recuperar.</span></div>
     <input class="search" id="recQ" type="search" placeholder="Buscar alumno" value="${esc(q)}" autocomplete="off">
-    <div class="list" id="recList">${list.map(a=>`<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%" data-act="recMas" data-id="${a.id}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta"><span class="tag ${a.club}">${a.club}</span><span>${esc(horarioTxt(a))}</span>${a.recuperar?`<span class="tag rec">Recupera ${a.recuperar}</span>`:""}</span></span><span class="mini">+1</span></button>`).join("")||'<div class="empty">Nadie coincide.</div>'}</div>
+    <div class="list" id="recList">${list.map(a=>`<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%" data-act="recMas" data-id="${a.id}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${tagsClub(a)}<span>${esc(horarioTxt(a))}</span>${recN(a)?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}</span></span><span class="mini">+1</span></button>`).join("")||'<div class="empty">Nadie coincide.</div>'}</div>
     <div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`);
   const i=$("#recQ"); i.focus(); i.setSelectionRange(i.value.length,i.value.length);
 }
@@ -296,7 +337,7 @@ function openAjuste(a){
 /* ---------- Panel Esteban / ganancia ---------- */
 let aumPct=10;
 function panelEquipo(){
-  const tot=activos().reduce((s,a)=>s+montoMes(a),0); const totJ=S.alumnos.filter(a=>a.activo!==false&&a.club==="JUMP").reduce((s,a)=>s+montoMes(a),0);
+  const tot=activos().reduce((s,a)=>s+montoMes(a),0); const totJ=S.alumnos.filter(a=>a.activo!==false).reduce((s,a)=>s+montoClub(a,"JUMP"),0);
   const vh=S.cfg.valorHora||0; const eq=S.equipo.length?S.equipo:[{id:"_",dias:{}}];
   const h=eq.reduce((s,x)=>s+horasMes(x.dias,S.mes),0), hp=eq.reduce((s,x)=>s+horasMes(x.dias,mesAnt(S.mes)),0);
   const pagoE=S.equipo.length?ganadoEn(S.mes):0, neta=tot-pagoE, pct=tot?pagoE/tot*100:0, pctJ=totJ?pagoE/totJ*100:0;
@@ -503,7 +544,7 @@ async function marcar(a,hora,estado){
   const avA=avisoApp(a.id,S.asFecha,hora,"ausencia"); if(avA&&avA.conRecupero&&!vuelveApp(a.id,S.asFecha,hora)) delta=0;
   if(nuevo) S.asMarcas[k]=nuevo; else delete S.asMarcas[k];
   render();
-  if(await guardarAsist() && delta) await setRec(a,(a.recuperar||0)+delta);
+  if(await guardarAsist() && delta) await setRec(a,delta,S.asFecha);
   if(delta>0) toast(`${a.nombre}: +1 clase a recuperar`);
 }
 function vAsist(){
@@ -524,7 +565,7 @@ function vAsist(){
     const ex=extras.filter(x=>x.hora===t.hora);
     return `<section class="sec"><div class="sec-head"><h3 class="num">${t.hora} · ${esc(t.nivel||"")}</h3><button class="linkish" data-act="asRecAdd" data-hora="${t.hora}">+ Viene a recuperar</button></div>
     <div class="list">${t.al.map(a=>{const e=S.asMarcas[`${a.id}|${t.hora}`];
-      return `<div class="row" style="grid-template-columns:1fr"><span class="name">${esc(a.nombre)}${a.recuperar?` <span class="tag rec">Debe ${a.recuperar}</span>`:""}${tagAviso(a.id,S.asFecha,t.hora)}</span>
+      return `<div class="row" style="grid-template-columns:1fr"><span class="name">${esc(a.nombre)}${recN(a)?` <span class="tag rec">Debe ${recN(a)}</span>`:""}${tagAviso(a.id,S.asFecha,t.hora)}</span>
       <div class="seg">${Object.keys(ESTADOS).map(k=>`<button class="seg-b ${k}" data-act="marca" data-id="${a.id}" data-hora="${t.hora}" data-e="${k}" aria-pressed="${e===k}">${ESTADOS[k]}</button>`).join("")}</div></div>`;}).join("")}
       ${ex.map(x=>`<div class="row"><span class="main"><span class="name">${esc(x.a.nombre)}</span><span class="meta"><span class="tag rec">Vino a recuperar</span>${avisoApp(x.a.id,S.asFecha,x.hora,"recupera")?"<span>Reservó por la app</span>":""}</span></span><button class="mini" data-act="asRecQuitar" data-id="${x.a.id}" data-hora="${x.hora}">Quitar</button></div>`).join("")}
       ${reservasAsistHTML(t.club,S.asFecha,t.hora)}
@@ -535,9 +576,9 @@ function vAsist(){
 function openAsRecAdd(hora){
   const dow=isoDate(S.asFecha).getDay(); const t=turnos(S.asClub).find(x=>x.dia===dow&&x.hora===hora);
   const cat=t&&t.nivel?catNorm(t.nivel):"";
-  const list=S.alumnos.filter(a=>a.activo!==false&&a.recuperar>0&&a.club===S.asClub).sort((x,y)=>(catsDe(y).has(cat)-catsDe(x).has(cat))||x.nombre.localeCompare(y.nombre));
+  const list=S.alumnos.filter(a=>a.activo!==false&&recN(a)>0&&enClub(a,S.asClub)).sort((x,y)=>(catsDe(y).has(cat)-catsDe(x).has(cat))||x.nombre.localeCompare(y.nombre));
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Viene a recuperar</h2><span class="small muted">${DIAS_LARGO[dow]} ${hora} · ${esc(t?.nivel||"")}. Al marcarlo se le descuenta una clase pendiente.</span></div>
-    ${list.length?`<div class="list">${list.map(a=>`<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%" data-act="asRecSel" data-id="${a.id}" data-hora="${hora}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${a.categoria?`<span>${esc(a.categoria)}</span>`:""}<span class="tag rec">Debe ${a.recuperar}</span>${catsDe(a).has(cat)?'<span class="free">Su categoría</span>':""}</span></span><span class="mini">Elegir</span></button>`).join("")}</div>`:`<div class="empty">Nadie de ${S.asClub==="ESPACIO"?"Espacio":"Jump"} tiene clases pendientes.</div>`}
+    ${list.length?`<div class="list">${list.map(a=>`<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%" data-act="asRecSel" data-id="${a.id}" data-hora="${hora}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${a.categoria?`<span>${esc(a.categoria)}</span>`:""}<span class="tag rec">Debe ${recN(a)}</span>${catsDe(a).has(cat)?'<span class="free">Su categoría</span>':""}</span></span><span class="mini">Elegir</span></button>`).join("")}</div>`:`<div class="empty">Nadie de ${S.asClub==="ESPACIO"?"Espacio":"Jump"} tiene clases pendientes.</div>`}
     <div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`);
 }
 function vCaptar(){
@@ -591,8 +632,9 @@ function openSheet(html,refresh=null){ $("#sheet").innerHTML=html; $("#overlay")
 function closeSheet(){ $("#overlay").hidden=true; $("#sheet").innerHTML=""; sheetRefresh=null; }
 $("#overlay").addEventListener("click",e=>{ if(e.target.id==="overlay") closeSheet(); });
 
-function hRow(h={dia:1,hora:"18:00"}){
-  return `<div class="hrow" data-nivel="${esc(h.nivel||"")}"><select aria-label="Día">${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${h.dia===d?"selected":""}>${DIAS_LARGO[d]}</option>`).join("")}</select><input type="time" aria-label="Hora" value="${h.hora}" step="900"><button type="button" class="x" data-act="hdel" aria-label="Quitar horario">×</button></div>`;
+function hRow(h={dia:1,hora:"18:00"},club){
+  const c=h.club||club||($("#aClub")&&$("#aClub").value)||S.club||"JUMP";
+  return `<div class="hrow" data-nivel="${esc(h.nivel||"")}"><select class="hd" aria-label="Día">${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${h.dia===d?"selected":""}>${DIAS_LARGO[d]}</option>`).join("")}</select><input type="time" aria-label="Hora" value="${h.hora}" step="900"><select class="hc" aria-label="Club">${["JUMP","ESPACIO"].map(x=>`<option value="${x}" ${c===x?"selected":""}>${CLUB_LBL[x]}</option>`).join("")}</select><button type="button" class="x" data-act="hdel" aria-label="Quitar horario">×</button></div>`;
 }
 const EST_TXT={vino:"Vino",falto:"Faltó sin avisar",recupera:"Avisó · recupera",recuperando:"Vino a recuperar"};
 const EST_COL={vino:"var(--ok)",falto:"var(--warn)",recupera:"var(--sun)",recuperando:"var(--jump)"};
@@ -621,7 +663,7 @@ function formAlumno(a={},leadId=""){
     <div class="btns"><h2 class="disp">${a.id?esc(a.nombre):"Nuevo alumno"}</h2>${a.id&&a.activo!==false?`<button type="button" class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes">${WA_ICON}</button>`:""}</div>
     <div class="field"><label for="aNom">Nombre</label><input id="aNom" required value="${esc(a.nombre)}"></div>
     <div class="two">
-      <div class="field"><label for="aClub">Club</label><select id="aClub">${["JUMP","ESPACIO"].map(c=>`<option ${(a.club||S.club||"JUMP")===c?"selected":""}>${c}</option>`).join("")}</select></div>
+      <div class="field"><label for="aClub">Club principal</label><select id="aClub">${["JUMP","ESPACIO"].map(c=>`<option ${(a.club||S.club||"JUMP")===c?"selected":""}>${c}</option>`).join("")}</select></div>
       <div class="field"><label for="aTel">Teléfono</label><input id="aTel" inputmode="tel" value="${esc(a.tel)}"></div>
     </div>
     <div class="two">
@@ -629,8 +671,8 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}"></div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
-    <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(hRow).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button></div>
-    <div class="field"><span class="flabel">Clases para recuperar</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec">${a.recuperar||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
+    <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
+    <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
     ${a.id?accesoHTML(a):""}
     ${a.id?avisosFichaHTML(a):""}
@@ -638,7 +680,7 @@ function formAlumno(a={},leadId=""){
     ${a.id?`<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="aAct" ${a.activo===false?"":"checked"}> Activo (sacalo si dejó o está en pausa)</label>`:""}
     <div class="btns">${a.id?`<button type="button" class="btn del" data-act="delA">Borrar</button>`:"<span></span>"}<span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
   </form>`);
-  const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow select")].map(s=>({dia:Number(s.value)}))};
+  const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)}))};
     const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesMes(tmp)} clases = ${money(cuotaMes(tmp))}${ex?" (incluye clase extra)":""}`:""; };
   calc(); $("#fA").addEventListener("input",calc); $("#fA").addEventListener("change",calc); $("#fA").addEventListener("click",()=>setTimeout(calc,0));
 }
@@ -678,7 +720,12 @@ async function setPago(a,val){
   const cur=(a.pagos&&a.pagos[S.mes])||{};
   return safe(()=>colA().doc(a.id).update({pagos:{[S.mes]:{pagado:val,monto:val?montoMes(a):(cur.monto||0),fecha:val?hoyISO:null}}}));
 }
-const setRec=(a,n)=>safe(()=>colA().doc(a.id).update({recuperar:Math.max(0,n)}));
+// Suma o descuenta clases para recuperar (con su vencimiento). "fecha" = el día que faltó.
+async function setRec(a,delta,fecha=hoyISO,quitarDe=null){ const pend=recPendAvisos(a); const p=recCambio(a,delta,fecha,quitarDe);
+  const ok=await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(a.id),p); pend.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); });
+  if(ok){ Object.assign(a,p); pend.forEach(v=>v.contado=true); } return ok; }
+const recPrev=a=>({recuperar:a.recuperar||0,recVence:{...(a.recVence||{})}});
+const recVolver=(a,p)=>safe(()=>colA().doc(a.id).update(p)).then(ok=>{ if(ok) Object.assign(a,p); return ok; });
 
 /* ---------- Events ---------- */
 document.addEventListener("click",async e=>{
@@ -700,7 +747,7 @@ document.addEventListener("click",async e=>{
     case "pago": if(A){ const was=!!pago(A); if(await setPago(A,!was)) toast(was?`${A.nombre}: vuelve a deber`:`${A.nombre}: pagó ${money(montoMes(A))}`,()=>setPago(A,was)); } break;
     case "msg": if(A) openMensajes(A); break;
     case "copy": { const t=b.dataset.text; try{ await navigator.clipboard.writeText(t); toast("Mensaje copiado"); }catch(err){ const r=document.createRange(); const bub=b.closest(".msg")?.querySelector(".bubble"); if(bub){ r.selectNodeContents(bub); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Texto seleccionado, copialo"); } } break; }
-    case "recMas": if(A){ if(await setRec(A,(A.recuperar||0)+1)){ toast(`${A.nombre}: +1 clase a recuperar`); A.recuperar=(A.recuperar||0)+1; if($("#recQ")) openRecAdd($("#recQ").value); } } break;
+    case "recMas": if(A){ if(await setRec(A,1)){ toast(`${A.nombre}: +1 clase a recuperar (hasta el ${fechaDM(venceDe(hoyISO))})`); if($("#recQ")) openRecAdd($("#recQ").value); } } break;
     case "recAdd": openRecAdd(); break;
     case "pagoNuevo": openPagoProfe(); break;
     case "asCSV": exportAsist(); break;
@@ -731,16 +778,16 @@ document.addEventListener("click",async e=>{
     case "asHoy": S.asFecha=hoyISO; render(); break;
     case "marca": if(A) await marcar(A,b.dataset.hora,b.dataset.e); break;
     case "asRecAdd": openAsRecAdd(b.dataset.hora); break;
-    case "asRecSel": if(A){ S.asMarcas[`${A.id}|${b.dataset.hora}`]="recuperando"; closeSheet(); if(await guardarAsist()){ await setRec(A,(A.recuperar||0)-1); toast(`${A.nombre} recupera hoy`); } } break;
-    case "asRecQuitar": if(A){ delete S.asMarcas[`${A.id}|${b.dataset.hora}`]; render(); if(await guardarAsist()&&!avisoApp(A.id,S.asFecha,b.dataset.hora,"recupera")) await setRec(A,(A.recuperar||0)+1); } break;
-    case "recMenos": if(A){ const prev=A.recuperar||0; if(await setRec(A,prev-1)) toast(`${A.nombre}: recuperó una clase`,()=>setRec(A,prev)); } break;
+    case "asRecSel": if(A){ S.asMarcas[`${A.id}|${b.dataset.hora}`]="recuperando"; closeSheet(); if(await guardarAsist()){ await setRec(A,-1); toast(`${A.nombre} recupera hoy`); } } break;
+    case "asRecQuitar": if(A){ delete S.asMarcas[`${A.id}|${b.dataset.hora}`]; render(); if(await guardarAsist()&&!avisoApp(A.id,S.asFecha,b.dataset.hora,"recupera")) await setRec(A,1,S.asFecha); } break;
+    case "recMenos": if(A){ const prev=recPrev(A); if(await setRec(A,-1)) toast(`${A.nombre}: recuperó una clase`,()=>recVolver(A,prev)); } break;
     case "recTurno": { const t=turnos(b.dataset.club).find(x=>x.dia===Number(b.dataset.dia)&&x.hora===b.dataset.hora); if(!t) break;
-      for(const a of t.al){ await setRec(a,(a.recuperar||0)+1); } toast(`${t.al.length} alumnos anotados para recuperar`); closeSheet(); break; }
-    case "lluvia": openLluvia(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
+      for(const a of t.al){ await setRec(a,1,b.dataset.f||hoyISO); } toast(`${t.al.length} alumnos anotados para recuperar`); closeSheet(); break; }
+    case "lluvia": openLluvia(b.dataset.club,Number(b.dataset.dia),b.dataset.hora,b.dataset.f||hoyISO); break;
     case "stepRec": { const el=$("#aRec"); el.textContent=Math.max(0,Number(el.textContent)+Number(b.dataset.d)); break; }
     case "editA": if(A&&S.modo!=="profe"){ formAlumno(A); cargarHist(A); } break;
     case "close": closeSheet(); break;
-    case "hadd": $("#hList").insertAdjacentHTML("beforeend",hRow()); break;
+    case "hadd": { const r=[...document.querySelectorAll("#hList .hrow .hc")].pop(); $("#hList").insertAdjacentHTML("beforeend",hRow(undefined,r?r.value:undefined)); break; }
     case "hdel": b.parentElement.remove(); break;
     case "cfgReset": { $("#cCobro").value=TPL_DEF.cobro; $("#cLluvia").value=TPL_DEF.lluvia; $("#cRec").value=TPL_DEF.recupera; toast("Volvieron los textos originales. Tocá Guardar."); break; }
     case "delA": case "delL": {
@@ -763,11 +810,13 @@ document.addEventListener("submit",async e=>{
   if(!window.MODO_STAFF) return;
   e.preventDefault(); const f=e.target;
   if(f.id==="fA"){
-    const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector("select").value),hora:r.querySelector("input").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; return h;}).filter(h=>h.hora);
-    const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,recuperar:Number($("#aRec").textContent)||0,notas:$("#aNota").value.trim()};
+    const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; return h;}).filter(h=>h.hora);
+    const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim()};
+    const prevA=S.alumnos.find(x=>x.id===f.dataset.id)||{}; const pendA=prevA.id?recPendAvisos(prevA):[];
+    { const nuevoRec=Number($("#aRec").textContent)||0; Object.assign(data,recCambio(prevA,nuevoRec-recN(prevA))); }
     if(!data.nombre) return;
     const id=f.dataset.id,lead=f.dataset.lead;
-    if(id){ data.activo=$("#aAct").checked; if(await safe(()=>colA().doc(id).update(data),"Guardado")) closeSheet(); }
+    if(id){ data.activo=$("#aAct").checked; if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(id),data); pendA.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); },"Guardado")) closeSheet(); }
     else { data.activo=true; data.tipo="Grupal"; data.pagos={}; data.alta=hoyISO;
       if(await safe(()=>colA().add(data),`${data.nombre} agregado`)){ if(lead) await safe(()=>colL().doc(lead).update({estado:"alumno",ganado:hoyISO})); closeSheet(); } }
   }
@@ -801,7 +850,7 @@ document.addEventListener("submit",async e=>{
 
 async function exportCSV(){
   const rows=[["Nombre","Club","Teléfono","Categoría","Precio por clase",`Total ${S.mes}`,"Horarios","A recuperar","Activo",`Pagó ${S.mes}`,"Notas"]];
-  S.alumnos.forEach(a=>rows.push([a.nombre,a.club,a.tel,a.categoria,a.precioClase,montoMes(a),horarioTxt(a),a.recuperar||0,a.activo===false?"No":"Sí",pago(a)?"Sí":"No",a.notas]));
+  S.alumnos.forEach(a=>rows.push([a.nombre,[...clubsDe(a)].join(" + "),a.tel,a.categoria,a.precioClase,montoMes(a),horarioTxt(a),recN(a)||0,a.activo===false?"No":"Sí",pago(a)?"Sí":"No",a.notas]));
   const csv="﻿"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");
   try{ await S.downloads.save({filename:`alumnos-${S.mes}.csv`,data:csv}); }catch(e){}
 }

@@ -209,7 +209,7 @@ async function refrescarNotif(datos) {
 }
 function tarjetaNotif(quien) {
   const st = estadoNotif(); if (st === "off" || st === "activas") return "";
-  const para = quien === "alumno" ? "Te avisamos 3 horas antes de cada clase." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
+  const para = quien === "alumno" ? "Te avisamos el día antes de cada clase, el mismo día y cuando se libera un lugar para recuperar." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
   if (st === "instalar") return `<div class="msg notif-card" style="gap:8px"><div class="msg-k"><b>Activá las notificaciones</b></div>
     <span class="small">${para} En iPhone primero hay que instalar la app:</span>
     <ol class="small" style="margin:0;padding-left:18px;line-height:1.6"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b> acá</li></ol></div>`;
