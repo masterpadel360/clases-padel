@@ -25,6 +25,9 @@ function pedirNotifAlEntrar() {
   openSheet(`${cab}<div style="display:grid;gap:12px">${cuerpo}</div>`);
 }
 
+// Le pide al servidor que le avise a Gabriel ya mismo (si no responde, sale igual en el próximo envío automático).
+function avisarAlInstante() { if (!window.AVISOS_URL) return; try { fetch(window.AVISOS_URL, { method: "POST", keepalive: true }).catch(() => {}); } catch (e) {} }
+
 function iniciarPortal(perfil, u) {
   P.perfil = perfil; P.uid = u.uid;
   document.getElementById("login").hidden = true; document.getElementById("portal").hidden = false;
@@ -241,7 +244,7 @@ document.addEventListener("click", async e => {
   if (pa === "variasOk") { await confirmarVarias(b); return; }
   if (pa === "ok") {
     if (P.ocupado || !P.accion) return; P.ocupado = true; b.disabled = true; b.textContent = "Un segundo…";
-    try { const r = await P.accion(); const url = r && r.msg && P.info.telGabriel ? waURL(P.info.telGabriel, r.msg) : "";
+    try { const r = await P.accion(); avisarAlInstante(); const url = r && r.msg && P.info.telGabriel ? waURL(P.info.telGabriel, r.msg) : "";
       if (r && url) openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">${r.titulo}</h2><p class="small" style="margin:0">${r.texto}</p></div>
         <div class="msg"><span class="small"><b>Último paso:</b> mandale el aviso a Gabriel por WhatsApp. Ya está escrito, solo tocás enviar.</span><div class="bubble">${esc(r.msg)}</div>
         <a class="cta wa" href="${url}" target="_blank" rel="noopener" data-pa="cerrar" style="justify-self:start">Mandar por WhatsApp <i>→</i></a></div>
@@ -282,7 +285,7 @@ async function confirmarVarias(b) {
   if (P.ocupado) return; P.ocupado = true; b.disabled = true; b.textContent = "Avisando…";
   const ok = []; let rec = 0, fallo = 0;
   for (const c of sel) { try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); fallo++; } }
-  P.ocupado = false;
+  P.ocupado = false; if (ok.length) avisarAlInstante();
   const lista = ok.map(c => `${fechaLarga(c.f).toLowerCase()} a las ${c.h}`).join(", ");
   const msg = `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Te aviso que no voy a poder ir: ${lista}. Lo cargué en la app.`;
   const url = P.info.telGabriel && ok.length ? waURL(P.info.telGabriel, msg) : "";

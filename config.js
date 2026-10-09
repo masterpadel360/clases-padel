@@ -14,3 +14,6 @@ window.OWNER_EMAIL = "gabohuppi22@gmail.com";
 
 // Clave pública para notificaciones (Firebase → Configuración → Cloud Messaging → Certificados push web).
 window.VAPID_KEY = "BOBTZZTz7eYd4liJmkF2obikioilgsLLk19fpGPgB-wA1eP80YVJwMKhfiKZ2iC6xiCS6BUZmH2UXYeRbBREYYs";
+
+// Dirección del aviso al instante (Cloudflare Worker). Si está vacía, los avisos salen igual cada 10 minutos.
+window.AVISOS_URL = null;

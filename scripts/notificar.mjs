@@ -37,7 +37,13 @@ async function enviar(uid, { title, body, tag }) {
 /* ---------- 1) Avisos para Gabriel ---------- */
 const staff = Object.entries(tokens).filter(([, t]) => t.rol === "dueño").map(([uid]) => uid);
 const desde = admin.firestore.Timestamp.fromDate(new Date(ahora.getTime() - 6 * 3600e3));
-const nuevos = (await db.collection("avisos").where("creado", ">=", desde).get()).docs.filter(d => !d.data().notificado);
+const pendientes = (await db.collection("avisos").where("creado", ">=", desde).get()).docs.filter(d => !d.data().notificado);
+// Los marcamos notificados antes de mandar: si el aviso al instante (Cloudflare) ya lo mandó, no sale repetido.
+const nuevos = [];
+for (const d of pendientes) {
+  const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
+  if (ok) nuevos.push(d);
+}
 if (nuevos.length) {
   const todos = (await db.collection("avisos").where("fecha", ">=", hoy).get()).docs.map(d => d.data());
   const porAlumno = {};
@@ -57,7 +63,6 @@ if (nuevos.length) {
     }
     for (const uid of staff) await enviar(uid, { ...msg, tag: "aviso-" + lista[0].alumnoId });
   }
-  const b = db.batch(); nuevos.forEach(d => b.update(d.ref, { notificado: true })); await b.commit();
   console.log(`Avisos notificados: ${nuevos.length}`);
 }
 
