@@ -125,6 +125,14 @@ function renderPortal() {
 }
 const clubTxt = c => c === "ESPACIO" ? "Espacio" : "Jump";
 
+function claseHTML(c, marcas) { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now(); const est = marcas[`${c.fecha}|${c.hora}`]; const e = est && EST_AL[est];
+  return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center;${pasada ? "opacity:.6" : ""}"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
+        <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
+          <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
+          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}</div>
+        ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }
+function marcasDe(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
+
 function vInicio(a, wa) {
   const rg = rangoMes(); const cl = misClases(0, rg); const prox = misClases(70).find(c => !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now());
   const bk = recAl(); const rec = bk.reduce((s, x) => s + x.n, 0);
@@ -158,12 +166,7 @@ function vInicio(a, wa) {
 
   ${mesesCl.map((mk, mi) => { const cm = cl.filter(c => c.fecha.startsWith(mk)); return `
   <section class="sec"><div class="sec-head"><h3>Tus clases de ${mesSolo(mk)}</h3><span class="small muted">${cm.length} clase${cm.length === 1 ? "" : "s"}</span></div>
-    ${cm.length ? `<div class="list">${cm.map(c => { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now(); const est = marcas[`${c.fecha}|${c.hora}`]; const e = est && EST_AL[est];
-      return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center;${pasada ? "opacity:.6" : ""}"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
-        <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
-          <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
-          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}</div>
-        ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
+    ${cm.length ? `<div class="list">${cm.map(c => claseHTML(c, marcas)).join("")}</div>`
       : `<div class="empty">No tenés clases este mes.</div>`}
     ${mi === mesesCl.length - 1 ? `<p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-pa="ptab" data-t="ausencias">¿No podés venir? Avisá con tiempo</button><button class="mini" data-pa="calendario">Recordatorios en mi calendario</button></div>` : ""}
@@ -174,14 +177,18 @@ function vInicio(a, wa) {
 function vAusencias(a, wa) {
   const asis = misAsistencias(); const mes = mesKey(now);
   const vino = asis.filter(x => x.fecha.startsWith(mes) && (x.estado === "vino" || x.estado === "recuperando")).length;
+  const prox = misClases(21).filter(c => inicioDe(c.fecha, c.hora).getTime() > Date.now()); const marcas = marcasDe(a);
   return `
-  <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Ausencias programadas</h3></div>
+  <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>¿No podés venir a una clase?</h3></div>
+    ${prox.length ? `<div class="list">${prox.map(c => claseHTML(c, marcas)).join("")}</div>` : `<div class="empty">No tenés clases en las próximas 3 semanas.</div>`}
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar dentro del mes.</p>
+  </section>
+  <section class="sec"><div class="sec-head"><h3>Ausencias programadas</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:12px">
-      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">📅</span><div style="display:grid;gap:2px"><b>¿Sabés que no vas a poder venir?</b><span class="small muted">Un turno médico, trabajo, un acto, un viaje… Avisá con tiempo: elegí desde y hasta qué día y avisamos todas tus clases de esas fechas.</span></div></div>
+      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">🗓️</span><div style="display:grid;gap:2px"><b>¿Sabés que no vas a poder venir por algo?</b><span class="small muted">Un turno médico, trabajo, un acto, un viaje… Avisá con tiempo: elegí desde y hasta qué día y avisamos todas tus clases de esas fechas.</span></div></div>
       <button class="btn pri" data-pa="viaje" style="width:100%">Programar ausencia</button>
       <button class="linkish" data-pa="varias" style="justify-self:center">O elegí clase por clase</button>
     </div>
-    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Las que avisás con <b>24 horas o más</b> te quedan para recuperar, dentro del mes de cada clase.</p>
   </section>
   ${avisadasHTML(wa) || `<section class="sec"><div class="sec-head"><h3>Avisaste que no venís</h3></div><div class="empty">No tenés ausencias avisadas.</div></section>`}
   <section class="sec"><div class="sec-head"><h3>Tu asistencia</h3><span class="small muted">${vino} en ${mesSolo(mes)}</span></div>
