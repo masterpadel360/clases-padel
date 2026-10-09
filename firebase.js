@@ -178,12 +178,21 @@ function estadoNotif() {
   return "pedir";
 }
 async function activarNotificaciones(datos) {
-  const reg = await navigator.serviceWorker.register("firebase-messaging-sw.js");
   const perm = await Notification.requestPermission();
   if (perm !== "granted") throw { code: "denegado" };
-  const token = await firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg });
+  let reg;
+  try {
+    reg = await navigator.serviceWorker.register("firebase-messaging-sw.js");
+    // En iPhone el service worker tarda en quedar activo; sin esto getToken falla.
+    const sw = reg.installing || reg.waiting || reg.active;
+    if (sw && sw.state !== "activated") await new Promise(ok => { const t = setTimeout(ok, 8000); sw.addEventListener("statechange", () => { if (sw.state === "activated") { clearTimeout(t); ok(); } }); });
+  } catch (e) { console.error(e); throw { code: "sw", detalle: e && (e.message || e.name) }; }
+  let token;
+  try { token = await firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg }); }
+  catch (e) { console.error(e); throw { code: "token", detalle: e && (e.code || e.message) }; }
   if (!token) throw { code: "sin-token" };
-  await fdb.doc("tokens/" + fauth.currentUser.uid).set({ ...datos, tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  try { await fdb.doc("tokens/" + fauth.currentUser.uid).set({ ...datos, tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); }
+  catch (e) { console.error(e); throw { code: "guardar", detalle: e && (e.code || e.message) }; }
   try { localStorage.setItem("notifOK", "1"); } catch (e) {}
   escucharEnPrimerPlano();
 }

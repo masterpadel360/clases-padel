@@ -130,7 +130,7 @@ document.addEventListener("change", e => { if (window.MODO_STAFF && e.target.id 
 window.accionExtra = async (act, b, A) => {
   switch (act) {
     case "salir": salir(); break;
-    case "notif": { b.disabled = true; try { await activarNotificaciones({ rol: S.esOwner ? "dueño" : "profe" }); toast("¡Listo! Te va a llegar un aviso cuando un alumno cancele o reserve."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Activalo desde los ajustes del celu." : "No se pudo activar. Probá de nuevo."); } render(); break; }
+    case "notif": { b.disabled = true; try { await activarNotificaciones({ rol: S.esOwner ? "dueño" : "profe" }); toast("¡Listo! Te va a llegar un aviso cuando un alumno cancele o reserve."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Activalo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}).`); } render(); break; }
     case "avisoVisto": { const id = b.dataset.av; S.vistos[id] = true; render(); try { await fdb.doc("avisos/" + id).update({ visto: true }); } catch (e) {} break; }
     case "avisosTodos": { const ids = S.avisos.filter(v => !v.visto).map(v => v.id); ids.forEach(id => S.vistos[id] = true); render();
       try { const bt = fdb.batch(); ids.forEach(id => bt.update(fdb.doc("avisos/" + id), { visto: true })); await bt.commit(); } catch (e) {} break; }
