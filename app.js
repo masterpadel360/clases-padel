@@ -57,7 +57,9 @@ function montoClub(a,club,m=S.mes){ const hs=a.horarios||[]; if(!hs.length) retu
 /* ---------- Clases para recuperar, con vencimiento ----------
    Se recuperan dentro del mes. Si faltó la última semana del mes, tiene hasta el 7 del mes siguiente.
    recN(a) = cuántas tiene. a.recVence = {"2026-10-31": 2, ...} = hasta cuándo vale cada una. */
-function venceDe(f){ const d=isoDate(f); const fin=new Date(d.getFullYear(),d.getMonth()+1,0); return fin.getDate()-d.getDate()<7 ? toISO(new Date(d.getFullYear(),d.getMonth()+1,7)) : toISO(fin); }
+// Las clases son de lunes a viernes: si el vencimiento cae sábado o domingo, vence el viernes anterior.
+function habil(f){ const d=isoDate(f); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); return toISO(d); }
+function venceDe(f){ const d=isoDate(f); const fin=new Date(d.getFullYear(),d.getMonth()+1,0); return habil(fin.getDate()-d.getDate()<7 ? toISO(new Date(d.getFullYear(),d.getMonth()+1,7)) : toISO(fin)); }
 const fechaDM = f => { const d=isoDate(f); return `${d.getDate()}/${d.getMonth()+1}`; };
 // Faltas avisadas por la app que todavía no se ubicaron en su mes (las ubica el proceso automático o la próxima edición).
 function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P.avisos:S.avisos)||[];
@@ -65,7 +67,7 @@ function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P
 // Devuelve las vigentes: [{vence, n}] ordenadas. a.recuperar manda en la cantidad; si tiene menos, se descuentan las que vencen antes.
 function recBuckets(a,pend=recPendAvisos(a).map(v=>v.fecha)){
   const tot=Math.max(0,a.recuperar||0); const m={};
-  Object.entries(a.recVence||{}).forEach(([k,n])=>{ n=Number(n)||0; if(n>0) m[k]=(m[k]||0)+n; });
+  Object.entries(a.recVence||{}).forEach(([k,n])=>{ n=Number(n)||0; if(n>0){ k=habil(k); m[k]=(m[k]||0)+n; } });
   pend.forEach(f=>{ const k=venceDe(f); m[k]=(m[k]||0)+1; });
   const sum=Object.values(m).reduce((s,n)=>s+n,0);
   if(tot>sum){ const k=venceDe(hoyISO); m[k]=(m[k]||0)+tot-sum; }
@@ -290,7 +292,7 @@ function vRecuperar(){
   return `
   <section class="sec" style="margin-top:4px">
     <div class="sec-head"><h2 class="disp">Recuperar</h2><button class="cta" data-act="recAdd" style="padding:6px 6px 6px 14px;font-size:13px">Anotar <i>+</i></button></div>
-    <p class="small muted" style="margin:0">${recs.length?`${recs.length} alumno${recs.length>1?"s":""} · ${tot} clase${tot>1?"s":""} pendiente${tot>1?"s":""}. El mensaje ya le ofrece los lugares libres de su categoría.`:"Acá aparece quién tiene que recuperar."} Se recuperan dentro del mes; si faltó la última semana, hasta el 7 del mes siguiente. Si no, se pierden solas.</p>
+    <p class="small muted" style="margin:0">${recs.length?`${recs.length} alumno${recs.length>1?"s":""} · ${tot} clase${tot>1?"s":""} pendiente${tot>1?"s":""}. El mensaje ya le ofrece los lugares libres de su categoría.`:"Acá aparece quién tiene que recuperar."} Se recuperan dentro del mes; si faltó la última semana, tiene la primera semana del mes siguiente. Si no, se pierden solas.</p>
     ${recs.length?`<div class="list">${recs.map(recRow).join("")}</div>`:`<div class="empty">Nadie tiene clases pendientes. Se suman cuando suspendés un turno por lluvia en <b>Agenda</b>, o tocando <b>Anotar +</b> cuando alguien falta.</div>`}
   </section>
   <section class="sec">

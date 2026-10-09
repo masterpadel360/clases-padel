@@ -8,9 +8,11 @@ export const sumarDias = (f, n) => { const [y, m, d] = partes(f); return fechaIS
 export const diaSemana = f => { const [y, m, d] = partes(f); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
 
 // Se recupera dentro del mes. Si faltó en la última semana del mes, hasta el 7 del mes siguiente.
+// Las clases son de lunes a viernes: si cae sábado o domingo, vence el viernes anterior.
+export function habil(f) { while ([0, 6].includes(diaSemana(f))) f = sumarDias(f, -1); return f; }
 export function venceDe(f) {
   const [y, m, d] = partes(f); const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  return ultimo - d < 7 ? fechaISO(y, m + 1, 7) : fechaISO(y, m, ultimo);
+  return habil(ultimo - d < 7 ? fechaISO(y, m + 1, 7) : fechaISO(y, m, ultimo));
 }
 
 // Ordena las clases para recuperar según cuándo vencen.
@@ -19,7 +21,7 @@ export function venceDe(f) {
 // Devuelve { recVence, recuperar } solo con las vigentes (las vencidas se pierden).
 export function normalizar(a, hoy, pend = []) {
   const tot = Math.max(0, Number(a.recuperar) || 0); const m = {};
-  Object.entries(a.recVence || {}).forEach(([k, n]) => { n = Number(n) || 0; if (n > 0) m[k] = (m[k] || 0) + n; });
+  Object.entries(a.recVence || {}).forEach(([k, n]) => { n = Number(n) || 0; if (n > 0) { k = habil(k); m[k] = (m[k] || 0) + n; } });
   pend.forEach(f => { const k = venceDe(f); m[k] = (m[k] || 0) + 1; });
   const sum = Object.values(m).reduce((s, n) => s + n, 0);
   if (tot > sum) { const k = venceDe(hoy); m[k] = (m[k] || 0) + tot - sum; }
