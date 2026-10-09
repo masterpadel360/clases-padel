@@ -47,10 +47,10 @@ function mostrarLogin(modo = "entrar") {
       <p class="small" id="lgErr" style="margin:0;color:var(--warn);min-height:1em">${esc(msgLogin)}</p>
       <button class="btn pri" id="lgBtn">${dueño ? "Crear cuenta" : "Entrar"}</button>
     </form>
-    <button class="linkish" id="lgSwitch" style="justify-self:center">${dueño ? "Ya tengo cuenta" : "Soy Gabriel y es la primera vez"}</button>
+    ${dueño ? `<button class="linkish" id="lgSwitch" style="justify-self:center">Ya tengo cuenta</button>` : ""}
   </div>`);
   msgLogin = "";
-  document.getElementById("lgSwitch").onclick = () => mostrarLogin(dueño ? "entrar" : "dueño");
+  const sw = document.getElementById("lgSwitch"); if (sw) sw.onclick = () => mostrarLogin("entrar");
   document.getElementById("fLogin").onsubmit = async e => {
     e.preventDefault();
     const u = document.getElementById("lgU").value, p = document.getElementById("lgP").value, err = document.getElementById("lgErr"), btn = document.getElementById("lgBtn");
