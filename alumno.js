@@ -166,7 +166,7 @@ function vInicio(a, wa) {
         ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }).join("")}</div>`
       : `<div class="empty">No tenés clases este mes.</div>`}
     ${mi === mesesCl.length - 1 ? `<p class="small" style="margin:0;color:rgba(247,242,237,.85)">Si avisás con <b>24 horas o más</b> de anticipación, la clase te queda para recuperar.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-pa="ptab" data-t="ausencias">¿Te vas de viaje? Avisá acá</button><button class="mini" data-pa="calendario">Recordatorios en mi calendario</button></div>` : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-pa="ptab" data-t="ausencias">¿No podés venir? Avisá con tiempo</button><button class="mini" data-pa="calendario">Recordatorios en mi calendario</button></div>` : ""}
   </section>`; }).join("")}
   ${wa ? `<a class="cta wa" href="${wa}" target="_blank" rel="noopener" style="margin-top:22px;justify-self:start">Escribirle a Gabriel <i>→</i></a>` : ""}`;
 }
@@ -177,9 +177,9 @@ function vAusencias(a, wa) {
   return `
   <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Ausencias programadas</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:12px">
-      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">✈️</span><div style="display:grid;gap:2px"><b>¿Te vas de viaje o no podés venir por un tiempo?</b><span class="small muted">Elegí desde y hasta qué día y avisamos todas tus clases de una vez.</span></div></div>
-      <button class="btn pri" data-pa="viaje" style="width:100%">Me voy de viaje</button>
-      <button class="linkish" data-pa="varias" style="justify-self:center">Prefiero elegir clase por clase</button>
+      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">📅</span><div style="display:grid;gap:2px"><b>¿Sabés que no vas a poder venir?</b><span class="small muted">Un turno médico, trabajo, un acto, un viaje… Avisá con tiempo: elegí desde y hasta qué día y avisamos todas tus clases de esas fechas.</span></div></div>
+      <button class="btn pri" data-pa="viaje" style="width:100%">Programar ausencia</button>
+      <button class="linkish" data-pa="varias" style="justify-self:center">O elegí clase por clase</button>
     </div>
     <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Las que avisás con <b>24 horas o más</b> te quedan para recuperar, dentro del mes de cada clase.</p>
   </section>
@@ -369,11 +369,11 @@ function abrirCalendario() {
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="calOk">Agregar al calendario</button></span></div>`);
 }
 
-/* ---- Me voy de viaje: avisa todas las clases entre dos fechas ---- */
+/* ---- Ausencia programada: avisa todas las clases entre dos fechas ---- */
 function abrirViaje() {
   const man = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const d1 = toISO(man), d2 = toISO(new Date(man.getFullYear(), man.getMonth(), man.getDate() + 6));
-  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Me voy de viaje</h2><span class="small muted">Elegí desde y hasta qué día no venís. Avisamos todas tus clases de esas fechas.</span></div>
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Programar ausencia</h2><span class="small muted">Elegí desde y hasta qué día no venís. Si es un solo día, poné la misma fecha en las dos. Avisamos todas tus clases de esas fechas.</span></div>
     <div class="two"><div class="field"><label for="vjD">Desde</label><input id="vjD" type="date" min="${hoyISO}" value="${d1}"></div><div class="field"><label for="vjH">Hasta</label><input id="vjH" type="date" min="${hoyISO}" value="${d2}"></div></div>
     <div id="vjPrev" style="display:grid;gap:8px"></div>
     <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
