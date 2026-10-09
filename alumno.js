@@ -104,7 +104,7 @@ function mesesPago() {
 }
 
 /* ---- Vista: tres pestañas (Inicio · Ausencias · Pagos) ---- */
-const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"] };
+const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"], lluvia: ["Se suspendió por lluvia · te queda para recuperar", "var(--jump)"] };
 const P_TABS = [
   ["inicio", "Inicio", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M5 9c4 2 10 2 14 0M5 15c4-2 10-2 14 0"/></svg>'],
   ["ausencias", "Ausencias", '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M10 13l4 4M14 13l-4 4"/></svg>'],

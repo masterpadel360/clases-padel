@@ -183,6 +183,7 @@ a.wa-link{color:var(--wa);font-weight:700;text-decoration:none}
 .seg-b.vino[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
 .seg-b.falto[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#fff}
 .seg-b.recupera[aria-pressed="true"]{background:var(--btn);border-color:var(--btn);color:var(--btn-ink)}
+.tag.lluvia{background:rgba(70,120,200,.15);color:#2f5f9e}
 .stepper{display:flex;align-items:center;gap:12px}
 .stepper button{width:38px;height:38px;border-radius:999px;border:0;background:var(--btn);color:var(--btn-ink);font-size:18px}
 .stepper b{font-family:var(--f-display);font-weight:600;font-size:30px;min-width:28px;text-align:center}
@@ -303,7 +304,7 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script>
 /* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
-window.APP_V = "202610092034";
+window.APP_V = "202610092037";
 (function () {
   let avisado = false;
   function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
@@ -325,10 +326,10 @@ window.APP_V = "202610092034";
   setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
 })();
 </script>
-<script src="config.js?v=202610092034"></script>
-<script src="app.js?v=202610092034"></script>
-<script src="staff-extra.js?v=202610092034"></script>
-<script src="alumno.js?v=202610092034"></script>
-<script src="firebase.js?v=202610092034"></script>
+<script src="config.js?v=202610092037"></script>
+<script src="app.js?v=202610092037"></script>
+<script src="staff-extra.js?v=202610092037"></script>
+<script src="alumno.js?v=202610092037"></script>
+<script src="firebase.js?v=202610092037"></script>
 </body>
 </html>
