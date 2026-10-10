@@ -154,7 +154,7 @@ if (alumnosConApp.length) {
         13: { title: `Hoy vence el pago de ${MESN} ⏳`, body: `${nombre}, hoy es el último día para pagar. Tocá Pagar en la app y subí el comprobante.` },
         14: { title: `Tu pago de ${MESN} está vencido`, body: `${nombre}, venció el 13. Pagalo cuanto antes desde la app: tocá Pagar y subí el comprobante.` } }[dia];
       const tieneCuota = (a.horarios || []).length || ((a.pagos || {})[mesAct] || {}).monto;
-      if (PAGO && tieneCuota && horaAR >= 10 && horaAR < 20 && !((a.pagos || {})[mesAct] || {}).pagado) {
+      if (PAGO && mesAct >= "2026-11" && tieneCuota && horaAR >= 10 && horaAR < 20 && !((a.pagos || {})[mesAct] || {}).pagado) {
         const idP = `pago_${a.id}_${mesAct}_${dia}`;
         if (!(await yaEnviado(idP))) {
           const comp = (await db.doc(`comprobantes/${a.id}_${mesAct}`).get()).data();
