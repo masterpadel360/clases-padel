@@ -28,7 +28,7 @@ const telDigits = tel => { let d=String(tel||"").replace(/\D/g,""); if(!d) retur
 const waURL = (tel,text) => { const d=telDigits(tel); return d ? `https://wa.me/${d}?text=${encodeURIComponent(text)}` : ""; };
 const nombreCorto = n => String(n||"").trim().split(/\s+/)[0].replace(/^./,c=>c.toUpperCase());
 
-const S = { tab:"hoy", club:"", mes:mesKey(now), q:"", dia:now.getDay(), fecha:hoyISO, alumnos:[], leads:[], cfg:{}, loaded:{a:false,l:false}, db:null, dbState:"cargando", downloads:null, asFecha:hoyISO, asClub:"ESPACIO", modo:"owner", esOwner:true, uid:null, user:null, horas:{}, hVal:{}, hMovs:[], fin:[], finEq:{}, asHist:{}, finMes:mesKey(now), horasFecha:hoyISO, metas:null, metasEq:{}, equipo:[], nombres:{}, asMarcas:{}, asKey:null, asUnsub:null, sent:{}, avisos:[], usuarios:[], perfil:null, vistos:{}, comps:{} };
+const S = { tab:"hoy", club:"", mes:mesKey(now), q:"", dia:now.getDay(), fecha:hoyISO, alumnos:[], leads:[], cfg:{}, loaded:{a:false,l:false}, db:null, dbState:"cargando", downloads:null, asFecha:hoyISO, asClub:"ESPACIO", modo:"owner", esOwner:true, uid:null, user:null, horas:{}, hVal:{}, hMovs:[], fin:[], finEq:{}, asHist:{}, finMes:mesKey(now), horasFecha:hoyISO, metas:null, metasEq:{}, equipo:[], nombres:{}, asMarcas:{}, asKey:null, asUnsub:null, sent:{}, avisos:[], usuarios:[], perfil:null, vistos:{}, comps:{}, reemp:{} };
 
 $("#todayLbl").textContent = now.toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});
 

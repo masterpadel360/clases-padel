@@ -1,5 +1,5 @@
 /* ---------- App del alumno ---------- */
-const P = { tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], comps: {}, cargado: false, ocupado: false };
+const P = { tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], comps: {}, reemp: {}, cargado: false, ocupado: false };
 const DIA_MS = 86400000;
 const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
 const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
@@ -34,8 +34,8 @@ function iniciarPortal(perfil, u) {
   const id = perfil.alumnoId;
   // Abre al instante con lo último que se vio en este celu; después se actualiza solo con lo nuevo.
   const CK = "portal_" + id; let tGuardar = 0;
-  try { const c = JSON.parse(localStorage.getItem(CK) || "null"); if (c && c.a) { Object.assign(P, { a: c.a, info: c.info || {}, turnos: c.turnos || {}, avisos: c.avisos || [], comps: c.comps || {}, asis: c.asis || [], cargado: true }); } } catch (e) {}
-  const guardar = () => { clearTimeout(tGuardar); tGuardar = setTimeout(() => { try { localStorage.setItem(CK, JSON.stringify({ a: P.a, info: P.info, turnos: P.turnos, avisos: P.avisos, comps: P.comps, asis: P.asis })); } catch (e) {} }, 800); };
+  try { const c = JSON.parse(localStorage.getItem(CK) || "null"); if (c && c.a) { Object.assign(P, { a: c.a, info: c.info || {}, turnos: c.turnos || {}, avisos: c.avisos || [], comps: c.comps || {}, reemp: c.reemp || {}, asis: c.asis || [], cargado: true }); } } catch (e) {}
+  const guardar = () => { clearTimeout(tGuardar); tGuardar = setTimeout(() => { try { localStorage.setItem(CK, JSON.stringify({ a: P.a, info: P.info, turnos: P.turnos, avisos: P.avisos, comps: P.comps, reemp: P.reemp, asis: P.asis })); } catch (e) {} }, 800); };
   const pr = () => { guardar(); if ($("#overlay").hidden) renderPortal(); };
   renderPortal();
   // Si la primera vez tarda mucho (mala señal), ofrecemos reintentar en vez de quedar trabado.
@@ -46,6 +46,7 @@ function iniciarPortal(perfil, u) {
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
   fdb.collection("cupos").where("fecha", ">=", hoyISO).onSnapshot(s => { P.cupos = {}; s.docs.forEach(d => P.cupos[d.id] = d.data()); pr(); }, () => {});
+  fdb.collection("reemplazos").where("alumnoId", "==", id).onSnapshot(s => { P.reemp = {}; s.docs.forEach(d => { const r = d.data(); P.reemp[`${r.fecha}|${r.hora}`] = r; }); pr(); }, () => {});
   fdb.collection("comprobantes").where("alumnoId", "==", id).onSnapshot(s => { P.comps = {}; s.docs.forEach(d => { const c = d.data(); P.comps[c.mes] = c; }); pr(); }, () => {});
   fdb.collection("avisos").where("alumnoId", "==", id).onSnapshot(s => { P.avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
   { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -147,12 +148,13 @@ function renderPortal() {
 }
 const clubTxt = c => c === "ESPACIO" ? "Espacio" : "Jump";
 
-function claseHTML(c, marcas) { const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now(); const est = marcas[`${c.fecha}|${c.hora}`]; const e = est && EST_AL[est];
+function claseHTML(c, marcas) { const rp = P.reemp[`${c.fecha}|${c.hora}`]; const d = isoDate(c.fecha); const pasada = inicioDe(c.fecha, c.hora).getTime() < Date.now(); const est = marcas[`${c.fecha}|${c.hora}`]; const e = est && EST_AL[est];
   return `<div class="slot" style="grid-template-columns:70px 1fr auto;align-items:center;${pasada ? "opacity:.6" : ""}"><div class="side"><div class="h num" style="font-size:24px">${c.hora}</div></div>
         <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
-          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}</div>
-        ${c.aus || c.vuelve || pasada ? "" : `<button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`}</div>`; }
+          ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}${rp ? `<span class="small" style="color:var(--jump);font-weight:700">Va ${esc(rp.quien)} en tu lugar</span>` : ""}</div>
+        ${pasada || c.aus || c.vuelve ? "" : rp ? `<button class="mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
+          : `<span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "fija" ? `<button class="mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}</span>`}</div>`; }
 function marcasAl(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
 
 function vInicio(a, wa) {
@@ -203,7 +205,7 @@ function vAusencias(a, wa) {
   return `
   <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>¿No podés venir a una clase?</h3></div>
     ${prox.length ? `<div class="list">${prox.map(c => claseHTML(c, marcas)).join("")}</div>` : `<div class="empty">No tenés clases en las próximas 3 semanas.</div>`}
-    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar en las 2 semanas siguientes.</p>
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar en las 2 semanas siguientes. ¿Va otra persona en tu lugar? Tocá <b>Va otro</b>.</p>
   </section>
   <section class="sec"><div class="sec-head"><h3>Ausencias programadas</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:12px">
@@ -289,6 +291,32 @@ async function mandarComprobante(m, b) {
   } catch (x) { console.error(x); b.disabled = false; b.textContent = "Pagar"; toast(x && x.code === "permission-denied" ? "Ese mes ya tiene un comprobante enviado." : "No se pudo enviar. Probá de nuevo."); }
 }
 
+/* ---- Mandar a alguien en tu lugar ---- */
+function abrirReemplazo(f, h, club) {
+  const d = isoDate(f);
+  openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">¿Quién va en tu lugar?</h2>
+      <p class="small" style="margin:0">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} a las ${h} · ${clubTxt(club)}. Tu lugar lo usa otra persona: <b>la clase no queda para recuperar</b>.</p></div>
+    <div style="display:grid;gap:12px">
+      <input id="reempNom" type="text" maxlength="40" placeholder="Nombre y apellido" autocomplete="off" style="font-size:16px">
+      <button class="btn pri" data-pa="reempOk" data-f="${f}" data-h="${h}" data-c="${club}" style="width:100%;font-size:16px;padding:14px">Confirmar</button>
+      <button class="linkish" data-pa="cerrar" style="justify-self:center;font-size:12px;opacity:.7">Cancelar</button></div>`);
+  setTimeout(() => { const i = $("#reempNom"); if (i) i.focus(); }, 50);
+}
+async function guardarReemplazo(b) {
+  const { f, h, c } = b.dataset; const quien = ($("#reempNom").value || "").trim().replace(/\s+/g, " ");
+  if (quien.length < 2) { toast("Escribí el nombre de quién va"); return; }
+  if (inicioDe(f, h).getTime() <= Date.now()) { toast("Esa clase ya empezó"); return; }
+  b.disabled = true; b.textContent = "Guardando…"; const a = P.a;
+  try {
+    await fdb.doc(`reemplazos/${a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: a.id, uid: P.uid, nombre: a.nombre, quien, fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
+      inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false });
+    const d = isoDate(f);
+    openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🎾</div><h2 class="disp" style="margin:0">Listo</h2>
+      <p class="small" style="margin:0">Le avisamos a Gabriel que el <b>${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth() + 1} a las ${h}</b> va <b>${esc(quien)}</b> en tu lugar.</p>
+      <button class="btn pri" data-pa="cerrar" style="width:100%">Listo</button></div>`);
+  } catch (x) { console.error(x); b.disabled = false; b.textContent = "Confirmar"; toast("No se pudo guardar. Probá de nuevo."); }
+}
+
 /* ---- Acciones ---- */
 function confirmar(titulo, texto, boton, accion) {
   openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">${titulo}</h2><p class="small" style="margin:0">${texto}</p></div>
@@ -336,6 +364,10 @@ document.addEventListener("click", async e => {
   if (pa === "cuenta") { abrirCuenta(); return; }
   if (pa === "cuUsuario" || pa === "cuClave") { await guardarCuenta(pa, b); return; }
   if (pa === "cerrar") { closeSheet(); return; }
+  if (pa === "reemp") { abrirReemplazo(b.dataset.f, b.dataset.h, b.dataset.c); return; }
+  if (pa === "reempOk") { await guardarReemplazo(b); return; }
+  if (pa === "reempNo") { const { f, h } = b.dataset; confirmar("¿Cancelás el reemplazo?", "Tu lugar vuelve a ser tuyo para esa clase.", "Sí, cancelar", async () => {
+      await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).delete(); return { titulo: "Listo", texto: "Cancelaste el reemplazo." }; }); return; }
   if (pa === "pagar") { abrirPagar(b.dataset.m); return; }
   if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }

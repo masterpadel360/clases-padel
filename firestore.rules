@@ -82,6 +82,24 @@ service cloud.firestore {
       allow delete: if esStaff();
     }
 
+    // ---------- Reemplazos: el alumno manda a otra persona en su lugar ----------
+    // Uno por clase (id = alumnoId_fecha_hhmm), solo antes de que empiece. Lo puede cancelar hasta que empiece.
+    function reemplazoOk(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['alumnoId', 'uid', 'nombre', 'quien', 'fecha', 'hora', 'hhmm', 'club', 'inicio', 'creado', 'notificado'])
+        && d.alumnoId == miAlumno() && d.uid == request.auth.uid
+        && id == d.alumnoId + '_' + d.fecha + '_' + d.hhmm
+        && d.quien is string && d.quien.size() >= 2 && d.quien.size() <= 40
+        && d.inicio is timestamp && d.inicio > request.time
+        && d.creado == request.time && d.notificado == false;
+    }
+    match /reemplazos/{id} {
+      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow create: if esStaff() || (esAlumno() && reemplazoOk(id));
+      allow update: if esStaff();
+      allow delete: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno() && resource.data.inicio > request.time);
+    }
+
     // ---------- Pagos: el alumno sube el comprobante y el mes queda pagado ----------
     // Uno por alumno y mes (id = alumnoId_AAAA-MM). Solo se puede volver a mandar si Gabriel lo rechazó.
     function compPrevioOk(id) {

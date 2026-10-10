@@ -12,6 +12,8 @@ function ajusteTurno(t, fecha) {
   return { aus, rec };
 }
 function tagAviso(aid, fecha, hora) {
+  const rp = (S.reemp || {})[`${aid}|${fecha}|${hora}`];
+  if (rp) return ` <span class="tag" style="background:var(--jump-soft,rgba(80,140,255,.15));color:var(--jump)">Va ${esc(rp.quien)} en su lugar</span>`;
   const v = avisoApp(aid, fecha, hora, "ausencia"); if (!v) return "";
   if (vuelveApp(aid, fecha, hora)) return ` <span class="tag" style="background:var(--ok-soft);color:var(--ok)">Avisó y al final viene</span>`;
   return ` <span class="tag rec">${v.conRecupero ? "Avisó por la app · recupera" : "Avisó tarde por la app"}</span>`;
