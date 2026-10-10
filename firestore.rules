@@ -82,7 +82,7 @@ service cloud.firestore {
       allow delete: if esStaff();
     }
 
-    // ---------- Reemplazos: el alumno manda a otra persona en su lugar ----------
+    // ---------- Reemplazos: el alumno manda a otra persona a usar su recuperación ----------
     // Uno por clase (id = alumnoId_fecha_hhmm), solo antes de que empiece. Lo puede cancelar hasta que empiece.
     function reemplazoOk(id) {
       let d = request.resource.data;

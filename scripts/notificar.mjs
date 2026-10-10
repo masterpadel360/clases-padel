@@ -75,7 +75,7 @@ if (nuevos.length) {
 for (const d of (await db.collection("reemplazos").where("notificado", "==", false).get()).docs) {
   const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
   if (!ok) continue; const r = d.data();
-  for (const uid of staff) await enviar(uid, { title: `${primerNombre(r.nombre)} manda a alguien en su lugar`, body: `Va ${r.quien} ${fechaTxt(r.fecha)} a las ${r.hora} · ${CLUB[r.club] || r.club}`, tag: "reemp-" + r.alumnoId });
+  for (const uid of staff) await enviar(uid, { title: `${primerNombre(r.nombre)} manda a alguien a recuperar`, body: `Va ${r.quien} en su lugar ${fechaTxt(r.fecha)} a las ${r.hora} · ${CLUB[r.club] || r.club}`, tag: "reemp-" + r.alumnoId });
 }
 
 /* ---------- 1b) Pagos con comprobante: el mes queda pagado y le avisamos a Gabriel ---------- */

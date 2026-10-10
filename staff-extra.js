@@ -20,15 +20,16 @@ function tagAviso(aid, fecha, hora) {
 }
 function reservasAsistHTML(club, fecha, hora) {
   const rs = S.avisos.filter(v => v.tipo === "recupera" && v.club === club && v.fecha === fecha && v.hora === hora && !S.asMarcas[`${v.alumnoId}|${hora}`] && !vuelveApp(v.alumnoId, fecha, hora));
-  return rs.map(v => { const a = S.alumnos.find(x => x.id === v.alumnoId); if (!a) return "";
-    return `<div class="row"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta"><span class="tag rec">Reservó por la app para recuperar</span></span></span><button class="mini go" data-act="asRecApp" data-id="${a.id}" data-hora="${hora}">Vino</button></div>`; }).join("");
+  return rs.map(v => { const a = S.alumnos.find(x => x.id === v.alumnoId); if (!a) return ""; const rp = (S.reemp || {})[`${a.id}|${fecha}|${hora}`];
+    return `<div class="row"><span class="main"><span class="name">${rp ? `${esc(rp.quien)} <span class="muted" style="font-weight:500">(por ${esc(a.nombre)})</span>` : esc(a.nombre)}</span><span class="meta"><span class="tag rec">${rp ? `Recupera en lugar de ${esc(a.nombre)}` : "Reservó por la app para recuperar"}</span></span></span><button class="mini go" data-act="asRecApp" data-id="${a.id}" data-hora="${hora}">Vino</button></div>`; }).join("");
 }
 const fechaCorta = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth() + 1}`; };
 function textoAviso(v) {
   const n = v.nombre || (S.alumnos.find(a => a.id === v.alumnoId) || {}).nombre || "Un alumno";
   if (v.tipo === "ausencia") return `<b>${esc(n)}</b> no va el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> · ${v.conRecupero ? '<span style="color:var(--sun)">queda para recuperar</span>' : '<span class="due">avisó con menos de 24 h, no recupera</span>'}`;
   if (vuelveApp(v.alumnoId, v.fecha, v.hora)) return `<b>${esc(n)}</b> <span style="color:var(--ok)">al final sí va</span> el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> (había avisado que no)`;
-  return `<b>${esc(n)}</b> reservó recuperar el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b>${v.nivel ? ` (${esc(v.nivel)})` : ""}`;
+  const rp = (S.reemp || {})[`${v.alumnoId}|${v.fecha}|${v.hora}`];
+  return `<b>${esc(n)}</b> reservó recuperar el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b>${v.nivel ? ` (${esc(v.nivel)})` : ""}${rp ? ` · va <b>${esc(rp.quien)}</b> en su lugar` : ""}`;
 }
 function avisosHoyHTML() {
   if (S.modo === "profe") return "";

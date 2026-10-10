@@ -154,7 +154,7 @@ function claseHTML(c, marcas) { const rp = P.reemp[`${c.fecha}|${c.hora}`]; cons
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}${c.nivel ? " · " + esc(c.nivel) : ""}</span>
           ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}${rp ? `<span class="small" style="color:var(--jump);font-weight:700">Va ${esc(rp.quien)} en tu lugar</span>` : ""}</div>
         ${pasada || c.aus || c.vuelve ? "" : rp ? `<button class="mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
-          : `<span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "fija" ? `<button class="mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}</span>`}</div>`; }
+          : `<span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}</span>`}</div>`; }
 function marcasAl(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
 
 function vInicio(a, wa) {
@@ -205,7 +205,7 @@ function vAusencias(a, wa) {
   return `
   <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>¿No podés venir a una clase?</h3></div>
     ${prox.length ? `<div class="list">${prox.map(c => claseHTML(c, marcas)).join("")}</div>` : `<div class="empty">No tenés clases en las próximas 3 semanas.</div>`}
-    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar en las 2 semanas siguientes. ¿Va otra persona en tu lugar? Tocá <b>Va otro</b>.</p>
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar en las 2 semanas siguientes.</p>
   </section>
   <section class="sec"><div class="sec-head"><h3>Ausencias programadas</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:12px">
@@ -295,7 +295,7 @@ async function mandarComprobante(m, b) {
 function abrirReemplazo(f, h, club) {
   const d = isoDate(f);
   openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">¿Quién va en tu lugar?</h2>
-      <p class="small" style="margin:0">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} a las ${h} · ${clubTxt(club)}. Tu lugar lo usa otra persona: <b>la clase no queda para recuperar</b>.</p></div>
+      <p class="small" style="margin:0">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} a las ${h} · ${clubTxt(club)}. Esta recuperación la usa otra persona en tu lugar.</p></div>
     <div style="display:grid;gap:12px">
       <input id="reempNom" type="text" maxlength="40" placeholder="Nombre y apellido" autocomplete="off" style="font-size:16px">
       <button class="btn pri" data-pa="reempOk" data-f="${f}" data-h="${h}" data-c="${club}" style="width:100%;font-size:16px;padding:14px">Confirmar</button>
@@ -387,8 +387,16 @@ document.addEventListener("click", async e => {
   }
   if (pa === "reservar") {
     const { f, h, c } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
-    confirmar(`¿Recuperás ${cuando}?`, "Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.", "Reservar", async () => {
+    confirmar(`¿Recuperás ${cuando}?`, `Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.
+      <span style="display:grid;gap:6px;margin-top:12px"><b>¿No podés ir vos?</b> Podés mandar a otra persona a recuperar en tu lugar (opcional):
+      <input id="recQuien" type="text" maxlength="40" placeholder="Nombre de quién va (si no vas vos)" autocomplete="off" style="font-size:16px"></span>`, "Reservar", async () => {
+      const quien = (($("#recQuien") || {}).value || "").trim().replace(/\s+/g, " ");
       await reservarRec(f, h, c);
+      if (quien.length >= 2) {
+        try { await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: P.a.id, uid: P.uid, nombre: P.a.nombre, quien: quien.slice(0, 40), fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
+          inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false }); } catch (x) { console.error(x); }
+        return { titulo: "¡Reservado!", texto: `Va <b>${esc(quien)}</b> a recuperar ${cuando} en tu lugar.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}, va ${quien} en mi lugar.` };
+      }
       return { titulo: "¡Reservado!", texto: `Te esperamos ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}.` };
     });
     return;
