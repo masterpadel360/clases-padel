@@ -111,13 +111,17 @@ function mesesPago() {
   return [...set].sort().reverse();
 }
 
-// Estado del pago de un mes: "pagado" (Gabriel lo marcó o el alumno mandó el comprobante), "rechazado" o "pendiente".
+// Se paga del 1 al 13 de cada mes. Desde el 14 queda vencido.
+const DIA_PAGO = 13;
+const pagoVence = m => `${DIA_PAGO}/${Number(m.slice(5, 7))}`;
+function mesVencido(m) { const act = mesKey(now); return m < act || (m === act && now.getDate() > DIA_PAGO); }
+// Estado del pago de un mes: "pagado" (Gabriel lo marcó o el alumno mandó el comprobante), "rechazado", "vencido" o "pendiente".
 function estPago(a, m) {
   const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
   if (p.pagado) return "pagado";
-  if (c && c.estado === "rechazado") return "rechazado";
   if (c && c.estado === "enviado" && !c.aplicado) return "pagado";
-  return "pendiente";
+  if (c && c.estado === "rechazado") return mesVencido(m) ? "vencido" : "rechazado";
+  return mesVencido(m) ? "vencido" : "pendiente";
 }
 
 /* ---- Vista: tres pestañas (Inicio · Ausencias · Pagos) ---- */
@@ -155,7 +159,7 @@ function vInicio(a, wa) {
   const bk = recAl(); const rec = bk.reduce((s, x) => s + x.n, 0);
   const marcas = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) marcas[`${x.fecha}|${hora}`] = x.marcas[k]; }));
   const mesesCl = [...new Set(cl.map(c => c.fecha.slice(0, 7)))];
-  const mes = mesKey(now); const pagoMes = { pagado: estPago(a, mes) === "pagado" }; const montoAct = montoMes(a, mes);
+  const mes = mesKey(now); const estMes = estPago(a, mes); const pagoMes = { pagado: estMes === "pagado" }; const montoAct = montoMes(a, mes);
   const ops = rec > 0 ? opcionesRec() : [];
   const vino = misAsistencias().filter(x => x.fecha.startsWith(mes) && (x.estado === "vino" || x.estado === "recuperando")).length;
   return `
@@ -164,7 +168,7 @@ function vInicio(a, wa) {
     ${prox ? `<div class="hero-main"><div class="mega num" style="font-size:clamp(64px,22vw,104px)">${prox.hora}</div><div class="spec"><span class="spec-k">${prox.tipo === "recupera" ? "Recuperación" : "Clase"}</span><span style="font-weight:800">${fechaRel(prox.fecha)}</span><span class="small muted" style="text-transform:capitalize">${clubTxt(prox.club)}${prox.nivel ? " · " + esc(prox.nivel) : ""}</span></div></div>` : ""}
     <div class="hero-stats">
       <button class="stat" data-pa="irRec" style="background:none;border:0;padding:0;text-align:left;color:inherit"><div class="val num" style="${rec ? "color:var(--sun)" : ""}">${rec}</div><div class="lbl">Para recuperar${rec ? " ›" : ""}</div></button>
-      <div class="stat"><div class="val num" style="font-size:24px;color:${pagoMes.pagado ? "var(--ok)" : "var(--sun)"}">${pagoMes.pagado ? "Pagado" : montoAct ? money(montoAct).replace("$ ", "$") : "—"}</div><div class="lbl">${pagoMes.pagado ? mesSolo(mes) : "A pagar " + mesSolo(mes)}</div></div>
+      <div class="stat"><div class="val num" style="font-size:24px;color:${pagoMes.pagado ? "var(--ok)" : estMes === "vencido" ? "var(--warn)" : "var(--sun)"}">${pagoMes.pagado ? "Pagado" : montoAct ? money(montoAct).replace("$ ", "$") : "—"}</div><div class="lbl">${pagoMes.pagado ? mesSolo(mes) : estMes === "vencido" ? "Vencido · " + mesSolo(mes) : "Pagá hasta el " + pagoVence(mes)}</div></div>
       <div class="stat"><div class="val num">${vino}</div><div class="lbl">Clases en ${mesSolo(mes)}</div></div>
     </div>
   </section>
@@ -223,7 +227,8 @@ function vPagos(a, wa) {
       const p = (a.pagos || {})[m] || {}; const est = estPago(a, m); const ok = est === "pagado"; const c = P.comps[m];
       return `<div class="row" style="flex-wrap:wrap"><span class="main"><span class="name" style="text-transform:capitalize">${mesLbl(m)}</span><span class="meta">${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases x ${money(a.precioClase)}${ex ? " · incluye clase extra" : ""}`}${ok && c && c.estado === "enviado" ? " · comprobante enviado" : ""}</span></span>
         <span style="display:grid;justify-items:end;gap:6px"><b class="num">${money(tot)}</b>${ok ? `<span class="tag" style="background:var(--ok-soft);color:var(--ok)">PAGADO ✓</span>` : `<button class="btn pri" data-pa="pagar" data-m="${m}" style="padding:8px 18px">Pagar</button>`}</span>
-        ${est === "rechazado" ? `<span class="small" style="flex-basis:100%;color:var(--warn);font-weight:700">Gabriel no pudo confirmar el comprobante. Volvé a mandarlo.</span>` : ""}</div>`; }).join("")}</div>
+        ${c && c.estado === "rechazado" && !ok ? `<span class="small" style="flex-basis:100%;color:var(--warn);font-weight:700">Gabriel no pudo confirmar el comprobante. Volvé a mandarlo.</span>` : ""}
+        ${est === "vencido" ? `<span class="small" style="flex-basis:100%;color:var(--warn);font-weight:700"><span class="tag" style="background:var(--warn-soft);color:var(--warn)">VENCIDO</span> Venció el ${pagoVence(m)}. Pagalo cuanto antes.</span>` : !ok ? `<span class="small muted" style="flex-basis:100%">Tenés hasta el <b>${pagoVence(m)}</b> para pagar.</span>` : ""}</div>`; }).join("")}</div>
   </section>
   ${wa ? `<a class="small" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Tengo una consulta sobre el pago de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener" style="margin-top:18px;display:inline-block;color:inherit;opacity:.8">¿Dudas con el pago? Escribile a Gabriel →</a>` : ""}`;
 }

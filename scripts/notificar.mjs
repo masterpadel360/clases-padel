@@ -2,7 +2,8 @@
 // 1) Le avisa a Gabriel cuando un alumno cancela, reserva o vuelve a su clase (respaldo del aviso al instante),
 //    y cuando un alumno paga subiendo el comprobante (el mes queda pagado).
 // 2) Ordena las clases para recuperar por vencimiento y borra las vencidas.
-// 3) Al alumno: recordatorio el día antes y 3 horas antes, avisos de lugar para recuperar y de vencimiento.
+// 3) Al alumno: recordatorio el día antes y 3 horas antes, avisos de lugar para recuperar y de vencimiento,
+//    y del pago del mes (se paga del 1 al 13: avisos el 1, el 10, el 13 y el 14 si quedó vencido).
 // 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
 import admin from "firebase-admin";
 import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm, clubH } from "./logica.mjs";
@@ -144,6 +145,23 @@ if (alumnosConApp.length) {
     const nombre = primerNombre(a.nombre);
     const rec = normalizar(a, hoy); const nRec = rec.recuperar; const vences = Object.keys(rec.recVence);
     const mandar = async (id, msg, extra) => { const ok = await enviar(uid, msg); await marcar(id, { ok, ...extra }); enviados++; };
+
+    // Pago del mes: se paga del 1 al 13. Avisos el 1, el 10 y el 13; el 14 avisa que está vencido (de 10 a 20 h).
+    {
+      const mesAct = hoy.slice(0, 7); const dia = Number(hoy.slice(8)); const MESN = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][Number(hoy.slice(5, 7)) - 1];
+      const PAGO = { 1: { title: `Ya podés pagar ${MESN} 💳`, body: `${nombre}, tenés del 1 al 13 para pagar la cuota. Entrá a la app, tocá Pagar y subí el comprobante.` },
+        10: { title: `Te quedan 3 días para pagar ${MESN}`, body: `${nombre}, el pago vence el 13. Tocá Pagar en la app y subí el comprobante.` },
+        13: { title: `Hoy vence el pago de ${MESN} ⏳`, body: `${nombre}, hoy es el último día para pagar. Tocá Pagar en la app y subí el comprobante.` },
+        14: { title: `Tu pago de ${MESN} está vencido`, body: `${nombre}, venció el 13. Pagalo cuanto antes desde la app: tocá Pagar y subí el comprobante.` } }[dia];
+      const tieneCuota = (a.horarios || []).length || ((a.pagos || {})[mesAct] || {}).monto;
+      if (PAGO && tieneCuota && horaAR >= 10 && horaAR < 20 && !((a.pagos || {})[mesAct] || {}).pagado) {
+        const idP = `pago_${a.id}_${mesAct}_${dia}`;
+        if (!(await yaEnviado(idP))) {
+          const comp = (await db.doc(`comprobantes/${a.id}_${mesAct}`).get()).data();
+          if (!(comp && comp.estado === "enviado")) await mandar(idP, { ...PAGO, tag: "pago" });
+        }
+      }
+    }
 
     // El día antes (unas 26 h antes): "mañana tenés clase; si no podés, avisá ahora y la recuperás".
     for (const f of [hoy, manana]) for (const c of clasesDelDia(a, f, avisos)) {
