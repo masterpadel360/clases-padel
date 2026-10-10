@@ -286,7 +286,7 @@ label.mini input[type=file]{display:none}
   <header class="top">
     <div class="brand">
       <span class="mark"><span class="wm">Clases de Pádel</span><span class="wm-sub" id="pHola"></span></span>
-      <span class="brand-r"><button class="mini" data-pa="salir">Salir</button></span>
+      <span class="brand-r"><button class="mini" data-pa="cuenta">Mi cuenta</button></span>
     </div>
   </header>
   <main id="pView" style="display:grid"></main>
@@ -304,7 +304,7 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script>
 /* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
-window.APP_V = "202610092037";
+window.APP_V = "202610092219";
 (function () {
   let avisado = false;
   function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
@@ -326,10 +326,10 @@ window.APP_V = "202610092037";
   setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
 })();
 </script>
-<script src="config.js?v=202610092037"></script>
-<script src="app.js?v=202610092037"></script>
-<script src="staff-extra.js?v=202610092037"></script>
-<script src="alumno.js?v=202610092037"></script>
-<script src="firebase.js?v=202610092037"></script>
+<script src="config.js?v=202610092219"></script>
+<script src="app.js?v=202610092219"></script>
+<script src="staff-extra.js?v=202610092219"></script>
+<script src="alumno.js?v=202610092219"></script>
+<script src="firebase.js?v=202610092219"></script>
 </body>
 </html>

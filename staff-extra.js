@@ -40,7 +40,7 @@ function avisosHoyHTML() {
 function accesoHTML(a) {
   if (!S.esOwner) return "";
   return `<div class="field"><span class="flabel">Acceso a la app del alumno</span>${a.usuario
-    ? `<span class="small">Usuario: <b>${esc(a.usuario)}</b></span><span class="small muted">Si se olvidó la contraseña, creale un acceso nuevo (el anterior deja de funcionar).</span><button type="button" class="mini" data-act="accesoCrear" data-id="${a.id}" style="justify-self:start">Crear acceso nuevo</button>`
+    ? `<span class="small">Usuario: <b>${esc(a.usuario)}</b> <span class="muted">(lo puede cambiar desde su app, en Mi cuenta)</span></span><span class="small muted">Si se olvidó la contraseña, generale una nueva y se la mandás por WhatsApp.</span><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="mini go" data-act="accClave" data-uid="${a.uid || ""}" data-id="${a.id}">Contraseña nueva</button><button type="button" class="linkish" style="font-size:12px" data-act="accesoCrear" data-id="${a.id}">Crear un acceso nuevo de cero</button></div>`
     : `<span class="small muted">Con un usuario y contraseña ve sus clases, asistencia y pagos, avisa si no va y reserva para recuperar.</span><button type="button" class="mini go" data-act="accesoCrear" data-id="${a.id}" style="justify-self:start">Crear acceso</button>`}</div>`;
 }
 function msgAcceso(nombre, usuario, clave) {
@@ -105,7 +105,7 @@ function cfgExtraHTML() {
       <div class="field"><label for="cTelG">Tu WhatsApp (para que los alumnos te escriban)</label><div style="display:flex;gap:8px"><input id="cTelG" inputmode="tel" value="${esc(S.cfg.telGabriel || "")}" placeholder="351…" style="flex:1"><button type="button" class="mini go" data-act="telGSave">Guardar</button></div></div>
       <button type="button" class="mini" data-act="copy" data-text="${esc(LINK_APP)}" style="justify-self:start">Copiar link</button></div>
     <div class="msg" style="gap:10px"><div class="msg-k"><b>Profes</b></div>
-      ${profes.length ? profes.map(p => `<span class="small">${esc(p.nombre)} · usuario <b>${esc(p.usuario)}</b></span>`).join("") : `<span class="small muted">Esteban todavía no tiene usuario en esta app.</span>`}
+      ${profes.length ? profes.map(p => `<span class="small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${esc(p.nombre)} · usuario <b>${esc(p.usuario)}</b> <button type="button" class="mini" style="font-size:12px;padding:4px 10px" data-act="accClave" data-uid="${p.id}">Contraseña nueva</button></span>`).join("") : `<span class="small muted">Esteban todavía no tiene usuario en esta app.</span>`}
       <button type="button" class="mini" data-act="profeCrear" style="justify-self:start">Crear acceso para un profe</button></div>
     <div class="msg" style="gap:10px"><div class="msg-k"><b>Datos</b></div>
       <span class="small muted">Para pasar los datos de la app anterior, elegí el archivo que te mandó Claude.</span>
@@ -138,6 +138,7 @@ window.accionExtra = async (act, b, A) => {
     case "accesoCrear": if (A) openAcceso(A, "alumno"); break;
     case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
     case "profeCrear": openAcceso(null, "profe"); break;
+    case "accClave": await claveNuevaPara(b.dataset.uid, A); break;
     case "telGSave": { const v = $("#cTelG").value.trim(); if (await safe(() => fdb.doc("config/general").set({ ...S.cfg, telGabriel: v }), "Guardado")) S.cfg = { ...S.cfg, telGabriel: v }; break; }
   }
 };
@@ -171,4 +172,20 @@ async function deshacerAviso(id) {
     });
     toast("Aviso deshecho"); if (!$("#overlay").hidden && $("#fA")) closeSheet();
   } catch (e) { console.error(e); toast("No se pudo deshacer. Probá de nuevo."); }
+}
+
+/* ---------- Contraseña nueva para un alumno o profe que se la olvidó (mismo usuario) ---------- */
+async function claveNuevaPara(uid, a) {
+  const u = S.usuarios.find(x => x.id === uid) || {}; const nombre = (a && a.nombre) || u.nombre || "";
+  if (!uid) { toast("Este alumno no tiene acceso todavía."); return; }
+  const clave = claveNueva();
+  if (!confirm(`¿Generar una contraseña nueva para ${nombre}? La anterior deja de funcionar.`)) return;
+  try {
+    const r = await llamarCuenta("/cuenta/clave", { uid, clave }); const usuario = r.usuario || (a && a.usuario) || u.usuario;
+    const txt = `Hola ${nombreCorto(nombre)}! Te generé una contraseña nueva para la app de las clases.\n\nEntrá acá: ${LINK_APP}\nUsuario: ${usuario}\nContraseña: ${clave}\n\nDespués la podés cambiar por una tuya en Mi cuenta.`;
+    const tel = a ? a.tel : (u.rol === "profe" ? S.cfg.telProfe : ""); const url = waURL(tel, txt);
+    openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Contraseña nueva</span><h2 class="disp">${esc(nombre)}</h2></div>
+      <div class="msg"><div class="bubble">${esc(txt)}</div><div class="msg-actions">${url ? `<a class="cta wa" href="${url}" target="_blank" rel="noopener">Mandar por WhatsApp <i>→</i></a>` : `<span class="small due">Falta el teléfono</span>`}<button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button></div></div>
+      <div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`);
+  } catch (x) { console.error(x); toast((x && x.msg) || "No se pudo. Probá de nuevo."); }
 }

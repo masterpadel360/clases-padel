@@ -254,6 +254,8 @@ document.addEventListener("click", async e => {
   const b = e.target.closest("[data-pa]"); if (!b) return;
   const pa = b.dataset.pa;
   if (pa === "salir") { salir(); return; }
+  if (pa === "cuenta") { abrirCuenta(); return; }
+  if (pa === "cuUsuario" || pa === "cuClave") { await guardarCuenta(pa, b); return; }
   if (pa === "cerrar") { closeSheet(); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
   if (pa === "novoy") {
@@ -402,3 +404,43 @@ function viajePrev() {
     : '<div class="empty">No tenés clases en esas fechas.</div>';
 }
 ["input", "change"].forEach(ev => document.addEventListener(ev, e => { if (!window.MODO_STAFF && e.target && (e.target.id === "vjD" || e.target.id === "vjH")) viajePrev(); }));
+
+/* ---- Mi cuenta: el alumno elige su usuario y su contraseña ---- */
+function abrirCuenta() {
+  const usuario = (P.perfil && P.perfil.usuario) || ((fauth.currentUser && fauth.currentUser.email) || "").split("@")[0];
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Mi cuenta</span><h2 class="disp">${esc(P.a ? P.a.nombre : "")}</h2></div>
+    <div class="field"><label for="cuU">Tu usuario</label><div style="display:flex;gap:8px"><input id="cuU" value="${esc(usuario)}" autocapitalize="none" autocorrect="off" spellcheck="false" style="flex:1"><button type="button" class="mini go" data-pa="cuUsuario">Guardar</button></div>
+      <span class="small muted">Es con lo que entrás. Letras, números y puntos, sin espacios ni tildes.</span></div>
+    <div class="field"><span class="flabel">Cambiar contraseña</span>
+      <input id="cuA" type="password" placeholder="Contraseña actual" autocomplete="current-password">
+      <input id="cuN" type="password" placeholder="Contraseña nueva (mínimo 6)" autocomplete="new-password">
+      <input id="cuR" type="password" placeholder="Repetí la nueva" autocomplete="new-password">
+      <button type="button" class="mini go" data-pa="cuClave" style="justify-self:start">Cambiar contraseña</button></div>
+    <p class="small" id="cuMsg" style="margin:0"></p>
+    <p class="small muted" style="margin:0">¿Te olvidaste la contraseña? Pedile a Gabriel una nueva.</p>
+    <div class="btns"><button type="button" class="linkish" data-pa="salir">Cerrar sesión</button><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
+}
+async function guardarCuenta(pa, b) {
+  const msg = $("#cuMsg"); const ok = t => { msg.style.color = "var(--ok)"; msg.textContent = t; }, mal = t => { msg.style.color = "var(--warn)"; msg.textContent = t; };
+  b.disabled = true; const txt0 = b.textContent; b.textContent = "Un segundo…";
+  try {
+    if (pa === "cuUsuario") {
+      const u = $("#cuU").value.trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9._]{2,23}$/.test(u)) { mal("El usuario tiene que tener de 3 a 24 letras o números (podés usar puntos), sin espacios ni tildes."); return; }
+      const r = await llamarCuenta("/cuenta/usuario", { usuario: u });
+      P.perfil = { ...(P.perfil || {}), usuario: r.usuario }; try { await fauth.currentUser.reload(); } catch (e) {}
+      ok(`Listo. Desde ahora entrás con el usuario "${r.usuario}".`);
+    } else {
+      const a = $("#cuA").value, n = $("#cuN").value, r = $("#cuR").value;
+      if (!a) { mal("Poné tu contraseña actual."); return; }
+      if (n.length < 6) { mal("La nueva tiene que tener al menos 6 caracteres."); return; }
+      if (n !== r) { mal("Las dos contraseñas nuevas no coinciden."); return; }
+      const u = fauth.currentUser;
+      try { await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, a)); }
+      catch (e) { mal(["auth/wrong-password", "auth/invalid-credential", "auth/invalid-login-credentials"].includes(e && e.code) ? "La contraseña actual no es correcta." : errorAuth(e)); return; }
+      await u.updatePassword(n); $("#cuA").value = $("#cuN").value = $("#cuR").value = "";
+      ok("Listo, contraseña cambiada. La próxima vez entrás con la nueva.");
+    }
+  } catch (x) { console.error(x); mal((x && x.msg) || (x && x.code ? errorAuth(x) : "No se pudo. Probá de nuevo.")); }
+  finally { b.disabled = false; b.textContent = txt0; }
+}

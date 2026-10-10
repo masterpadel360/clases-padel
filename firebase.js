@@ -217,3 +217,15 @@ function tarjetaNotif(quien) {
   if (st === "bloqueadas") return `<div class="msg notif-card"><span class="small">Las notificaciones están bloqueadas. Activalas desde los ajustes del celu para esta app.</span></div>`;
   return `<div class="msg notif-card" style="gap:10px"><div class="msg-k"><b>Activá las notificaciones</b></div><span class="small">${para}</span><button class="cta" ${quien === "alumno" ? 'data-pa="notif"' : 'data-act="notif"'} style="justify-self:start;padding:6px 6px 6px 14px;font-size:13px">Activar <i>🔔</i></button></div>`;
 }
+
+/* ---------- Cambios de cuenta (los hace el servidor de Cloudflare, que tiene permiso de administrador) ---------- */
+async function llamarCuenta(ruta, datos) {
+  if (!window.AVISOS_URL) throw { msg: "Falta configurar el servidor." };
+  const idToken = await fauth.currentUser.getIdToken();
+  let r, j;
+  try { r = await fetch(window.AVISOS_URL + ruta, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken, ...datos }) }); }
+  catch (e) { throw { msg: "Sin conexión. Probá de nuevo." }; }
+  try { j = await r.json(); } catch (e) { throw { msg: "Falta actualizar el servidor de Cloudflare (pegar el código nuevo)." }; }
+  if (j.error) throw { msg: j.error };
+  return j;
+}
