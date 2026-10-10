@@ -209,7 +209,7 @@ function vAusencias(a, wa) {
   </section>
   <section class="sec"><div class="sec-head"><h3>Ausencias programadas</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:12px">
-      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">🗓️</span><div style="display:grid;gap:2px"><b>¿Sabés que no vas a poder venir por algo?</b><span class="small muted">Un turno médico, trabajo, un acto, un viaje… Avisá con tiempo: elegí desde y hasta qué día y avisamos todas tus clases de esas fechas.</span></div></div>
+      <div style="display:flex;gap:12px;align-items:center"><span style="font-size:34px;line-height:1" aria-hidden="true">🗓️</span><div style="display:grid;gap:2px"><b>¿Sabés que no vas a poder venir por algo?</b><span class="small muted">Un turno médico, trabajo, un acto, un viaje… Avisá con tiempo: elegí un día, o desde y hasta qué día y avisamos todas tus clases de esas fechas.</span></div></div>
       <button class="btn pri" data-pa="viaje" style="width:100%">Programar ausencia</button>
       <button class="linkish" data-pa="varias" style="justify-self:center">O elegí clase por clase</button>
     </div>
@@ -405,6 +405,7 @@ document.addEventListener("click", async e => {
   if (pa === "irRec") { const el = document.getElementById("secRec"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   if (pa === "ptab") { P.tab = b.dataset.t; renderPortal(); scrollTo(0, 0); return; }
   if (pa === "viaje") { abrirViaje(); return; }
+  if (pa === "vjModo") { const d = ($("#vjD") || {}).value; abrirViaje(b.dataset.m); if (d) { $("#vjD").value = d; viajePrev(); } return; }
   if (pa === "viajeOk") { const sel = clasesViaje().map(c => ({ f: c.fecha, h: c.hora })); if (!sel.length) return; await avisarLista(b, sel); return; }
   if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.perfil.alumnoId }); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
@@ -500,23 +501,25 @@ function abrirCalendario() {
 }
 
 /* ---- Ausencia programada: avisa todas las clases entre dos fechas ---- */
-function abrirViaje() {
+function abrirViaje(modo = P.vjModo || "uno") {
+  P.vjModo = modo;
   const man = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const d1 = toISO(man), d2 = toISO(new Date(man.getFullYear(), man.getMonth(), man.getDate() + 6));
-  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Programar ausencia</h2><span class="small muted">Elegí desde y hasta qué día no venís. Si es un solo día, poné la misma fecha en las dos. Avisamos todas tus clases de esas fechas.</span></div>
-    <div class="two"><div class="field"><label for="vjD">Desde</label><input id="vjD" type="date" min="${hoyISO}" value="${d1}"></div><div class="field"><label for="vjH">Hasta</label><input id="vjH" type="date" min="${hoyISO}" value="${d2}"></div></div>
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Programar ausencia</h2><span class="small muted">¿Faltás un solo día o varios seguidos? Elegí y avisamos todas tus clases de esas fechas.</span></div>
+    <div style="display:flex;gap:8px"><button class="mini ${P.vjModo === "uno" ? "go" : ""}" data-pa="vjModo" data-m="uno">Un día</button><button class="mini ${P.vjModo === "varios" ? "go" : ""}" data-pa="vjModo" data-m="varios">Varios días</button></div>
+    <div class="two"><div class="field"><label for="vjD">${P.vjModo === "uno" ? "Día" : "Desde"}</label><input id="vjD" type="date" min="${hoyISO}" value="${d1}"></div><div class="field" ${P.vjModo === "uno" ? "hidden" : ""}><label for="vjH">Hasta</label><input id="vjH" type="date" min="${hoyISO}" value="${d2}"></div></div>
     <div id="vjPrev" style="display:grid;gap:8px"></div>
     <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="viajeOk" id="vjBtn">Avisar</button></span></div>`);
   viajePrev();
 }
 function clasesViaje() {
-  const d = ($("#vjD") || {}).value, h = ($("#vjH") || {}).value; if (!d || !h || h < d) return [];
+  const d = ($("#vjD") || {}).value, h = P.vjModo === "uno" ? d : ($("#vjH") || {}).value; if (!d || !h || h < d) return [];
   return misClases(130).filter(c => c.tipo === "fija" && !c.aus && !c.vuelve && c.fecha >= d && c.fecha <= h && inicioDe(c.fecha, c.hora).getTime() > Date.now());
 }
 function viajePrev() {
   const el = $("#vjPrev"), btn = $("#vjBtn"); if (!el || !btn) return;
-  const d = $("#vjD").value, h = $("#vjH").value;
+  const d = $("#vjD").value, h = P.vjModo === "uno" ? d : $("#vjH").value;
   if (d && h && h < d) { el.innerHTML = '<span class="small due">La fecha "hasta" tiene que ser igual o posterior a "desde".</span>'; btn.disabled = true; btn.textContent = "Avisar"; return; }
   const cl = clasesViaje(); const con = cl.filter(c => inicioDe(c.fecha, c.hora).getTime() - Date.now() >= DIA_MS).length; const sin = cl.length - con;
   btn.disabled = !cl.length; btn.textContent = cl.length ? `Avisar ${cl.length} clase${cl.length === 1 ? "" : "s"}` : "Avisar";

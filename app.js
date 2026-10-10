@@ -245,7 +245,7 @@ function vAlumnos(){
 function esNuevo(a){ if(a.codigo||!a.alta) return false; const d=new Date(now); d.setDate(d.getDate()-21); return a.alta>=toISO(d); }
 function slotHTML(t,fecha){
   const aj=fecha?ajusteTurno(t,fecha):{aus:new Set(),rec:[]}; const libres=CUPO-t.al.length+aj.aus.size-aj.rec.length;
-  return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}<span class="small muted">${esc(t.nivel)}</span><span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
+  return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}<button class="linkish" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" style="justify-self:start;font-size:12px;text-align:left">${t.nivel?esc(t.nivel):"+ Categoría"} ✎</button><span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
     <div style="display:grid;gap:4px;min-width:0"><div class="who">${t.al.map(a=>`<button class="pill ${t.club} ${esNuevo(a)?"nuevo":""} ${aj.aus.has(a.id)?"aus":""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)?' <b class="nuevo-b">Nuevo</b>':""}${aj.aus.has(a.id)?' <b class="aus-b">No viene</b>':""}</button>`).join("")}${aj.rec.map(a=>`<button class="pill rec" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <b class="rec-b">Recupera</b></button>`).join("")}</div>
     <button class="linkish suspend" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${fecha||hoyISO}">Suspender por lluvia</button></div></div>`;
 }
@@ -756,6 +756,21 @@ function aplicarComprobantes(){
       bt.update(S.db.doc("comprobantes/"+c.id),{aplicado:true}); await bt.commit(); }
     catch(e){ console.error(e); compAplicando.delete(c.id); } });
 }
+/* ---------- Categoría de un turno (club + día + hora): se guarda en el horario de cada alumno del turno ---------- */
+function alumnosDelTurno(club,dia,hora){ return S.alumnos.filter(a=>a.activo!==false&&(a.horarios||[]).some(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club)); }
+function openTurnoCat(club,dia,hora){
+  const al=alumnosDelTurno(club,dia,hora); const act=(al.flatMap(a=>(a.horarios||[]).filter(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club).map(h=>h.nivel||""))).find(Boolean)||"";
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Categoría del turno</h2><span class="small muted">${DIAS_LARGO[dia]} ${hora} · ${club} · ${al.length} alumno${al.length===1?"":"s"}. Solo pueden venir a recuperar acá los de esta categoría.</span></div>
+    <div class="field"><input id="tCat" list="cats2" value="${esc(act)}" placeholder="octava, séptima…" style="font-size:16px"><datalist id="cats2"><option>inicial</option><option>niños</option><option>octava</option><option>séptima</option><option>sexta</option></datalist></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="turnoCatOk" data-club="${club}" data-dia="${dia}" data-hora="${hora}">Guardar</button></div>`);
+}
+async function guardarTurnoCat(b){
+  const club=b.dataset.club,dia=Number(b.dataset.dia),hora=b.dataset.hora; const val=($("#tCat").value||"").trim();
+  const al=alumnosDelTurno(club,dia,hora); if(!al.length){ closeSheet(); return; }
+  const ok=await safe(async()=>{ const bt=S.db.batch();
+    al.forEach(a=>bt.update(colA().doc(a.id),{horarios:(a.horarios||[]).map(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club?{...h,nivel:val}:h)})); await bt.commit(); });
+  if(ok){ closeSheet(); toast(val?`Turno de las ${hora}: ${val}`:`Turno de las ${hora} sin categoría`); }
+}
 async function verComprobante(a){
   const c=compDe(a); if(!c) return;
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted" style="text-transform:capitalize">Comprobante de ${mesLbl(c.mes)} · ${money(c.monto||montoMes(a,c.mes))}${c.estado==="rechazado"?" · <b style='color:var(--warn)'>rechazado</b>":""}</span></div>
@@ -796,6 +811,8 @@ document.addEventListener("click",async e=>{
     case "recAdd": openRecAdd(); break;
     case "pagoNuevo": openPagoProfe(); break;
     case "verComp": if(A) verComprobante(A); break;
+    case "turnoCat": openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
+    case "turnoCatOk": guardarTurnoCat(b); break;
     case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
     case "asCSV": exportAsist(); break;
     case "irAsist": S.asFecha=b.dataset.f; S.tab="asist"; render(); scrollTo(0,0); break;
