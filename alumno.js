@@ -31,8 +31,15 @@ function avisarAlInstante() { if (!window.AVISOS_URL) return; try { fetch(window
 function iniciarPortal(perfil, u) {
   P.perfil = perfil; P.uid = u.uid;
   document.getElementById("login").hidden = true; document.getElementById("portal").hidden = false;
-  const id = perfil.alumnoId; const pr = () => { if ($("#overlay").hidden) renderPortal(); };
+  const id = perfil.alumnoId;
+  // Abre al instante con lo último que se vio en este celu; después se actualiza solo con lo nuevo.
+  const CK = "portal_" + id; let tGuardar = 0;
+  try { const c = JSON.parse(localStorage.getItem(CK) || "null"); if (c && c.a) { Object.assign(P, { a: c.a, info: c.info || {}, turnos: c.turnos || {}, avisos: c.avisos || [], comps: c.comps || {}, asis: c.asis || [], cargado: true }); } } catch (e) {}
+  const guardar = () => { clearTimeout(tGuardar); tGuardar = setTimeout(() => { try { localStorage.setItem(CK, JSON.stringify({ a: P.a, info: P.info, turnos: P.turnos, avisos: P.avisos, comps: P.comps, asis: P.asis })); } catch (e) {} }, 800); };
+  const pr = () => { guardar(); if ($("#overlay").hidden) renderPortal(); };
   renderPortal();
+  // Si la primera vez tarda mucho (mala señal), ofrecemos reintentar en vez de quedar trabado.
+  setTimeout(() => { if (!P.cargado) { const v = $("#pView"); if (v) v.innerHTML = `<div class="notice" style="display:grid;gap:10px">Está tardando en cargar. Revisá la conexión.<button class="btn pri" onclick="location.reload()" style="justify-self:start">Reintentar</button></div>`; } }, 8000);
   fdb.doc("alumnos/" + id).onSnapshot(d => { P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
   refrescarNotif({ rol: "alumno", alumnoId: id });
   setTimeout(pedirNotifAlEntrar, 700);

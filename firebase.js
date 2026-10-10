@@ -83,7 +83,7 @@ function mostrarVerificar(u) {
 function mostrarFaltaConfig() {
   pantalla(`<div class="login-card"><div class="login-brand"><span class="wm">Clases de Pádel</span></div><h2 class="disp">Casi lista</h2><p class="small" style="margin:0">Falta conectar la base de datos. En cuanto Gabriel pase los datos de Firebase, esta página empieza a funcionar.</p></div>`);
 }
-async function salir() { try { await fauth.signOut(); } catch (e) {} location.reload(); }
+async function salir() { try { Object.keys(localStorage).filter(k => k.startsWith("portal_") || k.startsWith("perfil_")).forEach(k => localStorage.removeItem(k)); } catch (e) {} try { await fauth.signOut(); } catch (e) {} location.reload(); }
 
 /* ---------- Arranque ---------- */
 (function arrancar() {
@@ -103,8 +103,15 @@ async function salir() { try { await fauth.signOut(); } catch (e) {} location.re
       if (!u.emailVerified) { mostrarVerificar(u); return; }
       return iniciarStaff({ rol: "dueño", nombre: "Gabriel" }, u);
     }
-    let p = null;
-    try { const d = await fdb.doc("usuarios/" + u.uid).get(); p = d.exists ? d.data() : null; } catch (e) { p = null; }
+    // Si ya entró antes en este celu, arranca al toque con su perfil guardado y lo confirma por detrás.
+    const PK = "perfil_" + u.uid; let guardado = null;
+    try { guardado = JSON.parse(localStorage.getItem(PK) || "null"); } catch (e) {}
+    const leer = async () => { try { const d = await fdb.doc("usuarios/" + u.uid).get(); const v = d.exists ? d.data() : null; try { v ? localStorage.setItem(PK, JSON.stringify(v)) : localStorage.removeItem(PK); } catch (e) {} return v; } catch (e) { return undefined; } };
+    if (guardado && guardado.rol === "alumno" && guardado.alumnoId) {
+      leer().then(async v => { if (v === null || (v && (v.rol !== "alumno" || v.alumnoId !== guardado.alumnoId))) { try { localStorage.removeItem(PK); } catch (e) {} location.reload(); } });
+      return iniciarPortal(guardado, u);
+    }
+    let p = await leer(); if (p === undefined) p = null;
     if (!p || !["profe", "alumno"].includes(p.rol)) { msgLogin = "Este usuario no tiene acceso. Pedile a Gabriel que te lo active."; await fauth.signOut(); return; }
     if (p.rol === "profe") return iniciarStaff(p, u);
     return iniciarPortal(p, u);
