@@ -175,6 +175,7 @@ a.wa-link{color:var(--wa);font-weight:700;text-decoration:none}
 .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
 .btn{border:0;border-radius:999px;padding:12px 20px;font-weight:700}
 .btn.pri{background:var(--btn);color:var(--btn-ink)}
+.btn:disabled{opacity:.45}
 .btn.sec2{background:rgba(255,255,255,.6);border:1px solid var(--line-2)}
 .btn.del{background:none;color:var(--warn);padding-inline:4px}
 .btn.del.armed{background:var(--warn);color:#fff;padding-inline:16px}
@@ -304,7 +305,7 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script>
 /* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
-window.APP_V = "202610092219";
+window.APP_V = "202610101114";
 (function () {
   let avisado = false;
   function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
@@ -326,10 +327,10 @@ window.APP_V = "202610092219";
   setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
 })();
 </script>
-<script src="config.js?v=202610092219"></script>
-<script src="app.js?v=202610092219"></script>
-<script src="staff-extra.js?v=202610092219"></script>
-<script src="alumno.js?v=202610092219"></script>
-<script src="firebase.js?v=202610092219"></script>
+<script src="config.js?v=202610101114"></script>
+<script src="app.js?v=202610101114"></script>
+<script src="staff-extra.js?v=202610101114"></script>
+<script src="alumno.js?v=202610101114"></script>
+<script src="firebase.js?v=202610101114"></script>
 </body>
 </html>

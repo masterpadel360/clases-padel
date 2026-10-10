@@ -1,5 +1,5 @@
 /* ---------- App del alumno ---------- */
-const P = { tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], cargado: false, ocupado: false };
+const P = { tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], comps: {}, cargado: false, ocupado: false };
 const DIA_MS = 86400000;
 const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
 const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
@@ -39,6 +39,7 @@ function iniciarPortal(perfil, u) {
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
   fdb.collection("cupos").where("fecha", ">=", hoyISO).onSnapshot(s => { P.cupos = {}; s.docs.forEach(d => P.cupos[d.id] = d.data()); pr(); }, () => {});
+  fdb.collection("comprobantes").where("alumnoId", "==", id).onSnapshot(s => { P.comps = {}; s.docs.forEach(d => { const c = d.data(); P.comps[c.mes] = c; }); pr(); }, () => {});
   fdb.collection("avisos").where("alumnoId", "==", id).onSnapshot(s => { P.avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
   { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
@@ -103,6 +104,15 @@ function mesesPago() {
   return [...set].sort().reverse();
 }
 
+// Estado del pago de un mes: "pagado" (Gabriel lo marcó o el alumno mandó el comprobante), "rechazado" o "pendiente".
+function estPago(a, m) {
+  const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
+  if (p.pagado) return "pagado";
+  if (c && c.estado === "rechazado") return "rechazado";
+  if (c && c.estado === "enviado" && !c.aplicado) return "pagado";
+  return "pendiente";
+}
+
 /* ---- Vista: tres pestañas (Inicio · Ausencias · Pagos) ---- */
 const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"], lluvia: ["Se suspendió por lluvia · te queda para recuperar", "var(--jump)"] };
 const P_TABS = [
@@ -138,7 +148,7 @@ function vInicio(a, wa) {
   const bk = recAl(); const rec = bk.reduce((s, x) => s + x.n, 0);
   const marcas = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) marcas[`${x.fecha}|${hora}`] = x.marcas[k]; }));
   const mesesCl = [...new Set(cl.map(c => c.fecha.slice(0, 7)))];
-  const mes = mesKey(now); const pagoMes = (a.pagos || {})[mes] || {}; const montoAct = montoMes(a, mes);
+  const mes = mesKey(now); const pagoMes = { pagado: estPago(a, mes) === "pagado" }; const montoAct = montoMes(a, mes);
   const ops = rec > 0 ? opcionesRec() : [];
   const vino = misAsistencias().filter(x => x.fecha.startsWith(mes) && (x.estado === "vino" || x.estado === "recuperando")).length;
   return `
@@ -157,7 +167,7 @@ function vInicio(a, wa) {
     ${rec ? `<div class="list rec-box">
       <div class="rec-top"><div class="big-num num">${rec}</div><div style="display:grid;gap:2px"><b>${rec === 1 ? "clase para recuperar" : "clases para recuperar"}</b>
         ${bk.map(x => `<span class="small">${bk.length > 1 ? `${x.n} ` : ""}${bk.length > 1 ? "hasta el" : "Tenés tiempo hasta el"} <b style="color:var(--warn)">${DIAS_LARGO[isoDate(x.vence).getDay()].toLowerCase()} ${fechaDM(x.vence)}</b></span>`).join("")}</div></div>
-      <p class="small" style="margin:0;line-height:1.5"><b>Las clases se recuperan dentro del mes.</b> Si faltás la última semana, tenés la primera semana del mes siguiente. Si no la recuperás a tiempo, <b>se pierde</b>.</p>
+      <p class="small" style="margin:0;line-height:1.5"><b>Tenés 2 semanas para recuperar.</b> Cada clase que faltás la podés recuperar en las 2 semanas siguientes (hasta el viernes). Si no la recuperás a tiempo, <b>se pierde</b>.</p>
     </div>
     ${ops.length ? `<div class="list">${ops.slice(0, 12).map(o => `<div class="row"><span class="main"><span class="name">${fechaRel(o.fecha)} · ${o.hora}</span><span class="meta">${o.fecha === hoyISO || fechaRel(o.fecha) === "Mañana" ? `${DIAS_LARGO[o.dia]} ${isoDate(o.fecha).getDate()} · ` : ""}${clubsDe(a).size > 1 ? clubTxt(o.club) + " · " : ""}${esc(o.nivel || "")} · <span class="free">${o.libres} lugar${o.libres > 1 ? "es" : ""}</span></span></span><button class="mini go" data-pa="reservar" data-f="${o.fecha}" data-h="${o.hora}" data-c="${o.club}">Reservar</button></div>`).join("")}</div>`
       : `<div class="empty">Por ahora no hay lugares libres de tu categoría antes de que venzan. Te avisamos cuando se libere uno. ${wa ? `<a class="wa-link" href="${wa}" target="_blank" rel="noopener">Escribile a Gabriel</a>` : ""}</div>`}`
@@ -181,7 +191,7 @@ function vAusencias(a, wa) {
   return `
   <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>¿No podés venir a una clase?</h3></div>
     ${prox.length ? `<div class="list">${prox.map(c => claseHTML(c, marcas)).join("")}</div>` : `<div class="empty">No tenés clases en las próximas 3 semanas.</div>`}
-    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar dentro del mes.</p>
+    <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 horas o más</b>, te queda para recuperar en las 2 semanas siguientes.</p>
   </section>
   <section class="sec"><div class="sec-head"><h3>Ausencias programadas</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:12px">
@@ -199,15 +209,71 @@ function vAusencias(a, wa) {
 }
 
 function vPagos(a, wa) {
-  const mes = mesKey(now); const pagoMes = (a.pagos || {})[mes] || {};
+  const mes = mesKey(now);
   return `
   <section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Pagos</h3></div>
-    <div class="list">${mesesPago().map(m => { const p = (a.pagos || {})[m] || {}; const n = clasesMes(a, m); const tot = montoMes(a, m); const aj = ajusteDe(a, m) !== null; const ex = extraDias(a, m).length;
-      return `<div class="row"><span class="main"><span class="name" style="text-transform:capitalize">${mesLbl(m)}</span><span class="meta">${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases x ${money(a.precioClase)}${ex ? " · incluye clase extra" : ""}`}</span></span>
-        <span style="display:grid;justify-items:end;gap:2px"><b class="num">${money(tot)}</b><span class="tag" style="background:${p.pagado ? "var(--ok-soft)" : "var(--warn-soft)"};color:${p.pagado ? "var(--ok)" : "var(--warn)"}">${p.pagado ? "PAGADO" : "PENDIENTE"}</span></span></div>`; }).join("")}</div>
-    ${P.info.alias && !pagoMes.pagado ? `<div class="msg" style="gap:8px"><span class="small">Podés transferir al alias <b>${esc(P.info.alias)}</b></span><button class="mini" data-pa="alias" style="justify-self:start">Copiar alias</button></div>` : ""}
+    <div class="list">${mesesPago().map(m => { const n = clasesMes(a, m); const tot = montoMes(a, m); const aj = ajusteDe(a, m) !== null; const ex = extraDias(a, m).length;
+      const p = (a.pagos || {})[m] || {}; const est = estPago(a, m); const ok = est === "pagado"; const c = P.comps[m];
+      return `<div class="row" style="flex-wrap:wrap"><span class="main"><span class="name" style="text-transform:capitalize">${mesLbl(m)}</span><span class="meta">${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases x ${money(a.precioClase)}${ex ? " · incluye clase extra" : ""}`}${ok && c && c.estado === "enviado" ? " · comprobante enviado" : ""}</span></span>
+        <span style="display:grid;justify-items:end;gap:6px"><b class="num">${money(tot)}</b>${ok ? `<span class="tag" style="background:var(--ok-soft);color:var(--ok)">PAGADO ✓</span>` : `<button class="btn pri" data-pa="pagar" data-m="${m}" style="padding:8px 18px">Pagar</button>`}</span>
+        ${est === "rechazado" ? `<span class="small" style="flex-basis:100%;color:var(--warn);font-weight:700">Gabriel no pudo confirmar el comprobante. Volvé a mandarlo.</span>` : ""}</div>`; }).join("")}</div>
   </section>
-  ${wa ? `<a class="cta wa" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Te paso el comprobante de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener" style="margin-top:22px;justify-self:start">Mandar comprobante <i>→</i></a>` : ""}`;
+  ${wa ? `<a class="small" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Tengo una consulta sobre el pago de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener" style="margin-top:18px;display:inline-block;color:inherit;opacity:.8">¿Dudas con el pago? Escribile a Gabriel →</a>` : ""}`;
+}
+
+// Achica la foto del comprobante para guardarla (máx. 1280 px, JPEG, menos de ~700 KB).
+async function achicarFoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = mal; i.src = url; });
+    let lado = 1280, q = 0.72, out = "";
+    for (let k = 0; k < 6; k++) {
+      const r = Math.min(1, lado / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * r); cv.height = Math.round(img.naturalHeight * r);
+      const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(img, 0, 0, cv.width, cv.height);
+      out = cv.toDataURL("image/jpeg", q); if (out.length < 700000) return out;
+      lado = Math.round(lado * 0.8); q = Math.max(0.5, q - 0.06);
+    }
+    return out.length < 700000 ? out : null;
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function abrirPagar(m) {
+  const a = P.a; const tot = montoMes(a, m); P.compFoto = null;
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp" style="text-transform:capitalize">Pagar ${mesLbl(m)}</h2><div class="mega num" style="font-size:40px">${money(tot)}</div></div>
+    <div style="display:grid;gap:14px">
+      ${P.info.alias ? `<div class="msg" style="gap:8px"><span class="small"><b>1.</b> Transferí al alias <b>${esc(P.info.alias)}</b></span><button class="mini" data-pa="alias" style="justify-self:start">Copiar alias</button></div>` : ""}
+      <div class="msg" style="gap:8px"><span class="small"><b>${P.info.alias ? "2." : "1."}</b> Subí la foto o captura del comprobante</span>
+        <label class="mini" style="justify-self:start;cursor:pointer">Elegir foto<input type="file" id="compFile" accept="image/*" hidden></label>
+        <img id="compPrev" alt="Comprobante" hidden style="max-width:100%;max-height:220px;border-radius:10px;justify-self:start">
+        <span id="compEst" class="small muted"></span></div>
+      <button class="btn pri" data-pa="pagarOk" data-m="${m}" id="compOk" disabled style="width:100%;font-size:16px;padding:14px">Pagar</button>
+      <button class="linkish" data-pa="cerrar" style="justify-self:center;font-size:12px;opacity:.7">Cancelar</button>
+    </div>`);
+}
+document.addEventListener("change", async e => {
+  if (window.MODO_STAFF || e.target.id !== "compFile") return;
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const est = $("#compEst"), ok = $("#compOk"), pv = $("#compPrev");
+  est.textContent = "Preparando la foto…"; ok.disabled = true;
+  let foto = null; try { foto = await achicarFoto(f); } catch (x) { console.error(x); }
+  if (!foto) { est.textContent = "No se pudo leer esa imagen. Probá con una captura de pantalla."; return; }
+  P.compFoto = foto; pv.src = foto; pv.hidden = false; est.textContent = ""; ok.disabled = false;
+});
+async function mandarComprobante(m, b) {
+  const a = P.a; if (!P.compFoto) { toast("Primero elegí la foto del comprobante"); return; }
+  b.disabled = true; b.textContent = "Enviando…";
+  const id = `${a.id}_${m}`;
+  try {
+    const bt = fdb.batch();
+    bt.set(fdb.doc("fotosPago/" + id), { alumnoId: a.id, mes: m, foto: P.compFoto });
+    bt.set(fdb.doc("comprobantes/" + id), { alumnoId: a.id, uid: P.uid, nombre: a.nombre, mes: m, monto: montoMes(a, m), estado: "enviado", aplicado: false, notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() });
+    await bt.commit();
+    P.compFoto = null; avisarAlInstante();
+    openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">✅</div><h2 class="disp" style="margin:0">¡Pagado!</h2>
+      <p class="small" style="margin:0">Le llegó tu comprobante de <b>${mesSolo(m)}</b> a Gabriel. Ya figura como <b style="color:var(--ok)">pagado</b>.</p>
+      <button class="btn pri" data-pa="cerrar" style="width:100%">Listo</button></div>`);
+  } catch (x) { console.error(x); b.disabled = false; b.textContent = "Pagar"; toast(x && x.code === "permission-denied" ? "Ese mes ya tiene un comprobante enviado." : "No se pudo enviar. Probá de nuevo."); }
 }
 
 /* ---- Acciones ---- */
@@ -257,6 +323,8 @@ document.addEventListener("click", async e => {
   if (pa === "cuenta") { abrirCuenta(); return; }
   if (pa === "cuUsuario" || pa === "cuClave") { await guardarCuenta(pa, b); return; }
   if (pa === "cerrar") { closeSheet(); return; }
+  if (pa === "pagar") { abrirPagar(b.dataset.m); return; }
+  if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
   if (pa === "novoy") {
     const { f, h, t } = b.dataset; const horas = (inicioDe(f, h).getTime() - Date.now()) / 3600000; const con = t === "fija" && horas >= 24;
@@ -400,7 +468,7 @@ function viajePrev() {
   const cl = clasesViaje(); const con = cl.filter(c => inicioDe(c.fecha, c.hora).getTime() - Date.now() >= DIA_MS).length; const sin = cl.length - con;
   btn.disabled = !cl.length; btn.textContent = cl.length ? `Avisar ${cl.length} clase${cl.length === 1 ? "" : "s"}` : "Avisar";
   el.innerHTML = cl.length ? `<div class="list" style="max-height:38vh;overflow:auto">${cl.map(c => { const dd = isoDate(c.fecha); return `<div class="row"><span class="name">${DIAS_LARGO[dd.getDay()]} ${dd.getDate()}/${dd.getMonth() + 1} · ${c.hora}</span><span class="small muted">${clubTxt(c.club)}</span></div>`; }).join("")}</div>
-    <p class="small" style="margin:0">${con ? `<b>${con}</b> te ${con === 1 ? "queda" : "quedan"} para recuperar, dentro del mes de cada clase.` : ""}${sin ? ` <span class="due">${sin} con menos de 24 h: no se recupera${sin > 1 ? "n" : ""}.</span>` : ""}</p>`
+    <p class="small" style="margin:0">${con ? `<b>${con}</b> te ${con === 1 ? "queda" : "quedan"} para recuperar, en las 2 semanas siguientes a cada clase.` : ""}${sin ? ` <span class="due">${sin} con menos de 24 h: no se recupera${sin > 1 ? "n" : ""}.</span>` : ""}</p>`
     : '<div class="empty">No tenés clases en esas fechas.</div>';
 }
 ["input", "change"].forEach(ev => document.addEventListener(ev, e => { if (!window.MODO_STAFF && e.target && (e.target.id === "vjD" || e.target.id === "vjH")) viajePrev(); }));

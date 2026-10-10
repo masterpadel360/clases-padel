@@ -28,7 +28,7 @@ const telDigits = tel => { let d=String(tel||"").replace(/\D/g,""); if(!d) retur
 const waURL = (tel,text) => { const d=telDigits(tel); return d ? `https://wa.me/${d}?text=${encodeURIComponent(text)}` : ""; };
 const nombreCorto = n => String(n||"").trim().split(/\s+/)[0].replace(/^./,c=>c.toUpperCase());
 
-const S = { tab:"hoy", club:"", mes:mesKey(now), q:"", dia:now.getDay(), fecha:hoyISO, alumnos:[], leads:[], cfg:{}, loaded:{a:false,l:false}, db:null, dbState:"cargando", downloads:null, asFecha:hoyISO, asClub:"ESPACIO", modo:"owner", esOwner:true, uid:null, user:null, horas:{}, hVal:{}, hMovs:[], fin:[], finEq:{}, asHist:{}, finMes:mesKey(now), horasFecha:hoyISO, metas:null, metasEq:{}, equipo:[], nombres:{}, asMarcas:{}, asKey:null, asUnsub:null, sent:{}, avisos:[], usuarios:[], perfil:null, vistos:{} };
+const S = { tab:"hoy", club:"", mes:mesKey(now), q:"", dia:now.getDay(), fecha:hoyISO, alumnos:[], leads:[], cfg:{}, loaded:{a:false,l:false}, db:null, dbState:"cargando", downloads:null, asFecha:hoyISO, asClub:"ESPACIO", modo:"owner", esOwner:true, uid:null, user:null, horas:{}, hVal:{}, hMovs:[], fin:[], finEq:{}, asHist:{}, finMes:mesKey(now), horasFecha:hoyISO, metas:null, metasEq:{}, equipo:[], nombres:{}, asMarcas:{}, asKey:null, asUnsub:null, sent:{}, avisos:[], usuarios:[], perfil:null, vistos:{}, comps:{} };
 
 $("#todayLbl").textContent = now.toLocaleDateString("es-AR",{weekday:"short",day:"numeric",month:"short"});
 
@@ -55,11 +55,11 @@ function tagsClub(a){ return [...clubsDe(a)].map(c=>`<span class="tag ${c}">${c}
 function montoClub(a,club,m=S.mes){ const hs=a.horarios||[]; if(!hs.length) return a.club===club?montoMes(a,m):0; return montoMes(a,m)*hs.filter(h=>clubH(a,h)===club).length/hs.length; }
 
 /* ---------- Clases para recuperar, con vencimiento ----------
-   Se recuperan dentro del mes. Si faltó la última semana del mes, tiene hasta el 7 del mes siguiente.
+   Cada clase se recupera en las 2 semanas siguientes a la falta: vence el viernes de la segunda semana después.
    recN(a) = cuántas tiene. a.recVence = {"2026-10-31": 2, ...} = hasta cuándo vale cada una. */
 // Las clases son de lunes a viernes: si el vencimiento cae sábado o domingo, vence el viernes anterior.
 function habil(f){ const d=isoDate(f); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); return toISO(d); }
-function venceDe(f){ const d=isoDate(f); const fin=new Date(d.getFullYear(),d.getMonth()+1,0); return habil(fin.getDate()-d.getDate()<7 ? toISO(new Date(d.getFullYear(),d.getMonth()+1,7)) : toISO(fin)); }
+function venceDe(f){ const d=isoDate(f); d.setDate(d.getDate()-((d.getDay()+6)%7)+18); return toISO(d); }
 const fechaDM = f => { const d=isoDate(f); return `${d.getDate()}/${d.getMonth()+1}`; };
 // Faltas avisadas por la app que todavía no se ubicaron en su mes (las ubica el proceso automático o la próxima edición).
 function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P.avisos:S.avisos)||[];
@@ -224,7 +224,7 @@ function alRow(a){
     <span class="name">${esc(a.nombre)}</span>
     <span class="meta">${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}</span>
   </button>
-  <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button><button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":"Debe"}</button>`}</div></div>`;
+  <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":"Debe"}</button>`}</div></div>`;
 }
 
 function vAlumnos(){
@@ -292,7 +292,7 @@ function vRecuperar(){
   return `
   <section class="sec" style="margin-top:4px">
     <div class="sec-head"><h2 class="disp">Recuperar</h2><button class="cta" data-act="recAdd" style="padding:6px 6px 6px 14px;font-size:13px">Anotar <i>+</i></button></div>
-    <p class="small muted" style="margin:0">${recs.length?`${recs.length} alumno${recs.length>1?"s":""} · ${tot} clase${tot>1?"s":""} pendiente${tot>1?"s":""}. El mensaje ya le ofrece los lugares libres de su categoría.`:"Acá aparece quién tiene que recuperar."} Se recuperan dentro del mes; si faltó la última semana, tiene la primera semana del mes siguiente. Si no, se pierden solas.</p>
+    <p class="small muted" style="margin:0">${recs.length?`${recs.length} alumno${recs.length>1?"s":""} · ${tot} clase${tot>1?"s":""} pendiente${tot>1?"s":""}. El mensaje ya le ofrece los lugares libres de su categoría.`:"Acá aparece quién tiene que recuperar."} Cada clase se recupera en las 2 semanas siguientes a la falta (hasta el viernes). Si no, se pierde sola.</p>
     ${recs.length?`<div class="list">${recs.map(recRow).join("")}</div>`:`<div class="empty">Nadie tiene clases pendientes. Se suman cuando suspendés un turno por lluvia en <b>Agenda</b>, o tocando <b>Anotar +</b> cuando alguien falta.</div>`}
   </section>
   <section class="sec">
@@ -736,8 +736,34 @@ async function safe(p,okMsg){
 const colA=()=>S.db.collection("alumnos");
 const colL=()=>S.db.collection("interesados");
 async function setPago(a,val){
-  const cur=(a.pagos&&a.pagos[S.mes])||{};
-  return safe(()=>colA().doc(a.id).update({pagos:{[S.mes]:{pagado:val,monto:val?montoMes(a):(cur.monto||0),fecha:val?hoyISO:null}}}));
+  const cur=(a.pagos&&a.pagos[S.mes])||{}; const c=compDe(a);
+  return safe(async()=>{ const bt=S.db.batch();
+    bt.update(colA().doc(a.id),{pagos:{[S.mes]:{pagado:val,monto:val?montoMes(a):(cur.monto||0),fecha:val?hoyISO:null}}});
+    // Si lo pasa a "Debe" y había un comprobante del alumno, queda rechazado (el alumno ve que lo tiene que volver a mandar).
+    if(!val&&c&&c.estado==="enviado") bt.update(S.db.doc("comprobantes/"+c.id),{estado:"rechazado",aplicado:true,notificado:true});
+    await bt.commit(); });
+}
+/* ---------- Comprobantes que sube el alumno al pagar ----------
+   comprobantes/{alumnoId_mes} = datos · fotosPago/{alumnoId_mes} = la foto. Al llegar uno, el mes queda pagado solo. */
+function compDe(a,m=S.mes){ return (S.comps||{})[`${a.id}_${m}`]||null; }
+const compAplicando=new Set();
+function aplicarComprobantes(){
+  if(!S.esOwner||!S.db||!S.loaded.a) return;
+  Object.values(S.comps||{}).filter(c=>c.estado==="enviado"&&!c.aplicado&&!compAplicando.has(c.id)).forEach(async c=>{
+    const a=S.alumnos.find(x=>x.id===c.alumnoId); if(!a) return; compAplicando.add(c.id);
+    try{ const bt=S.db.batch(); const f=c.creado&&c.creado.toDate?toISO(c.creado.toDate()):hoyISO;
+      bt.update(colA().doc(a.id),{pagos:{[c.mes]:{pagado:true,monto:c.monto||montoMes(a,c.mes),fecha:f,comprobante:true}}});
+      bt.update(S.db.doc("comprobantes/"+c.id),{aplicado:true}); await bt.commit(); }
+    catch(e){ console.error(e); compAplicando.delete(c.id); } });
+}
+async function verComprobante(a){
+  const c=compDe(a); if(!c) return;
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted" style="text-transform:capitalize">Comprobante de ${mesLbl(c.mes)} · ${money(c.monto||montoMes(a,c.mes))}${c.estado==="rechazado"?" · <b style='color:var(--warn)'>rechazado</b>":""}</span></div>
+    <div id="compImg" class="small muted">Cargando foto…</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${c.estado==="enviado"?`<button class="mini" data-act="compRech" data-id="${a.id}" style="color:var(--warn)">Rechazar pago</button>`:""}<button class="mini go" data-act="close">Cerrar</button></div>`);
+  try{ const d=await S.db.doc("fotosPago/"+c.id).get(); const el=$("#compImg"); if(!el) return;
+    el.innerHTML=d.exists?`<img src="${d.data().foto}" alt="Comprobante" style="width:100%;max-height:60vh;object-fit:contain;border-radius:10px">`:"No se encontró la foto."; }
+  catch(e){ const el=$("#compImg"); if(el) el.textContent="No se pudo cargar la foto."; }
 }
 // Suma o descuenta clases para recuperar (con su vencimiento). "fecha" = el día que faltó.
 async function setRec(a,delta,fecha=hoyISO,quitarDe=null){ const pend=recPendAvisos(a); const p=recCambio(a,delta,fecha,quitarDe);
@@ -769,6 +795,8 @@ document.addEventListener("click",async e=>{
     case "recMas": if(A){ if(await setRec(A,1)){ toast(`${A.nombre}: +1 clase a recuperar (hasta el ${fechaDM(venceDe(hoyISO))})`); if($("#recQ")) openRecAdd($("#recQ").value); } } break;
     case "recAdd": openRecAdd(); break;
     case "pagoNuevo": openPagoProfe(); break;
+    case "verComp": if(A) verComprobante(A); break;
+    case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
     case "asCSV": exportAsist(); break;
     case "irAsist": S.asFecha=b.dataset.f; S.tab="asist"; render(); scrollTo(0,0); break;
     case "irHoras": S.horasFecha=b.dataset.f; S.tab="horas"; render(); setTimeout(()=>{ const el=document.querySelector('[data-act="hStep"]'); el&&el.scrollIntoView({block:"center"}); },50); break;

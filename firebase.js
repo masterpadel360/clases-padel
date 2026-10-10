@@ -157,7 +157,8 @@ async function iniciarStaff(perfil, u) {
       vis(); }, () => {});
     db.collection("interesados").onSnapshot(snap => { S.leads = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.l = true; vis(); }, () => {});
   }
-  db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; publicarTurnos(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
+  db.collection("comprobantes").onSnapshot(snap => { S.comps = {}; snap.docs.forEach(d => { S.comps[d.id] = { id: d.id, ...d.data() }; }); aplicarComprobantes(); vis(); }, () => {});
+  db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; publicarTurnos(); aplicarComprobantes(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
   db.doc("config/general").onSnapshot(d => { S.cfg = d.exists ? d.data() : {}; publicarInfo(); }, () => {});
   refrescarNotif({ rol: perfil.rol });
 }

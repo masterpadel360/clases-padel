@@ -1,5 +1,6 @@
 // Corre cada 10 minutos en GitHub Actions.
-// 1) Le avisa a Gabriel cuando un alumno cancela, reserva o vuelve a su clase (respaldo del aviso al instante).
+// 1) Le avisa a Gabriel cuando un alumno cancela, reserva o vuelve a su clase (respaldo del aviso al instante),
+//    y cuando un alumno paga subiendo el comprobante (el mes queda pagado).
 // 2) Ordena las clases para recuperar por vencimiento y borra las vencidas.
 // 3) Al alumno: recordatorio el día antes y 3 horas antes, avisos de lugar para recuperar y de vencimiento.
 // 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
@@ -67,6 +68,21 @@ if (nuevos.length) {
     for (const uid of staff) await enviar(uid, { ...msg, tag: "aviso-" + lista[0].alumnoId });
   }
   console.log(`Avisos notificados: ${nuevos.length}`);
+}
+
+/* ---------- 1b) Pagos con comprobante: el mes queda pagado y le avisamos a Gabriel ---------- */
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const plata = n => "$" + Math.round(Number(n) || 0).toLocaleString("es-AR");
+for (const d of (await db.collection("comprobantes").where("notificado", "==", false).get()).docs) {
+  const c = await db.runTransaction(async tx => {
+    const s = await tx.get(d.ref); const v = s.exists && s.data(); if (!v || v.notificado || v.estado !== "enviado") return null;
+    const fecha = v.creado && v.creado.toDate ? new Date(v.creado.toDate().getTime() - 3 * 3600e3).toISOString().slice(0, 10) : hoy;
+    if (!v.aplicado) tx.set(db.doc("alumnos/" + v.alumnoId), { pagos: { [v.mes]: { pagado: true, monto: v.monto || 0, fecha, comprobante: true } } }, { merge: true });
+    tx.update(d.ref, { aplicado: true, notificado: true }); return v;
+  });
+  if (!c) continue;
+  const mes = MESES[Number(c.mes.slice(5, 7)) - 1] || c.mes;
+  for (const uid of staff) await enviar(uid, { title: `${primerNombre(c.nombre)} pagó ${mes} 💸`, body: `${plata(c.monto)} · subió el comprobante. Tocá 🧾 en su ficha para verlo.`, tag: "pago-" + c.alumnoId });
 }
 
 /* ---------- 2) Clases para recuperar: cada una con su vencimiento ---------- */

@@ -7,13 +7,10 @@ export const partes = f => f.split("-").map(Number);
 export const sumarDias = (f, n) => { const [y, m, d] = partes(f); return fechaISO(y, m, d + n); };
 export const diaSemana = f => { const [y, m, d] = partes(f); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
 
-// Se recupera dentro del mes. Si faltó en la última semana del mes, hasta el 7 del mes siguiente.
-// Las clases son de lunes a viernes: si cae sábado o domingo, vence el viernes anterior.
+// Cada clase se recupera en las 2 semanas siguientes a la falta: vence el viernes de la segunda semana después.
+// Las clases son de lunes a viernes: habil() lleva al viernes anterior una fecha que caiga sábado o domingo.
 export function habil(f) { while ([0, 6].includes(diaSemana(f))) f = sumarDias(f, -1); return f; }
-export function venceDe(f) {
-  const [y, m, d] = partes(f); const ultimo = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  return habil(ultimo - d < 7 ? fechaISO(y, m + 1, 7) : fechaISO(y, m, ultimo));
-}
+export function venceDe(f) { return sumarDias(f, 18 - ((diaSemana(f) + 6) % 7)); }
 
 // Ordena las clases para recuperar según cuándo vencen.
 // a.recuperar = cuántas tiene (lo que manda). a.recVence = {"AAAA-MM-DD": cantidad}.

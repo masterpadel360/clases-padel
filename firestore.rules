@@ -82,6 +82,39 @@ service cloud.firestore {
       allow delete: if esStaff();
     }
 
+    // ---------- Pagos: el alumno sube el comprobante y el mes queda pagado ----------
+    // Uno por alumno y mes (id = alumnoId_AAAA-MM). Solo se puede volver a mandar si Gabriel lo rechazó.
+    function compPrevioOk(id) {
+      return !exists(doc('comprobantes', id)) || get(doc('comprobantes', id)).data.estado == 'rechazado';
+    }
+    function comprobanteOk(id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['alumnoId', 'uid', 'nombre', 'mes', 'monto', 'estado', 'aplicado', 'notificado', 'creado'])
+        && d.alumnoId == miAlumno() && d.uid == request.auth.uid
+        && d.mes is string && d.mes.matches('^20[0-9][0-9]-(0[1-9]|1[0-2])$')
+        && id == d.alumnoId + '_' + d.mes
+        && d.monto is number && d.estado == 'enviado' && d.aplicado == false && d.notificado == false
+        && d.creado == request.time
+        && compPrevioOk(id)
+        && existsAfter(doc('fotosPago', id));
+    }
+    match /comprobantes/{id} {
+      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow create, update: if esStaff() || (esAlumno() && comprobanteOk(id));
+      allow delete: if esStaff();
+    }
+    match /fotosPago/{id} {
+      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow create, update: if esStaff() || (esAlumno()
+        && request.resource.data.keys().hasOnly(['alumnoId', 'mes', 'foto'])
+        && request.resource.data.alumnoId == miAlumno()
+        && id == miAlumno() + '_' + request.resource.data.mes
+        && request.resource.data.foto is string && request.resource.data.foto.size() < 750000
+        && compPrevioOk(id)
+        && getAfter(doc('comprobantes', id)).data.alumnoId == miAlumno());
+      allow delete: if esStaff();
+    }
+
     // ---------- Resto ----------
     match /asistencia/{id} {
       allow read: if tienePerfil();
