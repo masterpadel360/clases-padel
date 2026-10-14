@@ -205,3 +205,55 @@ html.v2 .sheet .cta.wa{background:var(--s-olive)}
 html.v2 .toast{background:var(--s-olive);color:var(--s-cream)}
 
 @media (prefers-reduced-motion:reduce){.v2-recordar,.v2-prog-fill{animation:none}.v2-despl,.v2-anillo circle.arco{transition:none}}
+
+/* ===== avisos arriba (varios) ===== */
+.v2-avisos{display:flex;flex-direction:column;gap:8px;margin-bottom:-14px}
+.v2-avisos .v2-recordar{margin-bottom:0}
+.v2-recordar.suave{background:var(--s-olive);box-shadow:0 14px 26px -14px rgba(20,30,18,.7)}
+.v2-recordar.suave .v2-cta{color:var(--s-olive)}
+.v2-recordar.suave::after{background:repeating-linear-gradient(115deg,transparent 0 5px,rgba(207,224,74,.35) 5px 8px)}
+
+/* ===== fichas (ausencias y pagos) ===== */
+.v2-fichas{display:flex;flex-direction:column;gap:8px}
+.v2-ficha{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--s-card);border-radius:12px;padding:10px 12px 10px 10px;position:relative;overflow:hidden}
+.v2-ficha.off{background:transparent;box-shadow:inset 0 0 0 1.5px var(--s-line)}
+.v2-ficha.venc{box-shadow:inset 3px 0 0 var(--s-falta)}
+.v2-fecha{width:52px;height:56px;border-radius:9px;background:var(--s-olive);color:var(--s-cream);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.v2-fecha span{font-size:.58rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--s-brass-l)}
+.v2-fecha b{font-family:var(--s-sport);font-stretch:72%;font-weight:900;font-size:1.9rem;margin-top:2px}
+.v2-ficha.off .v2-fecha{background:transparent;color:var(--s-ink);box-shadow:inset 0 0 0 1.5px var(--s-line)}
+.v2-ficha.off .v2-fecha span{color:var(--s-dim)}
+.v2-ficha.venc .v2-fecha{background:var(--s-falta)}
+.v2-ficha.venc .v2-fecha span{color:#fff}
+.v2-ficha-tx{min-width:0;display:flex;flex-direction:column;gap:1px;font-size:.8rem;color:var(--s-dim)}
+.v2-ficha-tx>b{font-family:var(--s-sport);font-stretch:78%;font-weight:800;font-size:1.35rem;color:var(--s-ink);line-height:1.1}
+.v2-ficha-tx .st{font-weight:700;font-size:.76rem}
+.st.fui,.e.fui{color:var(--s-fui)}.st.falta,.e.falta{color:var(--s-falta)}.st.aviso,.e.aviso{color:#8a6a2f}.e.lluvia{color:#3d6a9e}
+.v2-tag{font-style:normal;font-family:var(--s-body);font-size:.58rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;background:var(--s-lima);color:var(--s-olive);padding:2px 6px;border-radius:4px;vertical-align:middle}
+.v2-ficha-acc{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.v2-sub a{color:var(--s-ink);font-weight:700}
+
+/* ===== programar ausencia ===== */
+.v2-programar{position:relative;overflow:hidden;background:var(--s-olive);color:var(--s-cream);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 18px 30px -18px rgba(20,30,18,.6)}
+.v2-programar>*{position:relative;z-index:1}
+.v2-programar .k{color:var(--s-brass-l);letter-spacing:.24em}
+.v2-programar h3{margin:0;letter-spacing:.005em!important;font-family:var(--s-sport);font-stretch:75%;font-weight:800;font-style:italic;font-size:1.9rem;line-height:1;text-transform:uppercase;max-width:15ch}
+.v2-programar p{margin:0;font-size:.85rem;color:rgba(239,233,218,.7);max-width:32ch}
+.v2-pagar.lima{background:var(--s-lima);color:var(--s-olive);box-shadow:0 12px 24px -12px rgba(207,224,74,.5);margin-top:6px}
+
+/* ===== asistencia ===== */
+.v2-asis{display:flex;flex-direction:column;margin-top:12px;border-top:1px solid var(--s-line)}
+.v2-asis-f{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--s-line);font-size:.85rem}
+.v2-asis-f:last-child{border-bottom:0}
+.v2-asis-f .pt{width:9px;height:9px;border-radius:50%;background:var(--s-dim)}
+.v2-asis-f .pt.fui{background:var(--s-fui)}.v2-asis-f .pt.falta{background:var(--s-falta)}.v2-asis-f .pt.aviso{background:#c79a45}.v2-asis-f .pt.lluvia{background:#3d6a9e}
+.v2-asis-f .f{font-weight:600}
+.v2-asis-f .e{font-size:.74rem;font-weight:700;text-align:right}
+
+/* ===== pagos ===== */
+.v2-alias{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--s-card);border-radius:12px;padding:12px 14px}
+.v2-alias b{display:block;font-family:var(--s-sport);font-stretch:85%;font-weight:800;font-size:1.15rem}
+.v2-pasos{display:flex;flex-direction:column;gap:8px}
+.v2-pasos>div{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:var(--s-card);border-radius:12px;padding:12px 14px;font-size:.88rem}
+.v2-pasos>div>b{width:30px;height:30px;border-radius:50%;background:var(--s-olive);color:var(--s-lima);display:grid;place-items:center;font-family:var(--s-sport);font-stretch:75%;font-weight:900;font-size:1.1rem}
+.fuitx{color:var(--s-fui)}

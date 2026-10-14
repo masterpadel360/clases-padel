@@ -34,6 +34,7 @@
 
   function cabecera(a, estMes) {
     const mes = mesKey(now);
+    const debe = mesesPago().some(m => m !== mes && estPago(a, m) !== "pagado"); if (debe && estMes !== "vencido") estMes = "vencido";
     const pill = estMes === "pagado" ? '<span class="v2-estado ok"><i></i>Al día</span>' : estMes === "vencido" ? '<span class="v2-estado mal"><i></i>Cuota vencida</span>' : '<span class="v2-estado"><i></i>Cuota pendiente</span>';
     const club = [...clubsDe(a)].map(lugarTxt).join(" · ");
     return `<div class="v2-marca"><span class="v2-logo">${pelota()}<span class="v2-nom">Clases de Pádel</span></span><span class="v2-mes">${MESN[Number(mes.slice(5, 7)) - 1].slice(0, 3)} · ${mes.slice(0, 4)}</span></div>
@@ -99,7 +100,7 @@
     return `<section class="v2-pago ${est === "pagado" ? "listo" : ""}">
       <svg class="v2-cancha" viewBox="0 0 200 120" aria-hidden="true"><g><rect x="4" y="4" width="192" height="112"/><line x1="100" y1="0" x2="100" y2="120" stroke-width="4"/><line x1="36" y1="4" x2="36" y2="116"/><line x1="164" y1="4" x2="164" y2="116"/><line x1="36" y1="60" x2="164" y2="60"/></g></svg>
       <span class="v2-vel" aria-hidden="true"></span>
-      <div class="v2-pago-g"><div><span class="k">Cuota de ${MESN[Number(mes.slice(5, 7)) - 1]}</span><div class="v2-monto">${est === "pagado" ? "Pagado" : money(monto).replace("$ ", "$")}</div><p>${sub}</p></div>
+      <div class="v2-pago-g"><div><span class="k">Cuota de ${MESN[Number(mes.slice(5, 7)) - 1]}</span><div class="v2-monto">${est === "pagado" ? "Pagado" : money(monto).replace(/\$\s+/, "$")}</div><p>${sub}</p></div>
         <div class="v2-anillo"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="36"/><circle class="arco" cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${est === "pagado" ? 0 : (C * (1 - frac)).toFixed(1)}"/></svg><span>${anillo}</span></div></div>
       ${est === "pagado" ? "" : `<button class="v2-pagar" data-pa="pagar" data-m="${mes}">Pagar ahora</button>`}
       ${deuda.length ? `<button class="v2-deuda" data-pa="ptab" data-t="pagos">Tenés ${deuda.length === 1 ? "un mes anterior" : deuda.length + " meses anteriores"} sin pagar ›</button>` : ""}
@@ -124,7 +125,7 @@
     const rec = recAl().reduce((s, x) => s + x.n, 0); const bk = recAl();
     const estMes = estPago(a, mesKey(now));
     return `<div class="v2">${cabecera(a, estMes)}
-      ${rec ? `<button class="v2-recordar" data-pa="irRec"><span class="ico"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span><span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>` : ""}
+      ${avisosArriba(a, "inicio")}
       ${hero(prox)}
       ${tarjetaNotif("alumno")}
       ${tusClases(a, cl, marcas, proxKey)}
@@ -133,15 +134,105 @@
       <div class="v2-extra"><button class="v2-mini" data-pa="ptab" data-t="ausencias">Programar una ausencia</button><button class="v2-mini" data-pa="calendario">Recordatorios en mi calendario</button>${wa ? `<a class="v2-mini wa" href="${wa}" target="_blank" rel="noopener">Escribirle a Gabriel</a>` : ""}</div>
     </div>`;
   };
-  // Ausencias y Pagos: misma información de siempre, con la cabecera nueva arriba.
-  const vAusOrig = window.vAusencias, vPagOrig = window.vPagos;
-  window.vAusencias = (a, wa) => `<div class="v2">${cabecera(a, estPago(a, mesKey(now)))}<div class="v2-otra">${vAusOrig(a, wa)}</div></div>`;
-  window.vPagos = (a, wa) => `<div class="v2">${cabecera(a, estPago(a, mesKey(now)))}<div class="v2-otra">${vPagOrig(a, wa)}</div></div>`;
+  // Avisos importantes arriba de todo, en todas las pantallas.
+  function avisosArriba(a, tab) {
+    const out = [];
+    const bk = recAl(); const rec = bk.reduce((s, x) => s + x.n, 0);
+    const ico = '<span class="ico"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>';
+    const icoP = '<span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg></span>';
+    const mes = mesKey(now); const est = estPago(a, mes);
+    const deuda = mesesPago().filter(m => m !== mes && estPago(a, m) !== "pagado");
+    const dias = Math.ceil((new Date(now.getFullYear(), now.getMonth(), DIA_PAGO) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS);
+    if (deuda.length || est === "vencido") {
+      const m = deuda.length ? deuda[deuda.length - 1] : mes;
+      out.push(`<button class="v2-recordar" data-pa="${tab === "pagos" ? "pagar" : "ptab"}" ${tab === "pagos" ? `data-m="${m}"` : 'data-t="pagos"'}>${icoP}<span class="tx"><b>${deuda.length > 1 ? `${deuda.length} cuotas vencidas` : "Cuota vencida"}</b><small>Pagala cuanto antes para seguir al día</small></span><span class="v2-cta">Pagar</span></button>`);
+    } else if (est === "rechazado") {
+      out.push(`<button class="v2-recordar" data-pa="pagar" data-m="${mes}">${icoP}<span class="tx"><b>Revisá tu pago</b><small>Gabriel no pudo confirmar el comprobante. Volvé a mandarlo.</small></span><span class="v2-cta">Mandar</span></button>`);
+    } else if (est === "pendiente" && conPlazo(mes) && dias >= 0 && dias <= 3) {
+      out.push(`<button class="v2-recordar suave" data-pa="pagar" data-m="${mes}">${icoP}<span class="tx"><b>${dias === 0 ? "Hoy vence tu cuota" : `Te ${dias === 1 ? "queda 1 día" : `quedan ${dias} días`} para pagar`}</b><small>La cuota de ${MESN[now.getMonth()]} vence el ${pagoVence(mes)}</small></span><span class="v2-cta">Pagar</span></button>`);
+    }
+    if (rec) out.push(`<button class="v2-recordar" data-pa="${tab === "inicio" ? "irRec" : "v2irRec"}">${ico}<span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>`);
+    return out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "";
+  }
+
+  /* ---- Ausencias ---- */
+  const ESTV = { vino: ["Fuiste", "fui"], recuperando: ["Recuperaste", "fui"], falto: ["Faltaste sin avisar", "falta"], recupera: ["Avisaste · recuperás", "aviso"], lluvia: ["Suspendida por lluvia · recuperás", "lluvia"] };
+  function fichaClase(c) {
+    const d = isoDate(c.fecha); const rp = P.reemp[`${c.fecha}|${c.hora}`];
+    const estado = c.aus ? (c.aus.conRecupero ? '<span class="st aviso">No venís · te quedó para recuperar</span>' : '<span class="st falta">No venís</span>')
+      : c.vuelve ? '<span class="st fui">Confirmaste que venís</span>' : rp ? `<span class="st aviso">Va ${esc(rp.quien)} en tu lugar</span>` : "";
+    const acc = c.aus || c.vuelve ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
+      : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="v2-mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}`;
+    return `<div class="v2-ficha${c.aus ? " off" : ""}"><div class="v2-fecha"><span>${DC[d.getDay()]}</span><b>${d.getDate()}</b></div>
+      <div class="v2-ficha-tx"><b>${c.hora}${c.tipo === "recupera" ? ' <i class="v2-tag">Recuperación</i>' : ""}</b><span>${lugarTxt(c.club)} · ${fechaRel(c.fecha)}</span>${estado}</div>
+      <div class="v2-ficha-acc">${acc}</div></div>`;
+  }
+  window.vAusencias = function (a, wa) {
+    const prox = misClases(21).filter(c => inicioDe(c.fecha, c.hora).getTime() > Date.now());
+    const av = P.avisos.filter(v => v.tipo === "ausencia" && v.fecha >= hoyISO && !esVuelta(v.fecha, v.hora) && inicioDe(v.fecha, v.hora).getTime() > Date.now()).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+    const asis = misAsistencias(); const mes = mesKey(now); const asMes = asis.filter(x => x.fecha.startsWith(mes));
+    const fui = asMes.filter(x => x.estado === "vino" || x.estado === "recuperando").length, fal = asMes.filter(x => x.estado === "falto").length;
+    return `<div class="v2">${cabecera(a, estPago(a, mes))}${avisosArriba(a, "ausencias")}
+      <section class="v2-sec"><div class="v2-head"><h2>No puedo ir</h2><span class="k">Próximas 3 semanas</span></div>
+        ${prox.length ? `<div class="v2-fichas">${prox.map(fichaClase).join("")}</div>` : `<div class="v2-vacio">No tenés clases en las próximas 3 semanas.</div>`}
+        <p class="v2-sub">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 h o más</b>, te queda para recuperar en las 2 semanas siguientes.</p>
+      </section>
+      <section class="v2-programar">
+        <svg class="v2-cancha" viewBox="0 0 200 120" aria-hidden="true"><g><rect x="4" y="4" width="192" height="112"/><line x1="100" y1="0" x2="100" y2="120" stroke-width="4"/><line x1="36" y1="4" x2="36" y2="116"/><line x1="164" y1="4" x2="164" y2="116"/><line x1="36" y1="60" x2="164" y2="60"/></g></svg>
+        <span class="v2-vel" aria-hidden="true"></span>
+        <span class="k">Ausencia programada</span>
+        <h3>¿Te vas de viaje o tenés un compromiso?</h3>
+        <p>Elegí un día, o desde y hasta qué día, y avisamos todas tus clases de esas fechas.</p>
+        <button class="v2-pagar lima" data-pa="viaje">Programar ausencia</button>
+        <button class="v2-deuda" data-pa="varias">O elegí clase por clase ›</button>
+      </section>
+      ${av.length ? `<section class="v2-sec"><div class="v2-head"><h2>Avisaste</h2><span class="k">${av.length} ${av.length === 1 ? "clase" : "clases"}</span></div>
+        <div class="v2-fichas">${av.map(v => { const d = isoDate(v.fecha);
+          const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (a.recuperar || 0) >= 1;
+          const puede = v.conRecupero && a24 && lugar && tiene;
+          const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona" : !tiene ? "Ya usaste esa clase para recuperar" : "";
+          return `<div class="v2-ficha off"><div class="v2-fecha"><span>${DC[d.getDay()]}</span><b>${d.getDate()}</b></div>
+            <div class="v2-ficha-tx"><b>${v.hora}</b>${v.conRecupero ? '<span class="st aviso">Te queda para recuperar</span>' : '<span class="st falta">Avisaste tarde: no se recupera</span>'}${nota ? `<span>${nota}</span>` : ""}</div>
+            <div class="v2-ficha-acc">${puede ? `<button class="v2-mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div></div>`; }).join("")}</div>
+        <p class="v2-sub">Podés volver atrás <b>una sola vez</b>, hasta 24 h antes y si tu lugar sigue libre.${wa ? ` ¿Otro caso? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
+      </section>` : ""}
+      <section class="v2-sec"><div class="v2-head"><h2>Tu asistencia</h2><span class="k">${MESN[now.getMonth()]}</span></div>
+        <div class="v2-caja">
+          <div class="v2-cuenta"><b class="fui">${fui}</b><span class="k">${fui === 1 ? "clase" : "clases"}</span><i></i><b class="falta">${fal}</b><span class="k">${fal === 1 ? "falta" : "faltas"}</span></div>
+          ${asis.length ? `<div class="v2-asis">${asis.slice(0, 20).map(x => { const d = isoDate(x.fecha); const e = ESTV[x.estado] || [x.estado, ""];
+            return `<div class="v2-asis-f"><span class="pt ${e[1]}"></span><span class="f">${DC[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${x.hora}</span><span class="e ${e[1]}">${e[0]}</span></div>`; }).join("")}</div>`
+            : `<p class="v2-sub" style="margin-top:10px">Todavía no hay asistencias cargadas.</p>`}
+        </div>
+      </section>
+    </div>`;
+  };
+
+  /* ---- Pagos ---- */
+  window.vPagos = function (a, wa) {
+    const mes = mesKey(now); const meses = mesesPago();
+    const otros = meses.filter(m => m !== mes);
+    return `<div class="v2">${cabecera(a, estPago(a, mes))}${avisosArriba(a, "pagos")}
+      <section class="v2-sec"><div class="v2-head"><h2>Tu cuota</h2><span class="k">${MESN[now.getMonth()]}</span></div>${cuota(a)}
+        ${P.info.alias ? `<div class="v2-alias"><span><span class="k">Alias para transferir</span><b>${esc(P.info.alias)}</b></span><button class="v2-mini" data-pa="alias">Copiar</button></div>` : ""}
+      </section>
+      ${otros.length ? `<section class="v2-sec"><div class="v2-head"><h2>Meses anteriores</h2><span class="k">${otros.length} sin pagar</span></div>
+        <div class="v2-fichas">${otros.map(m => { const est = estPago(a, m); const n = clasesMes(a, m); const aj = ajusteDe(a, m) !== null; const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
+          return `<div class="v2-ficha ${est === "vencido" ? "venc" : ""}"><div class="v2-fecha"><span>${MESN[Number(m.slice(5, 7)) - 1].slice(0, 3)}</span><b>${m.slice(2, 4)}</b></div>
+            <div class="v2-ficha-tx"><b>${money(montoMes(a, m)).replace(/\$\s+/, "$")}</b><span>${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases × ${money(a.precioClase).replace(/\$\s+/, "$")}`}</span>
+              ${est === "vencido" ? `<span class="st falta">Vencida el ${pagoVence(m)}</span>` : c && c.estado === "rechazado" ? '<span class="st falta">No se pudo confirmar el comprobante</span>' : ""}</div>
+            <div class="v2-ficha-acc"><button class="v2-mini rojo" data-pa="pagar" data-m="${m}">Pagar</button></div></div>`; }).join("")}</div></section>` : ""}
+      <section class="v2-sec"><div class="v2-head"><h2>Cómo pagar</h2></div>
+        <div class="v2-pasos"><div><b>1</b><span>Transferí el total al alias${P.info.alias ? ` <b>${esc(P.info.alias)}</b>` : ""}.</span></div><div><b>2</b><span>Tocá <b>Pagar ahora</b> y subí la captura del comprobante.</span></div><div><b>3</b><span>Listo: el mes queda <b class="fuitx">pagado</b> y a Gabriel le llega el aviso.</span></div></div>
+        <p class="v2-sub">Se paga del 1 al 13 de cada mes.${wa ? ` ¿Dudas? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Tengo una consulta sobre el pago de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
+      </section>
+    </div>`;
+  };
 
   // Acciones propias del diseño nuevo.
   document.addEventListener("click", e => {
     if (window.MODO_STAFF) return;
-    const b = e.target.closest("[data-pa='v2ver'],[data-pa='v2dia']"); if (!b) return;
+    const b = e.target.closest("[data-pa='v2ver'],[data-pa='v2dia'],[data-pa='v2irRec']"); if (!b) return;
+    if (b.dataset.pa === "v2irRec") { P.tab = "inicio"; renderPortal(); setTimeout(() => { const el = document.getElementById("secRec"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 60); return; }
     if (b.dataset.pa === "v2ver") { detalleAbierto = !detalleAbierto; const box = b.closest(".v2-clases"); box.querySelector(".v2-despl").classList.toggle("abierto", detalleAbierto); b.setAttribute("aria-expanded", detalleAbierto); b.firstChild.textContent = detalleAbierto ? "Ocultar " : "Ver detalle "; return; }
     selClase = Number(b.dataset.i); renderPortal();
   }, true);
