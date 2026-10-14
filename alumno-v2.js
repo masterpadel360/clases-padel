@@ -34,7 +34,7 @@
 
   function cabecera(a, estMes) {
     const mes = mesKey(now);
-    const debe = mesesPago().some(m => m !== mes && estPago(a, m) !== "pagado"); if (debe && estMes !== "vencido") estMes = "vencido";
+    const debe = mesesPago().some(m => m !== mes && conPlazo(m) && estPago(a, m) !== "pagado"); if (debe && estMes !== "vencido") estMes = "vencido";
     const pill = estMes === "pagado" ? '<span class="v2-estado ok"><i></i>Al día</span>' : estMes === "vencido" ? '<span class="v2-estado mal"><i></i>Cuota vencida</span>' : '<span class="v2-estado"><i></i>Cuota pendiente</span>';
     const club = [...clubsDe(a)].map(lugarTxt).join(" · ");
     return `<div class="v2-marca"><span class="v2-logo">${pelota()}<span class="v2-nom">Clases de Pádel</span></span><span class="v2-mes">${MESN[Number(mes.slice(5, 7)) - 1].slice(0, 3)} · ${mes.slice(0, 4)}</span></div>
@@ -90,19 +90,19 @@
 
   function cuota(a) {
     const mes = mesKey(now); const est = estPago(a, mes); const monto = montoMes(a, mes); const n = clasesMes(a, mes);
-    const deuda = mesesPago().filter(m => m !== mes && estPago(a, m) !== "pagado");
+    const deuda = mesesPago().filter(m => m !== mes && conPlazo(m) && estPago(a, m) !== "pagado");
     const vence = new Date(now.getFullYear(), now.getMonth(), DIA_PAGO); const dias = Math.ceil((vence - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS);
     const plazo = conPlazo(mes); const frac = plazo ? Math.max(0, Math.min(1, dias / DIA_PAGO)) : 1;
     const C = 226.2;
     const anillo = est === "pagado" ? `<svg class="v2-tilde" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><small>al día</small>`
       : est === "vencido" ? `<b>!</b><small>vencido</small>` : plazo ? `<b>${Math.max(dias, 0)}</b><small>${dias === 1 ? "día" : "días"}</small>` : `<b>${n}</b><small>clases</small>`;
-    const sub = est === "pagado" ? "Gracias, ya está registrado." : est === "vencido" ? `Venció el ${pagoVence(mes)}. Pagalo cuanto antes.` : est === "rechazado" ? "Gabriel no pudo confirmar el comprobante. Volvé a mandarlo." : `${n} clases${plazo ? ` · pagás hasta el ${pagoVence(mes)}` : ""}`;
+    const sub = est === "pagado" ? "Gracias, ya está registrado." : !plazo ? `${n} clases · este mes lo arreglás directo con Gabriel. Desde noviembre pagás por la app.` : est === "vencido" ? `Venció el ${pagoVence(mes)}. Pagalo cuanto antes.` : est === "rechazado" ? "Gabriel no pudo confirmar el comprobante. Volvé a mandarlo." : `${n} clases${plazo ? ` · pagás hasta el ${pagoVence(mes)}` : ""}`;
     return `<section class="v2-pago ${est === "pagado" ? "listo" : ""}">
       <svg class="v2-cancha" viewBox="0 0 200 120" aria-hidden="true"><g><rect x="4" y="4" width="192" height="112"/><line x1="100" y1="0" x2="100" y2="120" stroke-width="4"/><line x1="36" y1="4" x2="36" y2="116"/><line x1="164" y1="4" x2="164" y2="116"/><line x1="36" y1="60" x2="164" y2="60"/></g></svg>
       <span class="v2-vel" aria-hidden="true"></span>
       <div class="v2-pago-g"><div><span class="k">Cuota de ${MESN[Number(mes.slice(5, 7)) - 1]}</span><div class="v2-monto">${est === "pagado" ? "Pagado" : money(monto).replace(/\$\s+/, "$")}</div><p>${sub}</p></div>
         <div class="v2-anillo"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="36"/><circle class="arco" cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${est === "pagado" ? 0 : (C * (1 - frac)).toFixed(1)}"/></svg><span>${anillo}</span></div></div>
-      ${est === "pagado" ? "" : `<button class="v2-pagar" data-pa="pagar" data-m="${mes}">Pagar ahora</button>`}
+      ${est === "pagado" || !plazo ? "" : `<button class="v2-pagar" data-pa="pagar" data-m="${mes}">Pagar ahora</button>`}
       ${deuda.length ? `<button class="v2-deuda" data-pa="ptab" data-t="pagos">Tenés ${deuda.length === 1 ? "un mes anterior" : deuda.length + " meses anteriores"} sin pagar ›</button>` : ""}
     </section>`;
   }
@@ -141,7 +141,7 @@
     const ico = '<span class="ico"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>';
     const icoP = '<span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg></span>';
     const mes = mesKey(now); const est = estPago(a, mes);
-    const deuda = mesesPago().filter(m => m !== mes && estPago(a, m) !== "pagado");
+    const deuda = mesesPago().filter(m => m !== mes && conPlazo(m) && estPago(a, m) !== "pagado");
     const dias = Math.ceil((new Date(now.getFullYear(), now.getMonth(), DIA_PAGO) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS);
     if (deuda.length || est === "vencido") {
       const m = deuda.length ? deuda[deuda.length - 1] : mes;
@@ -210,7 +210,7 @@
   /* ---- Pagos ---- */
   window.vPagos = function (a, wa) {
     const mes = mesKey(now); const meses = mesesPago();
-    const otros = meses.filter(m => m !== mes);
+    const otros = meses.filter(m => m !== mes && conPlazo(m));
     return `<div class="v2">${cabecera(a, estPago(a, mes))}${avisosArriba(a, "pagos")}
       <section class="v2-sec"><div class="v2-head"><h2>Tu cuota</h2><span class="k">${MESN[now.getMonth()]}</span></div>${cuota(a)}
         ${P.info.alias ? `<div class="v2-alias"><span><span class="k">Alias para transferir</span><b>${esc(P.info.alias)}</b></span><button class="v2-mini" data-pa="alias">Copiar</button></div>` : ""}
