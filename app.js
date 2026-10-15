@@ -659,6 +659,15 @@ function render(){
   if(focused){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
 }
 
+/* ---------- Encabezado que se esconde al bajar y vuelve al subir ---------- */
+{ let yAnt=0, acc=0, tick=false;
+  addEventListener("scroll",()=>{ if(tick) return; tick=true; requestAnimationFrame(()=>{ tick=false;
+    const h=document.querySelector("#staffApp .top"); if(!h||$("#staffApp").hidden) return;
+    const y=Math.max(0,scrollY), d=y-yAnt; yAnt=y;
+    if(y<60){ h.classList.remove("oculto"); acc=0; return; }
+    acc=(Math.sign(d)===Math.sign(acc)?acc:0)+d;
+    if(acc>12) h.classList.add("oculto"); else if(acc<-12) h.classList.remove("oculto"); }); },{passive:true}); }
+
 /* ---------- Objetivo de alumnos ---------- */
 const objMin=()=>{ try{ return localStorage.getItem("objMin")==="1"; }catch(e){ return false; } };
 function setObjMin(v){ try{ localStorage.setItem("objMin",v?"1":"0"); }catch(e){} objBar(); }
