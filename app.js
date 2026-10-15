@@ -693,6 +693,10 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}"></div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
+    ${a.id?"":`<div class="field promo"><span class="flabel">Precio promo del primer mes (opcional)</span>
+      <div class="two"><div class="field"><label for="aPromo">Precio por clase</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Ej: 8000"></div>
+      <div class="field"><label for="aPromoMes">Mes de la promo</label><select id="aPromoMes">${[0,1].map(i=>{const d=new Date(now.getFullYear(),now.getMonth()+i,1);const m=mesKey(d);return `<option value="${m}">${mesSolo(m)}</option>`;}).join("")}</select></div></div>
+      <span class="small muted" id="aPromoCalc">Ese mes paga el precio promo. Desde el mes siguiente paga el precio normal solo.</span></div>`}
     <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
     <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
@@ -703,7 +707,9 @@ function formAlumno(a={},leadId=""){
     <div class="btns">${a.id?`<button type="button" class="btn del" data-act="delA">Borrar</button>`:"<span></span>"}<span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
   </form>`);
   const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)}))};
-    const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesMes(tmp)} clases = ${money(cuotaMes(tmp))}${ex?" (incluye clase extra)":""}`:""; };
+    const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesMes(tmp)} clases = ${money(cuotaMes(tmp))}${ex?" (incluye clase extra)":""}`:"";
+    const pr=$("#aPromo"); if(pr){ const pv=Number(pr.value)||0, pm=$("#aPromoMes").value; const sig=mesKey(new Date(Number(pm.slice(0,4)),Number(pm.slice(5,7)),1));
+      $("#aPromoCalc").textContent=pv?`${mesSolo(pm)}: ${clasesMes(tmp,pm)} clases x ${money(pv)} = ${money(clasesMes(tmp,pm)*pv)}${tmp.precioClase?` · desde ${mesSolo(sig)}: ${money(tmp.precioClase)} por clase`:""}`:"Ese mes paga el precio promo. Desde el mes siguiente paga el precio normal solo."; } };
   calc(); $("#fA").addEventListener("input",calc); $("#fA").addEventListener("change",calc); $("#fA").addEventListener("click",()=>setTimeout(calc,0));
 }
 function formLead(l={}){
@@ -885,6 +891,7 @@ document.addEventListener("submit",async e=>{
     const id=f.dataset.id,lead=f.dataset.lead;
     if(id){ data.activo=$("#aAct").checked; if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(id),data); pendA.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); },"Guardado")) closeSheet(); }
     else { data.activo=true; data.tipo="Grupal"; data.pagos={}; data.alta=hoyISO;
+      { const pv=Number(($("#aPromo")||{}).value)||0; if(pv>0){ const pm=$("#aPromoMes").value; data.pagos[pm]={ajuste:clasesMes(data,pm)*pv,nota:`Promo primer mes (${money(pv)} por clase)`}; data.promo={mes:pm,precioClase:pv}; } }
       if(await safe(()=>colA().add(data),`${data.nombre} agregado`)){ if(lead) await safe(()=>colL().doc(lead).update({estado:"alumno",ganado:hoyISO})); closeSheet(); } }
   }
   if(f.id==="fL"){
