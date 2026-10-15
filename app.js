@@ -21,6 +21,10 @@ const pad = n => String(n).padStart(2,"0");
 const now = new Date();
 const hoyISO = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
 const mesKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+// Si la app quedó abierta y cambió el día (iPhone la retoma sin recargar), recargamos para que fechas, cuotas y vencimientos estén al día.
+{ const diaHoy=()=>{ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+  const chequear=()=>{ if(document.visibilityState!=="visible"||diaHoy()===hoyISO) return; const ov=document.getElementById("overlay"); if(ov&&!ov.hidden) return; location.reload(); };
+  document.addEventListener("visibilitychange",chequear); setInterval(chequear,60*1000); }
 const mesLbl = k => { const [y,m]=k.split("-"); return new Date(+y,+m-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}); };
 const mesSolo = k => mesLbl(k).split(" ")[0];
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -243,12 +247,20 @@ function vAlumnos(){
   if(S.q){ const q=S.q.toLowerCase(); list=list.filter(a=>(a.nombre||"").toLowerCase().includes(q)||(a.tel||"").includes(q)); }
   list.sort((a,b)=>(a.activo===false)-(b.activo===false)||(a.nombre||"").localeCompare(b.nombre||""));
   const act=list.filter(a=>a.activo!==false).length;
+  const cobra=a=>a.activo!==false&&montoMes(a)>0&&!(a.inicio&&a.inicio.slice(0,7)>S.mes);
+  const deben=list.filter(a=>cobra(a)&&!pago(a)), pagaron=list.filter(a=>a.activo!==false&&pago(a));
+  const fp=S.fPago||""; if(fp==="debe") list=deben; else if(fp==="pago") list=pagaron;
+  const venc=S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13));
+  const resumen=fp==="debe"?(deben.length?`<div class="fp-res debe"><b>${deben.length}</b> ${deben.length===1?"alumno debe":"alumnos deben"} · faltan cobrar <b class="num">${money(deben.reduce((t,a)=>t+montoMes(a),0))}</b>${venc?" · <b>vencido</b>":""}<span class="small">Tocá el ícono de WhatsApp de cada uno para mandarle el recordatorio.</span></div>`:`<div class="fp-res ok">🎉 Todos pagaron ${mesSolo(S.mes)}.</div>`)
+    :fp==="pago"?`<div class="fp-res ok"><b>${pagaron.length}</b> ${pagaron.length===1?"pagó":"pagaron"} · cobrado <b class="num">${money(pagaron.reduce((t,a)=>t+cobradoDe(a),0))}</b></div>`:"";
   return `
   <section class="sec" style="margin-top:4px">
     <input class="search" id="q" type="search" placeholder="Buscar por nombre o teléfono" value="${esc(S.q)}" autocomplete="off">
     <div class="sec-head"><h3>${act} activos${list.length>act?` · ${list.length-act} pausados`:""}</h3>
       <span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(S.mes)}</span><button class="linkish" data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
-    ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}
+    <div class="seg fp" role="group" aria-label="Filtrar por pago"><button type="button" class="seg-b" data-act="fPago" data-v="" aria-pressed="${!fp}">Todos</button><button type="button" class="seg-b fp-debe" data-act="fPago" data-v="debe" aria-pressed="${fp==="debe"}">No pagaron · ${deben.length}</button><button type="button" class="seg-b fp-pago" data-act="fPago" data-v="pago" aria-pressed="${fp==="pago"}">Pagaron · ${pagaron.length}</button></div>
+    ${resumen}
+    ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:fp?"":(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}
     ${S.alumnos.length&&S.downloads?`<button class="linkish" data-act="csv" style="justify-self:start">Descargar lista (CSV)</button>`:""}
   </section>`;
 }
@@ -655,7 +667,7 @@ function render(){
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
   if(focused&&S.tab==="alumnos"){ const tmp=document.createElement("div"); tmp.innerHTML=html; const nq=tmp.querySelector("#q"), lq=$("#q");
     if(nq&&lq){ const ls=lq.parentElement; [...ls.childNodes].forEach(c=>{ if(c!==lq) c.remove(); }); nq.remove(); const ns=tmp.querySelector("section"); if(ns){ ls.append(...ns.childNodes); } return; } }
-  $("#view").innerHTML=html;
+  const yAntes=scrollY; $("#view").innerHTML=html; if(Math.abs(scrollY-yAntes)>1) scrollTo(0,yAntes);
   if(focused){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
 }
 
@@ -862,6 +874,7 @@ document.addEventListener("click",async e=>{
     case "mes": { const [y,m]=S.mes.split("-").map(Number); S.mes=mesKey(new Date(y,m-1+Number(b.dataset.d),1)); render(); break; }
     case "dia": S.dia=Number(b.dataset.d); render(); break;
     case "fecha": { const st=document.getElementById("daysStrip"); const sl=st?st.scrollLeft:0; S.fecha=b.dataset.f; render(); const n=document.getElementById("daysStrip"); if(n) n.scrollLeft=sl; break; }
+    case "fPago": S.fPago=b.dataset.v; render(); break;
     case "pago": if(A){ const was=!!pago(A); if(await setPago(A,!was)) toast(was?`${A.nombre}: vuelve a deber`:`${A.nombre}: pagó ${money(montoMes(A))}`,()=>setPago(A,was)); } break;
     case "msg": if(A) openMensajes(A); break;
     case "copy": { const t=b.dataset.text; try{ await navigator.clipboard.writeText(t); toast("Mensaje copiado"); }catch(err){ const r=document.createRange(); const bub=b.closest(".msg")?.querySelector(".bubble"); if(bub){ r.selectNodeContents(bub); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Texto seleccionado, copialo"); } } break; }

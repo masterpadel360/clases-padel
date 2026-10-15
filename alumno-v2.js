@@ -57,8 +57,8 @@
         <div class="v2-top"><span class="k">${prox.tipo === "recupera" ? "Próxima clase · recuperación" : "Próxima clase"}</span><span class="v2-vivo"><i></i>Lugar confirmado</span></div>
         <h1 class="v2-cuando">${DC[d.getDay()]} ${d.getDate()}<br><span>${prox.hora}</span></h1>
         <div class="v2-donde">${lugarTxt(prox.club)}</div>
-        <div class="v2-slide" data-f="${prox.fecha}" data-h="${prox.hora}" data-t="${prox.tipo}"><div class="v2-relleno"></div><div class="v2-slide-tx">Deslizá si no podés ir</div>
-          <div class="v2-perilla" role="button" tabindex="0" aria-label="Avisar que no voy">${flecha}</div></div>
+        ${prox.vuelve || (P.reemp || {})[prox.fecha + "|" + prox.hora] ? `<div class="v2-donde" style="opacity:.8">${prox.vuelve ? "Confirmaste que venís" : "Va otra persona en tu lugar"}</div>` : `<div class="v2-slide" data-f="${prox.fecha}" data-h="${prox.hora}" data-t="${prox.tipo}"><div class="v2-relleno"></div><div class="v2-slide-tx">Deslizá si no podés ir</div>
+          <div class="v2-perilla" role="button" tabindex="0" aria-label="Avisar que no voy">${flecha}</div></div>`}
       </div></section>
       <p class="v2-nota">Si no podés venir, avisá con 24 h de anticipación y la clase queda para recuperar.</p>`;
   }
@@ -97,19 +97,20 @@
 
   function cuota(a) {
     const mes = mesKey(now); const est = estPago(a, mes); const monto = montoMes(a, mes); const n = clasesMes(a, mes);
+    const pm = (a.pagos || {})[mes] || {}; const det = ajusteDe(a, mes) !== null ? esc(pm.nota || "Monto acordado") : `${n} clases`;
     const deuda = mesesPago().filter(m => m !== mes && conPlazo(m) && estPago(a, m) !== "pagado");
     const vence = new Date(now.getFullYear(), now.getMonth(), DIA_PAGO); const dias = Math.ceil((vence - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS);
     const plazo = conPlazo(mes); const frac = plazo ? Math.max(0, Math.min(1, dias / DIA_PAGO)) : 1;
     const C = 226.2;
     const anillo = est === "pagado" ? `<svg class="v2-tilde" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><small>al día</small>`
       : est === "vencido" ? `<b>!</b><small>vencido</small>` : plazo ? `<b>${Math.max(dias, 0)}</b><small>${dias === 1 ? "día" : "días"}</small>` : `<b>${n}</b><small>clases</small>`;
-    const sub = est === "pagado" ? "Gracias, ya está registrado." : !plazo ? `${n} clases · este mes lo arreglás directo con Gabriel. Desde noviembre pagás por la app.` : est === "vencido" ? `Venció el ${pagoVence(mes)}. Pagalo cuanto antes.` : est === "rechazado" ? "Gabriel no pudo confirmar el comprobante. Volvé a mandarlo." : `${n} clases${plazo ? ` · pagás hasta el ${pagoVence(mes)}` : ""}`;
+    const sub = est === "pagado" ? "Gracias, ya está registrado." : !plazo ? `${det} · este mes lo arreglás directo con Gabriel. Desde noviembre pagás por la app.` : est === "vencido" ? `Venció el ${pagoVence(mes)}. Pagalo cuanto antes.` : est === "rechazado" ? "Gabriel no pudo confirmar el comprobante. Volvé a mandarlo." : `${det}${plazo ? ` · pagás hasta el ${pagoVence(mes)}` : ""}`;
     return `<section class="v2-pago ${est === "pagado" ? "listo" : ""}">
       <svg class="v2-cancha" viewBox="0 0 200 120" aria-hidden="true"><g><rect x="4" y="4" width="192" height="112"/><line x1="100" y1="0" x2="100" y2="120" stroke-width="4"/><line x1="36" y1="4" x2="36" y2="116"/><line x1="164" y1="4" x2="164" y2="116"/><line x1="36" y1="60" x2="164" y2="60"/></g></svg>
       <span class="v2-vel" aria-hidden="true"></span>
       <div class="v2-pago-g"><div><span class="k">Cuota de ${MESN[Number(mes.slice(5, 7)) - 1]}</span><div class="v2-monto">${est === "pagado" ? "Pagado" : money(monto).replace(/\$\s+/, "$")}</div><p>${sub}</p></div>
         <div class="v2-anillo"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="36"/><circle class="arco" cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${est === "pagado" ? 0 : (C * (1 - frac)).toFixed(1)}"/></svg><span>${anillo}</span></div></div>
-      ${est === "pagado" || !plazo ? "" : `<button class="v2-pagar" data-pa="pagar" data-m="${mes}">Pagar ahora</button>`}
+      ${est === "pagado" || !plazo || !monto ? "" : `<button class="v2-pagar" data-pa="pagar" data-m="${mes}">Pagar ahora</button>`}
       ${deuda.length ? `<button class="v2-deuda" data-pa="ptab" data-t="pagos">Tenés ${deuda.length === 1 ? "un mes anterior" : deuda.length + " meses anteriores"} sin pagar ›</button>` : ""}
     </section>`;
   }
@@ -349,7 +350,7 @@
       ${otros.length ? `<section class="v2-sec"><div class="v2-head"><h2>Meses anteriores</h2><span class="k">${otros.length} sin pagar</span></div>
         <div class="v2-fichas">${otros.map(m => { const est = estPago(a, m); const n = clasesMes(a, m); const aj = ajusteDe(a, m) !== null; const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
           return `<div class="v2-ficha ${est === "vencido" ? "venc" : ""}"><div class="v2-fecha"><span>${MESN[Number(m.slice(5, 7)) - 1].slice(0, 3)}</span><b>${m.slice(2, 4)}</b></div>
-            <div class="v2-ficha-tx"><b>${money(montoMes(a, m)).replace(/\$\s+/, "$")}</b><span>${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : `${n} clases × ${money(a.precioClase).replace(/\$\s+/, "$")}`}</span>
+            <div class="v2-ficha-tx"><b>${money(montoMes(a, m)).replace(/\$\s+/, "$")}</b><span>${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : (a.precioClase ? `${n} clases × ${money(a.precioClase).replace(/\$\s+/, "$")}` : `${n} clases`)}</span>
               ${est === "vencido" ? `<span class="st falta">Vencida el ${pagoVence(m)}</span>` : c && c.estado === "rechazado" ? '<span class="st falta">No se pudo confirmar el comprobante</span>' : ""}</div>
             <div class="v2-ficha-acc"><button class="v2-mini rojo" data-pa="pagar" data-m="${m}">Pagar</button></div></div>`; }).join("")}</div></section>` : ""}
       <section class="v2-sec"><div class="v2-head"><h2>Cómo pagar</h2></div>

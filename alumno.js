@@ -40,7 +40,7 @@ function iniciarPortal(perfil, u) {
   renderPortal();
   // Si la primera vez tarda mucho (mala señal), ofrecemos reintentar en vez de quedar trabado.
   setTimeout(() => { if (!P.cargado) { const v = $("#pView"); if (v) v.innerHTML = `<div class="notice" style="display:grid;gap:10px">Está tardando en cargar. Revisá la conexión.<button class="btn pri" onclick="location.reload()" style="justify-self:start">Reintentar</button></div>`; } }, 8000);
-  fdb.doc("alumnos/" + id).onSnapshot(d => { P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
+  fdb.doc("alumnos/" + id).onSnapshot(d => { if (!d.exists && d.metadata && d.metadata.fromCache && !P.a) return; P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
   refrescarNotif({ rol: "alumno", alumnoId: id });
   setTimeout(pedirNotifAlEntrar, 700);
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
@@ -74,7 +74,7 @@ function misClases(dias = 14, rango = null) {
     .sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
 }
 // "Al final voy": un aviso de ausencia + una reserva en ese mismo turno. Queda fijo, no se puede volver a cambiar.
-function esVuelta(fecha, hora) { return P.avisos.some(v => v.tipo === "ausencia" && v.fecha === fecha && v.hora === hora) && P.avisos.some(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora); }
+function esVuelta(fecha, hora) { const dw = isoDate(fecha).getDay(); if (!((P.a && P.a.horarios) || []).some(x => Number(x.dia) === dw && x.hora === hora)) return false; return P.avisos.some(v => v.tipo === "ausencia" && v.fecha === fecha && v.hora === hora) && P.avisos.some(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora); }
 function libresDe(club, fecha, hora) {
   const d = isoDate(fecha); const t = P.turnos[`${club}|${d.getDay()}|${hora}`]; if (!t) return 0;
   const c = P.cupos[cupoId(club, fecha, hora)] || {}; const cupo = P.info.cupo || CUPO;
@@ -108,7 +108,9 @@ function misAsistencias() {
 function mesesPago() {
   const a = P.a; if (!a) return [];
   const actual = mesKey(now); const set = new Set([actual]);
-  Object.keys(a.pagos || {}).forEach(m => { if (m < actual && !(a.pagos[m] || {}).pagado) set.add(m); });
+  const desde = a.inicio ? a.inicio.slice(0, 7) : "";
+  Object.keys(a.pagos || {}).forEach(m => { if (m < actual && m >= desde && !(a.pagos[m] || {}).pagado) set.add(m); });
+  for (let k = PAGO_DESDE, i = 0; k < actual && i < 36; k = mesSig(k), i++) if (k >= desde && montoMes(a, k) > 0 && estPago(a, k) !== "pagado") set.add(k);
   return [...set].sort().reverse();
 }
 
@@ -121,6 +123,7 @@ function mesVencido(m) { if (!conPlazo(m)) return false; const act = mesKey(now)
 function estPago(a, m) {
   const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
   if (p.pagado) return "pagado";
+  if (a.inicio && m < a.inicio.slice(0, 7)) return "pagado";
   if (c && c.estado === "enviado" && !c.aplicado) return "pagado";
   if (c && c.estado === "rechazado") return mesVencido(m) ? "vencido" : "rechazado";
   return mesVencido(m) ? "vencido" : "pendiente";
@@ -272,12 +275,13 @@ document.addEventListener("change", async e => {
   const est = $("#compEst"), ok = $("#compOk"), pv = $("#compPrev");
   est.textContent = "Preparando la foto…"; ok.disabled = true;
   let foto = null; try { foto = await achicarFoto(f); } catch (x) { console.error(x); }
+  if (!$("#compOk") || P.enviando) return;
   if (!foto) { est.textContent = "No se pudo leer esa imagen. Probá con una captura de pantalla."; return; }
   P.compFoto = foto; pv.src = foto; pv.hidden = false; est.textContent = ""; ok.disabled = false;
 });
 async function mandarComprobante(m, b) {
-  const a = P.a; if (!P.compFoto) { toast("Primero elegí la foto del comprobante"); return; }
-  b.disabled = true; b.textContent = "Enviando…";
+  const a = P.a; if (P.enviando) return; if (!P.compFoto) { toast("Primero elegí la foto del comprobante"); return; }
+  P.enviando = true; b.disabled = true; b.textContent = "Enviando…";
   const id = `${a.id}_${m}`;
   try {
     const bt = fdb.batch();
@@ -289,6 +293,7 @@ async function mandarComprobante(m, b) {
       <p class="small" style="margin:0">Le llegó tu comprobante de <b>${mesSolo(m)}</b> a Gabriel. Ya figura como <b style="color:var(--ok)">pagado</b>.</p>
       <button class="btn pri" data-pa="cerrar" style="width:100%">Listo</button></div>`);
   } catch (x) { console.error(x); b.disabled = false; b.textContent = "Pagar"; toast(x && x.code === "permission-denied" ? "Ese mes ya tiene un comprobante enviado." : "No se pudo enviar. Probá de nuevo."); }
+  finally { P.enviando = false; }
 }
 
 /* ---- Mandar a alguien en tu lugar ---- */
@@ -325,7 +330,7 @@ function confirmar(titulo, texto, boton, accion) {
   P.accion = accion;
 }
 async function avisarNoVoy(fecha, hora, tipo) {
-  const a = P.a; const ini = inicioDe(fecha, hora); const con = tipo === "fija" && ini.getTime() - Date.now() >= DIA_MS;
+  const a = P.a; const ini = inicioDe(fecha, hora); const con = ini.getTime() - Date.now() >= DIA_MS + 120000;
   const d = isoDate(fecha); const hFija = (a.horarios || []).find(x => x.dia === d.getDay() && x.hora === hora);
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
   const cid = cupoId(club, fecha, hora);
@@ -393,8 +398,9 @@ document.addEventListener("click", async e => {
       const quien = (($("#recQuien") || {}).value || "").trim().replace(/\s+/g, " ");
       await reservarRec(f, h, c);
       if (quien.length >= 2) {
-        try { await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: P.a.id, uid: P.uid, nombre: P.a.nombre, quien: quien.slice(0, 40), fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
-          inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false }); } catch (x) { console.error(x); }
+        let okR = true; try { await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: P.a.id, uid: P.uid, nombre: P.a.nombre, quien: quien.slice(0, 40), fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
+          inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false }); } catch (x) { console.error(x); okR = false; }
+        if (!okR) return { titulo: "¡Reservado!", texto: `Tu lugar ${cuando} quedó guardado, pero no se pudo anotar que va <b>${esc(quien)}</b>. Avisale a Gabriel por WhatsApp.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}, va ${quien} en mi lugar.` };
         return { titulo: "¡Reservado!", texto: `Va <b>${esc(quien)}</b> a recuperar ${cuando} en tu lugar.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}, va ${quien} en mi lugar.` };
       }
       return { titulo: "¡Reservado!", texto: `Te esperamos ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}.` };
@@ -482,7 +488,7 @@ function descargarCalendario() {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
   const ev = (a.horarios || []).map((h, i) => {
     const lugar = clubH(a, h) === "ESPACIO" ? "Espacio La 10" : "Jump";
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); while (d.getDay() !== h.dia) d.setDate(d.getDate() + 1);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); for (let i = 0; i < 7 && d.getDay() !== Number(h.dia); i++) d.setDate(d.getDate() + 1);
     const [hh, mm] = h.hora.split(":").map(Number); const ini = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(hh)}${p2(mm)}00`;
     const fin = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}T${p2(Math.min(hh + 1, 23))}${p2(hh + 1 > 23 ? 59 : mm)}00`;
     return ["BEGIN:VEVENT", `UID:clase-${a.id}-${i}-${h.dia}-${h.hora.replace(":", "")}@clasespadel`, `DTSTAMP:${stamp}`, `DTSTART;TZID=America/Argentina/Cordoba:${ini}`, `DTEND;TZID=America/Argentina/Cordoba:${fin}`,

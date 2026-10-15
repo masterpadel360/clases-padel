@@ -55,7 +55,7 @@ service cloud.firestore {
         && id == d.alumnoId + '_' + d.fecha + '_' + d.hhmm + '_' + d.tipo
         && d.inicio is timestamp && d.inicio > request.time
         && d.visto == false
-        && (d.tipo != 'ausencia' || d.conRecupero == (d.inicio > request.time + duration.value(24, 'h')))
+        && (d.tipo != 'ausencia' || d.conRecupero == false || d.inicio > request.time + duration.value(24, 'h'))
         && ((d.tipo == 'ausencia' && d.conRecupero == false)
           || getAfter(doc('alumnos', d.alumnoId)).data.ultimoAviso == id)
         && getAfter(doc('cupos', d.club + '_' + d.fecha + '_' + d.hhmm)).data.ultimo == id
