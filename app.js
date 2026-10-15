@@ -659,6 +659,7 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
     await safe(()=>S.db.doc(`lluvias/${LL.fecha}_${t.club}_${hhmmDe(t.hora)}`).set({club:t.club,fecha:LL.fecha,hora:t.hora,alumnos:ids,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})); }
   const d=isoDate(LL.fecha); const cuando=LL.fecha===hoyISO?"hoy":`el ${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth()+1}`;
   const msg=`🌧 Por la lluvia se suspenden las clases de ${cuando}: ${lineas.join(", ")}. A cada uno le queda la clase para recuperar en las próximas 2 semanas, la reservan desde la app.`;
+  try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){}
   render(); openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🌧</div><h2 class="disp" style="margin:0">Clases suspendidas</h2>
     <p class="small" style="margin:0">${lineas.length} turno${lineas.length===1?"":"s"} · ${tot} alumnos con clase para recuperar. La notificación les llega en unos minutos.</p>
     <div class="msg" style="text-align:left;width:100%"><span class="small muted">Si querés avisar también en el grupo de WhatsApp:</span><div class="bubble">${esc(msg)}</div><button class="mini" data-act="copy" data-text="${esc(msg)}">Copiar mensaje</button></div>

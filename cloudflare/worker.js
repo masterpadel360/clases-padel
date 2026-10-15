@@ -13,6 +13,19 @@ const CLUB = { JUMP: "Jump", ESPACIO: "Espacio La 10" };
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 export default {
+  // Cada 10 minutos (Cloudflare sí respeta el horario): manda las lluvias pendientes y le pide a GitHub
+  // que corra los recordatorios (GitHub solo, a veces los atrasa horas).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try { if (env.FIREBASE_SA) await lluvias(env); } catch (e) { console.log("lluvias", e && e.stack || e); }
+      if (env.GITHUB_TOKEN) {
+        const r = await fetch("https://api.github.com/repos/masterpadel360/clases-padel/actions/workflows/notificaciones.yml/dispatches", {
+          method: "POST", headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "avisos-clases", "Content-Type": "application/json" },
+          body: JSON.stringify({ ref: "main" }) });
+        if (!r.ok) console.log("GitHub", r.status, await r.text());
+      }
+    })());
+  },
   async fetch(req, env, ctx) {
     const origin = req.headers.get("Origin") || "";
     const cors = {
@@ -30,6 +43,7 @@ export default {
       return new Response(JSON.stringify(r), { status: r.error ? 400 : 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
     ctx.waitUntil(procesar(env).catch(e => console.log("Error:", e && e.stack || e)));
+    ctx.waitUntil(lluvias(env).catch(e => console.log("Lluvias:", e && e.stack || e)));
     return new Response("ok", { headers: cors });
   },
 };
@@ -74,6 +88,25 @@ async function procesar(env) {
       msg = { title: `${n}: ${lista.length} avisos`, body: [aus.length ? `no va ${aus.map(v => `${fechaTxt(v.fecha)} ${v.hora}`).join(", ")}` : "", rec.length ? `recupera ${rec.map(v => `${fechaTxt(v.fecha)} ${v.hora}`).join(", ")}` : ""].filter(Boolean).join(" · ") };
     }
     for (const s of staff) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { ...msg, tag: "aviso-" + lista[0].alumnoId });
+  }
+}
+
+// Lluvia: Gabriel suspende turnos desde el panel y a cada alumno le llega el aviso al instante.
+async function lluvias(env) {
+  const sa = JSON.parse(env.FIREBASE_SA);
+  const token = await accessToken(sa);
+  const fs = firestore(sa.project_id, token);
+  const pend = await fs.query("lluvias", { fieldFilter: { field: { fieldPath: "notificado" }, op: "EQUAL", value: { booleanValue: false } } });
+  if (!pend.length) return;
+  const porAlumno = {};
+  (await fs.list("tokens")).forEach(t => { if (t.data.rol === "alumno" && t.data.alumnoId && Array.isArray(t.data.tokens)) (porAlumno[t.data.alumnoId] = porAlumno[t.data.alumnoId] || []).push(...t.data.tokens); });
+  const hoy = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  for (const d of pend) {
+    if (!(await fs.marcar(d.name, d.updateTime))) continue;
+    const l = d.data; const dd = new Date(`${l.fecha}T12:00:00-03:00`);
+    const cuando = l.fecha === hoy ? "de hoy" : `del ${DIAS[dd.getUTCDay()]} ${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`;
+    for (const aid of l.alumnos || []) for (const t of porAlumno[aid] || [])
+      await enviar(sa.project_id, token, t, { title: `🌧 Se suspendió tu clase ${cuando} ${l.hora}`, body: "Por lluvia. Te queda una clase para recuperar: reservala desde la app cuando quieras.", tag: "lluvia" });
   }
 }
 
