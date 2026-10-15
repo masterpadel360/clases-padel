@@ -466,3 +466,6 @@ html.v2 #staffApp .fp-res.ok{background:rgba(79,138,44,.1);border-color:rgba(79,
 .aum-n b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .aum-n small{font-size:11.5px;opacity:.7}
 .aum-p{font-size:13px;white-space:nowrap;text-align:right}
+/* Panel: foto de la cancha de fondo en la tarjeta del mes */
+html.v2 #staffApp .hero{background:linear-gradient(180deg,rgba(18,24,14,.88) 0%,rgba(22,30,18,.62) 38%,rgba(22,30,18,.55) 60%,rgba(16,22,13,.92) 100%),url("fondo.jpg") center 70%/cover,var(--s-olive)!important}
+html.v2 #staffApp .hero::after{display:none}
