@@ -16,7 +16,8 @@ const TPL_DEF = {
 const WA_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2A9.8 9.8 0 0 0 3.6 17l-1.3 4.8 4.9-1.3A9.8 9.8 0 1 0 12 2.2zm0 17.8a8 8 0 0 1-4.1-1.1l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 1 1 12 20zm4.4-6c-.2-.1-1.4-.7-1.7-.8-.2-.1-.4-.1-.5.1l-.8.9c-.1.2-.3.2-.5.1a6.5 6.5 0 0 1-3.2-2.8c-.2-.4.2-.4.7-1.3.1-.1 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5a.9.9 0 0 0-.6.3 2.7 2.7 0 0 0-.9 2c0 1.2.9 2.3 1 2.5.1.1 1.7 2.6 4.1 3.7 1.5.7 2.1.7 2.9.6.5-.1 1.4-.6 1.6-1.2.2-.6.2-1.1.1-1.2l-.4-.2z"/></svg>';
 
 const $ = s => document.querySelector(s);
-const money = n => new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(n||0);
+const FMT_ARS = new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}); const _money = new Map();
+const money = n => { n=n||0; let r=_money.get(n); if(r===undefined){ r=FMT_ARS.format(n); if(_money.size>2000) _money.clear(); _money.set(n,r); } return r; };
 const pad = n => String(n).padStart(2,"0");
 const now = new Date();
 const hoyISO = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
@@ -25,7 +26,7 @@ const mesKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
 { const diaHoy=()=>{ const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
   const chequear=()=>{ if(document.visibilityState!=="visible"||diaHoy()===hoyISO) return; const ov=document.getElementById("overlay"); if(ov&&!ov.hidden) return; location.reload(); };
   document.addEventListener("visibilitychange",chequear); setInterval(chequear,60*1000); }
-const mesLbl = k => { const [y,m]=k.split("-"); return new Date(+y,+m-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}); };
+const _mesLbl = {}; const mesLbl = k => _mesLbl[k] || (_mesLbl[k] = (([y,m])=>new Date(+y,+m-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}))(k.split("-")));
 const mesSolo = k => mesLbl(k).split(" ")[0];
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const telDigits = tel => { let d=String(tel||"").replace(/\D/g,""); if(!d) return ""; if(d.startsWith("54")) return d; if(d.startsWith("0")) d=d.slice(1); if(d.length===10) return "549"+d; if(d.length===11 && d.startsWith("9")) return "54"+d; return d; };
@@ -39,7 +40,8 @@ $("#todayLbl").textContent = now.toLocaleDateString("es-AR",{weekday:"short",day
 function byClub(list){ return S.club ? list.filter(x=>enClub(x,S.club)) : list; }
 function activos(){ return byClub(S.alumnos.filter(a=>a.activo!==false)); }
 function pago(a,m=S.mes){ return a.pagos && a.pagos[m] && a.pagos[m].pagado; }
-function ocurrencias(dia,m){ const [y,mm]=m.split("-").map(Number); let n=0; const last=new Date(y,mm,0).getDate(); for(let d=1;d<=last;d++) if(new Date(y,mm-1,d).getDay()===dia) n++; return n; }
+const _ocu = {}; function ocurrencias(dia,m){ const k=dia+"|"+m; if(_ocu[k]!==undefined) return _ocu[k]; return (_ocu[k]=ocurrencias0(dia,m)); }
+function ocurrencias0(dia,m){ const [y,mm]=m.split("-").map(Number); let n=0; const last=new Date(y,mm,0).getDate(); for(let d=1;d<=last;d++) if(new Date(y,mm-1,d).getDay()===dia) n++; return n; }
 function diasDe(a){ return [...new Set((a.horarios||[]).map(h=>h.dia))]; }
 function clasesDesde(a,f){ const d0=isoDate(f); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); const ds=diasDe(a); let n=0; for(let d=d0.getDate();d<=last;d++) if(ds.includes(new Date(d0.getFullYear(),d0.getMonth(),d).getDay())) n++; return n; }
 const mesSig=m=>mesKey(new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1));
@@ -242,7 +244,7 @@ function emptyAlumnos(){ return `<div class="empty">Todavía no hay alumnos. Toc
 
 function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
-  return `<div class="row"><button class="main" data-act="editA" data-id="${a.id}">
+  return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
     <span class="meta">${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}</span>
   </button>
@@ -675,7 +677,7 @@ function render(){
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
   if(focused&&S.tab==="alumnos"){ const tmp=document.createElement("div"); tmp.innerHTML=html; const nq=tmp.querySelector("#q"), lq=$("#q");
     if(nq&&lq){ const ls=lq.parentElement; [...ls.childNodes].forEach(c=>{ if(c!==lq) c.remove(); }); nq.remove(); const ns=tmp.querySelector("section"); if(ns){ ls.append(...ns.childNodes); } return; } }
-  const yAntes=scrollY; $("#view").innerHTML=html; if(Math.abs(scrollY-yAntes)>1) scrollTo(0,yAntes);
+  const yAntes=scrollY; const tmpV=document.createElement("main"); tmpV.innerHTML=html; morph($("#view"),tmpV); if(Math.abs(scrollY-yAntes)>1) scrollTo(0,yAntes);
   if(focused){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
 }
 
@@ -758,6 +760,26 @@ function openObjetivo(){ const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.
     <p class="small muted" style="margin:12px 0 0">Tip: deslizá la franja para arriba y se achica; para abajo, vuelve.</p>
     <div class="btns" style="margin-top:14px">${meta?`<button class="btn sec2" data-act="objBorrar">Sacarlo</button>`:"<span></span>"}<button class="btn pri" data-act="objSave">Guardar</button></div>`); }
 async function guardarObjetivo(v){ if(await safe(()=>S.db.doc("config/general").set({...S.cfg,objetivoAlumnos:v}),v?`Objetivo: ${v} alumnos`:"Objetivo sacado")){ S.cfg={...S.cfg,objetivoAlumnos:v}; closeSheet(); render(); } }
+
+/* ---------- Actualizar solo lo que cambió (en vez de redibujar toda la pantalla) ---------- */
+function morph(a,b){
+  if(a.nodeType===1&&a!==$("#view")){ for(const at of [...a.attributes]) if(!b.hasAttribute(at.name)) a.removeAttribute(at.name);
+    for(const at of b.attributes) if(a.getAttribute(at.name)!==at.value) a.setAttribute(at.name,at.value); }
+  const bc=[...b.childNodes];
+  for(let i=0;i<bc.length;i++){ const nb=bc[i]; let na=a.childNodes[i];
+    if(!na){ a.appendChild(nb); continue; }
+    const kb=nb.nodeType===1?nb.getAttribute("data-k"):null;
+    if(kb!==null&&(na.nodeType!==1||na.getAttribute("data-k")!==kb)){ let m=null; for(let j=i+1;j<a.childNodes.length;j++){ const x=a.childNodes[j]; if(x.nodeType===1&&x.getAttribute("data-k")===kb){ m=x; break; } }
+      if(m){ a.insertBefore(m,na); na=m; } else { a.insertBefore(nb,na); continue; } }
+    if(na.nodeType!==nb.nodeType||(na.nodeType===1&&na.tagName!==nb.tagName)){ a.replaceChild(nb,na); continue; }
+    if(na.nodeType!==1){ if(na.nodeValue!==nb.nodeValue) na.nodeValue=nb.nodeValue; continue; }
+    if(na.isEqualNode(nb)) continue;
+    morph(na,nb);
+    if(na!==document.activeElement){ if(na.tagName==="INPUT"){ if(na.type==="checkbox"||na.type==="radio") na.checked=nb.hasAttribute("checked"); else if(na.value!==(nb.getAttribute("value")||"")) na.value=nb.getAttribute("value")||""; }
+      else if(na.tagName==="SELECT"){ const o=na.querySelector("option[selected]"); if(o) na.value=o.value; } else if(na.tagName==="TEXTAREA") na.value=nb.textContent; }
+  }
+  while(a.childNodes.length>bc.length) a.removeChild(a.lastChild);
+}
 
 /* ---------- Sheets ---------- */
 let sheetRefresh=null;

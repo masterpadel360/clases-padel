@@ -469,3 +469,53 @@ html.v2 #staffApp .fp-res.ok{background:rgba(79,138,44,.1);border-color:rgba(79,
 /* Panel: foto de la cancha de fondo en la tarjeta del mes */
 html.v2 #staffApp .hero{background:linear-gradient(180deg,rgba(18,24,14,.88) 0%,rgba(22,30,18,.62) 38%,rgba(22,30,18,.55) 60%,rgba(16,22,13,.92) 100%),url("fondo.jpg") center 70%/cover,var(--s-olive)!important}
 html.v2 #staffApp .hero::after{display:none}
+
+/* =====================================================================
+   PANEL · MODO TRABAJO: contraste alto y colores con significado
+   verde = pagó / vino · rojo = debe / faltó · ámbar = recupera
+   azul = Jump · oliva = Espacio
+   ===================================================================== */
+html.v2 #staffApp{--k-bg:#d9ddcf;--k-card:#fbfbf6;--k-line:#c3cab6;--k-ink:#141a11;--k-dim:#465041;
+  --k-ok:#2e7d32;--k-ok-s:#e3f1df;--k-no:#c62828;--k-no-s:#fbe4e1;--k-amb:#b86e00;--k-amb-s:#fdf0d8;--k-jump:#2c5aa0;--k-jump-s:#e2eaf6;--k-esp:#55731a;--k-esp-s:#e8efd6;
+  --s-card:var(--k-card);--s-dim:var(--k-dim);--s-line:var(--k-line);--muted:var(--k-dim);--line:var(--k-line);--line-2:var(--k-line)}
+html.v2.v2-staff,html.v2.v2-staff body{background:#d9ddcf!important}
+html.v2 #staffApp .top{background:var(--k-bg)}
+/* tarjetas y listas: blancas, separadas del fondo */
+html.v2 #staffApp .list,html.v2 #staffApp .search,html.v2 #staffApp .msg,html.v2 #staffApp .empty,html.v2 #staffApp .notice,html.v2 #staffApp .tu,html.v2 #staffApp .obj{background:var(--k-card)!important;border:1px solid var(--k-line)!important}
+html.v2 #staffApp .row{border-bottom:1px solid var(--k-line)}
+html.v2 #staffApp .meta,html.v2 #staffApp .small,html.v2 #staffApp .muted{color:var(--k-dim)}
+/* estado de pago: franja al costado + botón sólido */
+html.v2 #staffApp .row.is-debe{box-shadow:inset 5px 0 0 var(--k-no)}
+html.v2 #staffApp .row.is-ok{box-shadow:inset 5px 0 0 var(--k-ok)}
+html.v2 #staffApp .row.is-pausa{opacity:.55}
+html.v2 #staffApp .pay{border:0!important;font-weight:800;min-width:72px;min-height:44px;padding-inline:12px;border-radius:10px}
+html.v2 #staffApp .pay.ok{background:var(--k-ok)!important;color:#fff!important}
+html.v2 #staffApp .pay.no{background:var(--k-no)!important;color:#fff!important}
+html.v2 #staffApp .amt{border:1px solid var(--k-line)!important;background:#fff!important;color:var(--k-ink)!important}
+html.v2 #staffApp .amt.aj{border-color:var(--k-amb)!important;color:var(--k-amb)!important}
+/* filtros de pago */
+html.v2 #staffApp .seg.fp .fp-debe{color:var(--k-no);border-color:var(--k-no)}
+html.v2 #staffApp .seg.fp .fp-pago{color:var(--k-ok);border-color:var(--k-ok)}
+html.v2 #staffApp .seg.fp .fp-debe[aria-pressed="true"]{background:var(--k-no);border-color:var(--k-no);color:#fff}
+html.v2 #staffApp .seg.fp .fp-pago[aria-pressed="true"]{background:var(--k-ok);border-color:var(--k-ok);color:#fff}
+html.v2 #staffApp .fp-res.debe{background:var(--k-no-s);border-color:var(--k-no)}
+html.v2 #staffApp .fp-res.ok{background:var(--k-ok-s);border-color:var(--k-ok)}
+/* clubes con color propio */
+html.v2 #staffApp .tag.JUMP,html.v2 #staffApp .tu-club.JUMP,html.v2 #staffApp [data-club="JUMP"][aria-pressed="true"]{background:var(--k-jump)!important;color:#fff!important;border-color:var(--k-jump)!important}
+html.v2 #staffApp .tag.ESPACIO,html.v2 #staffApp .tu-club.ESPACIO,html.v2 #staffApp [data-club="ESPACIO"][aria-pressed="true"]{background:var(--k-esp)!important;color:#fff!important;border-color:var(--k-esp)!important}
+/* asistencia: cada botón con su color, el elegido sólido */
+html.v2 #staffApp .seg-b.vino{color:var(--k-ok);border-color:var(--k-ok);background:var(--k-ok-s)}
+html.v2 #staffApp .seg-b.falto{color:var(--k-no);border-color:var(--k-no);background:var(--k-no-s)}
+html.v2 #staffApp .seg-b.recupera{color:var(--k-amb);border-color:var(--k-amb);background:var(--k-amb-s)}
+html.v2 #staffApp .seg-b.vino[aria-pressed="true"]{background:var(--k-ok);color:#fff}
+html.v2 #staffApp .seg-b.falto[aria-pressed="true"]{background:var(--k-no);color:#fff}
+html.v2 #staffApp .seg-b.recupera[aria-pressed="true"]{background:var(--k-amb);color:#fff}
+html.v2 #staffApp .seg-b{min-height:46px;font-weight:800;border-width:1.5px}
+html.v2 #staffApp .tag.rec{background:var(--k-amb-s);color:var(--k-amb)}
+/* toque instantáneo: respuesta visual al apretar */
+html.v2 #staffApp button,html.v2 #staffApp .row .main{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html.v2 #staffApp button:active{transform:scale(.97);filter:brightness(.92)}
+/* velocidad: el navegador solo dibuja lo que está en pantalla */
+html.v2 #staffApp .list>.row{content-visibility:auto;contain-intrinsic-size:auto 92px}
+html.v2 #staffApp .tu{content-visibility:auto;contain-intrinsic-size:auto 300px}
+html.v2 #staffApp .sec{contain:layout style}

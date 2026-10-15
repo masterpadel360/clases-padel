@@ -181,7 +181,7 @@
     const lista = t.al.map(a => fila(a, aj.aus.has(a.id) ? '<span class="bd no">No viene</span>' : esNuevo(a) ? '<span class="bd nv">Nuevo</span>' : "", aj.aus.has(a.id) ? "aus" : ""))
       .concat(aj.rec.map(a => { const v = S.avisos.find(x => x.tipo === "recupera" && x.alumnoId === a.id && x.fecha === f && x.hora === t.hora); return fila(a, '<span class="bd rc">Recupera</span>' + (v && !paso ? quitar("quitarRec", v.id) : ""), "rec"); }))
       .concat(ext.map(x => `<div class="tu-al ext"><span class="av">${ini2(x.nombre)}</span><span class="nm">${esc(x.nombre)}${x.tel ? ` <small>${esc(x.tel)}</small>` : ""}</span><span class="bd pr">${x.tipo === "invitado" ? "Invitado" : "Prueba"}</span>${paso ? "" : quitar("quitarExtra", x.id)}</div>`)).join("");
-    return `<div class="tu ${ahora ? "ahora" : ""} ${paso ? "paso" : ""}">
+    return `<div class="tu ${ahora ? "ahora" : ""} ${paso ? "paso" : ""}" data-k="${t.club}|${t.hora}">
       <div class="tu-h"><span class="hr">${t.hora || "—"}</span>${ahora ? '<span class="vivo">Ahora</span>' : ""}</div>
       <div class="tu-c">
         <div class="tu-top">${S.club ? "" : `<span class="tag ${t.club}">${t.club === "ESPACIO" ? "Espacio" : "Jump"}</span>`}
