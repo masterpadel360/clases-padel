@@ -662,8 +662,8 @@ function render(){
 /* ---------- Encabezado que acompaña el dedo: se va yendo al bajar, vuelve al subir y al soltar se acomoda suave ---------- */
 { let yAnt=scrollY, off=0, H=0, tick=false, tFin=null, dir=0;
   const top=()=>document.querySelector("#staffApp .top");
-  const pintar=(h,anim)=>{ h.style.transition=anim?"transform .45s cubic-bezier(.22,1,.36,1), opacity .45s cubic-bezier(.22,1,.36,1)":"none";
-    h.style.transform=off?`translate3d(0,${-off}px,0)`:""; h.style.opacity=H?String(1-.55*(off/H)):""; h.classList.toggle("oculto",off>=H-1); };
+  const pintar=(h,anim)=>{ h.style.transition=anim?"transform .45s cubic-bezier(.22,1,.36,1)":"none";
+    h.style.transform=off?`translate3d(0,${-off}px,0)`:""; h.classList.toggle("oculto",off>=H-1); };
   addEventListener("scroll",()=>{ if(tick) return; tick=true; requestAnimationFrame(()=>{ tick=false;
     const h=top(); if(!h||$("#staffApp").hidden||!$("#overlay").hidden) { yAnt=scrollY; return; }
     H=h.offsetHeight+8; const y=Math.max(0,scrollY), d=y-yAnt; yAnt=y; if(Math.abs(d)>1) dir=Math.sign(d);
