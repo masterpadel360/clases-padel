@@ -271,7 +271,7 @@ html.v2 #staffApp .brand{background:transparent!important;border:0!important;box
 html.v2 #staffApp .top{background:var(--s-bg);padding-block:10px 10px}
 html.v2 #staffApp .wm{font-family:var(--s-sport);font-stretch:85%;font-weight:800;font-size:.9rem;letter-spacing:.2em}
 html.v2 #staffApp .wm::before{content:"";display:inline-block;width:30px;height:30px;border-radius:50%;vertical-align:middle;margin-right:10px;
-  background:radial-gradient(circle at 34% 28%,#f3fb9a 0%,#d9ec54 38%,#b7cc33 70%,#8ea224 100%);box-shadow:inset -5px -6px 10px rgba(60,70,10,.35),0 6px 12px -6px rgba(0,0,0,.45)}
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g fill='none' stroke='%23fbfbef' stroke-width='5' stroke-linecap='round'><path d='M6 28 C 36 40, 36 60, 6 74'/><path d='M94 24 C 63 38, 63 62, 94 78'/></g></svg>") center/100% 100% no-repeat,radial-gradient(circle at 34% 28%,#f3fb9a 0%,#d9ec54 38%,#b7cc33 70%,#8ea224 100%);box-shadow:inset -5px -6px 10px rgba(60,70,10,.35),0 6px 12px -6px rgba(0,0,0,.45)}
 html.v2 #staffApp .wm-sub{margin-left:40px;margin-top:-6px;color:var(--s-dim)}
 html.v2 #staffApp .sub{color:var(--s-dim)}
 html.v2 #staffApp .icon-btn{background:var(--s-olive)}
@@ -346,9 +346,9 @@ html.v2 #login .login-card::after{content:"";position:absolute;right:-50px;botto
 html.v2 #login .login-brand{display:flex!important;flex-direction:column;align-items:flex-start;gap:4px}
 html.v2 #login .login-brand .wm{font-family:var(--s-sport);font-stretch:85%;font-weight:800;font-size:.8rem;letter-spacing:.24em;color:var(--s-cream)}
 html.v2 #login .login-brand .wm::before{content:"";display:block;width:58px;height:58px;border-radius:50%;margin-bottom:14px;
-  background:radial-gradient(circle at 34% 28%,#f3fb9a 0%,#d9ec54 38%,#b7cc33 70%,#8ea224 100%);box-shadow:inset -8px -10px 16px rgba(60,70,10,.35),inset 6px 6px 12px rgba(255,255,230,.35),0 12px 22px -10px rgba(0,0,0,.6)}
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g fill='none' stroke='%23fbfbef' stroke-width='5' stroke-linecap='round'><path d='M6 28 C 36 40, 36 60, 6 74'/><path d='M94 24 C 63 38, 63 62, 94 78'/></g></svg>") center/100% 100% no-repeat,radial-gradient(circle at 34% 28%,#f3fb9a 0%,#d9ec54 38%,#b7cc33 70%,#8ea224 100%);box-shadow:inset -8px -10px 16px rgba(60,70,10,.35),inset 6px 6px 12px rgba(255,255,230,.35),0 12px 22px -10px rgba(0,0,0,.6)}
 html.v2 #login .login-brand .wm-sub{color:var(--s-brass-l);margin:0}
-html.v2 #login .login-card h2{font-family:var(--s-sport);font-stretch:72%;font-weight:900;font-style:italic;font-size:3.4rem;line-height:.85;color:var(--s-cream)!important;text-transform:uppercase;margin:4px 0 0}
+html.v2 #login .login-card h2{font-family:var(--s-sport);font-stretch:72%;font-weight:900;font-style:italic;font-size:3.6rem;max-width:6ch;line-height:.85;color:var(--s-cream)!important;text-transform:uppercase;margin:4px 0 0}
 html.v2 #login .login-card h2::after{content:"";display:block;width:80px;height:4px;margin-top:12px;background:linear-gradient(90deg,var(--s-lima) 0 60%,transparent 60% 66%,var(--s-lima) 66% 78%,transparent 78% 84%,var(--s-lima) 84% 90%,transparent 90%);transform:skewX(-20deg)}
 html.v2 #login .small,html.v2 #login .muted{color:rgba(239,233,218,.7)!important}
 html.v2 #login .field label{color:var(--s-brass-l);letter-spacing:.2em}

@@ -39,13 +39,13 @@ function mostrarLogin(modo = "entrar") {
   const dueño = modo === "dueño";
   pantalla(`<div class="login-card">
     <div class="login-brand"><span class="wm">Clases de Pádel</span><span class="wm-sub">Jump · Espacio</span></div>
-    <h2 class="disp">${dueño ? "Crear tu cuenta" : "Entrar"}</h2>
+    <h2 class="disp">${dueño ? "Crear tu cuenta" : "A la cancha"}</h2>
     ${dueño ? `<p class="small muted" style="margin:0">Solo para Gabriel, la primera vez. Usá tu mail ${esc(window.OWNER_EMAIL)}.</p>` : ""}
     <form id="fLogin" data-modo="${modo}" style="display:grid;gap:12px">
       <div class="field"><label for="lgU">${dueño ? "Mail" : "Usuario"}</label><input id="lgU" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" ${dueño ? `type="email" value="${esc(window.OWNER_EMAIL)}"` : ""} required></div>
       <div class="field"><label for="lgP">Contraseña</label><input id="lgP" type="password" autocomplete="${dueño ? "new-password" : "current-password"}" required minlength="6"></div>
       <p class="small" id="lgErr" style="margin:0;color:var(--warn);min-height:1em">${esc(msgLogin)}</p>
-      <button class="btn pri" id="lgBtn">${dueño ? "Crear cuenta" : "Entrar"}</button>
+      <button class="btn pri" id="lgBtn">${dueño ? "Crear cuenta" : "Ingresar"}</button>
     </form>
     ${dueño ? `<button class="linkish" id="lgSwitch" style="justify-self:center">Ya tengo cuenta</button>` : ""}
   </div>`);
@@ -64,7 +64,7 @@ function mostrarLogin(modo = "entrar") {
         await fauth.signInWithEmailAndPassword(usuarioAEmail(u), p);
       }
     } catch (x) { err.textContent = errorAuth(x); }
-    finally { btn.disabled = false; btn.textContent = dueño ? "Crear cuenta" : "Entrar"; }
+    finally { btn.disabled = false; btn.textContent = dueño ? "Crear cuenta" : "Ingresar"; }
   };
 }
 function mostrarVerificar(u) {
