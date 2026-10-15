@@ -1,14 +1,14 @@
 /* ---------- Diseño nuevo de la app del alumno (versión de prueba) ----------
- * Se activa entrando con ?nuevo=1 (queda guardado en ese celu) y se apaga con ?nuevo=0.
+ * Es el diseño normal para todos. Con ?nuevo=0 se vuelve al viejo en ese celu (y con ?nuevo=1 al nuevo otra vez).
  * No cambia ninguna lógica: usa las mismas funciones, datos y botones (data-pa) de alumno.js,
  * solo dibuja distinto el Inicio y le pone el estilo nuevo a todas las pantallas del alumno.
  */
 (function () {
   try {
     const q = new URLSearchParams(location.search).get("nuevo");
-    if (q === "1") localStorage.setItem("disenoAlumno", "v2");
-    if (q === "0") localStorage.removeItem("disenoAlumno");
-    if (localStorage.getItem("disenoAlumno") !== "v2") return;
+    if (q === "1") localStorage.removeItem("disenoViejo");
+    if (q === "0") localStorage.setItem("disenoViejo", "1");
+    if (localStorage.getItem("disenoViejo") === "1") return; // el diseño nuevo es el normal; ?nuevo=0 vuelve al viejo
   } catch (e) { return; }
   document.documentElement.classList.add("v2");
   // Marca qué pantalla está a la vista (login, alumno o panel) para el estilo, sin selectores pesados.
