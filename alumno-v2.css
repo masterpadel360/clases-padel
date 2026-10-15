@@ -363,3 +363,33 @@ html.v2 *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 html.v2 button,html.v2 a,html.v2 [data-pa],html.v2 [data-act],html.v2 .tab{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 html.v2 button:active,html.v2 .tab:active{opacity:.85}
 html.v2 .v2-sec,html.v2 #staffApp .sec{content-visibility:auto;contain-intrinsic-size:auto 400px}
+
+/* ===== agenda: tarjeta por turno ===== */
+html.v2 #staffApp .list:has(> .tu){background:transparent!important;display:flex;flex-direction:column;gap:10px;overflow:visible}
+html.v2 #staffApp .tu{display:grid;grid-template-columns:64px 1fr;gap:12px;background:var(--s-card);border-radius:14px;padding:12px;position:relative}
+html.v2 #staffApp .tu.paso{opacity:.55}
+html.v2 #staffApp .tu.ahora{box-shadow:0 0 0 2px var(--s-lima-d)}
+html.v2 #staffApp .tu-h{background:var(--s-olive);color:var(--s-cream);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:10px 0;align-self:start}
+html.v2 #staffApp .tu-h .hr{font-family:var(--s-sport);font-stretch:72%;font-weight:900;font-size:1.45rem;line-height:1}
+html.v2 #staffApp .tu-h .vivo{font-size:.55rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;background:var(--s-lima);color:var(--s-olive);padding:2px 6px;border-radius:4px}
+html.v2 #staffApp .tu-c{min-width:0;display:flex;flex-direction:column;gap:8px}
+html.v2 #staffApp .tu-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+html.v2 #staffApp .tu-cat{background:none;border:0;padding:0;font-size:.74rem;font-weight:700;color:var(--s-dim)}
+html.v2 #staffApp .tu-cupo{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:800;color:var(--s-fui);white-space:nowrap}
+html.v2 #staffApp .tu-cupo.lleno{color:var(--s-dim)}
+html.v2 #staffApp .tu-cupo .pts{display:inline-flex;gap:3px}
+html.v2 #staffApp .tu-cupo i{width:8px;height:8px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--s-dim)}
+html.v2 #staffApp .tu-cupo i.si{background:var(--s-olive);box-shadow:none}
+html.v2 #staffApp .tu-lista{display:flex;flex-direction:column;border-top:1px solid var(--s-line)}
+html.v2 #staffApp .tu-al{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:none;border:0;border-bottom:1px solid var(--s-line);padding:8px 0;text-align:left;color:var(--s-ink)}
+html.v2 #staffApp .tu-al:last-child{border-bottom:0}
+html.v2 #staffApp .tu-al .av{width:28px;height:28px;border-radius:50%;background:var(--s-bg);display:grid;place-items:center;font-size:.62rem;font-weight:800;letter-spacing:.04em;color:var(--s-dim)}
+html.v2 #staffApp .tu-al .nm{font-weight:600;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.v2 #staffApp .tu-al.aus .nm{text-decoration:line-through;text-decoration-color:var(--s-falta);opacity:.6}
+html.v2 #staffApp .tu-al.rec .av{background:rgba(169,135,90,.25);color:#7a5a2a}
+html.v2 #staffApp .bd{font-size:.58rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:3px 6px;border-radius:4px}
+html.v2 #staffApp .bd.no{background:var(--s-falta);color:#fff}
+html.v2 #staffApp .bd.nv{background:var(--s-lima);color:var(--s-olive)}
+html.v2 #staffApp .bd.rc{background:var(--s-brass);color:#fff}
+html.v2 #staffApp .tu-vacio{font-size:.82rem;color:var(--s-dim);padding:8px 0}
+html.v2 #staffApp .tu-lluvia{align-self:flex-start;background:none;border:0;padding:2px 0;font-size:.72rem;font-weight:700;color:var(--s-dim);text-decoration:underline;text-underline-offset:3px}

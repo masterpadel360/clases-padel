@@ -162,6 +162,29 @@
     return out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "";
   }
 
+
+  /* ---- Agenda del panel: una tarjeta por turno, alumnos en lista y lugares a la vista ---- */
+  window.slotHTML = function (t, fecha) {
+    const aj = fecha ? ajusteTurno(t, fecha) : { aus: new Set(), rec: [] };
+    const van = t.al.length - aj.aus.size + aj.rec.length; const libres = CUPO - van;
+    const f = fecha || hoyISO; const ini = new Date(`${f}T${t.hora}:00-03:00`).getTime(), ya = Date.now();
+    const ahora = ya >= ini && ya < ini + 60 * 60 * 1000, paso = ya >= ini + 60 * 60 * 1000;
+    const cupo = Array.from({ length: CUPO }, (_, i) => `<i class="${i < van ? "si" : ""}"></i>`).join("");
+    const ini2 = n => esc(String(n || "?").trim().split(/\s+/).map(x => x[0]).slice(0, 2).join("").toUpperCase());
+    const fila = (a, extra, cls) => `<button class="tu-al ${cls}" data-act="editA" data-id="${a.id}"><span class="av">${ini2(a.nombre)}</span><span class="nm">${esc(a.nombre)}</span>${extra}</button>`;
+    const lista = t.al.map(a => fila(a, aj.aus.has(a.id) ? '<span class="bd no">No viene</span>' : esNuevo(a) ? '<span class="bd nv">Nuevo</span>' : "", aj.aus.has(a.id) ? "aus" : ""))
+      .concat(aj.rec.map(a => fila(a, '<span class="bd rc">Recupera</span>', "rec"))).join("");
+    return `<div class="tu ${ahora ? "ahora" : ""} ${paso ? "paso" : ""}">
+      <div class="tu-h"><span class="hr">${t.hora || "—"}</span>${ahora ? '<span class="vivo">Ahora</span>' : ""}</div>
+      <div class="tu-c">
+        <div class="tu-top">${S.club ? "" : `<span class="tag ${t.club}">${t.club === "ESPACIO" ? "Espacio" : "Jump"}</span>`}
+          <button class="tu-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel ? esc(t.nivel) : "+ Categoría"} ✎</button>
+          <span class="tu-cupo ${libres > 0 ? "" : "lleno"}"><span class="pts">${cupo}</span>${libres > 0 ? `${libres} libre${libres > 1 ? "s" : ""}` : "Completo"}</span></div>
+        <div class="tu-lista">${lista || '<span class="tu-vacio">Sin alumnos</span>'}</div>
+        <button class="tu-lluvia" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${f}">Suspender por lluvia</button>
+      </div></div>`;
+  };
+
   /* ---- Ausencias ---- */
   const ESTV = { vino: ["Fuiste", "fui"], recuperando: ["Recuperaste", "fui"], falto: ["Faltaste sin avisar", "falta"], recupera: ["Avisaste · recuperás", "aviso"], lluvia: ["Suspendida por lluvia · recuperás", "lluvia"] };
   function fichaClase(c) {
