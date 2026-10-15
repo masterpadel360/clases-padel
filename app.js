@@ -640,7 +640,7 @@ function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTem
 function render(){
   if(!tabsDe().includes(S.tab)) S.tab=tabsDe()[0];
   if(S.modo==="profe"){ S.club="JUMP"; S.asClub="JUMP"; }
-  renderTabs(); $("#cfgBtn").hidden=!S.esOwner;
+  renderTabs(); $("#cfgBtn").hidden=!S.esOwner; objBar();
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab));
   document.querySelectorAll("#clubs .chip").forEach(b=>b.setAttribute("aria-pressed",b.dataset.club===S.club));
   $("#fab").hidden=S.modo==="profe"||(S.tab!=="alumnos"&&S.tab!=="hoy");
@@ -658,6 +658,20 @@ function render(){
   $("#view").innerHTML=html;
   if(focused){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
 }
+
+/* ---------- Objetivo de alumnos ---------- */
+function objBar(){ const b=$("#objBar"); if(!b) return; const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.alumnos.filter(a=>a.activo!==false).length;
+  b.hidden=S.modo==="profe"||!S.esOwner||S.dbState!=="ok";
+  if(!meta){ b.innerHTML=`<span class="obj-k">Objetivo</span><span class="obj-t">Poné cuántos alumnos querés tener</span><span class="obj-go">Elegir</span>`; return; }
+  const falta=Math.max(0,meta-n), pct=Math.min(100,Math.round(n/meta*100));
+  b.innerHTML=`<span class="obj-wm num" aria-hidden="true">${meta}</span><span class="obj-k">Objetivo ${meta}</span><span class="obj-t"><b class="num">${n}</b> alumnos · ${falta?`faltan <b class="num">${falta}</b>`:`¡llegaste! 🎯${n>meta?` +${n-meta}`:""}`}</span><span class="obj-pct num">${pct}%</span><span class="obj-bar"><i style="width:${pct}%"></i></span>`;
+  b.setAttribute("aria-label",`Objetivo ${meta} alumnos. Tenés ${n}${falta?`, faltan ${falta}`:", llegaste"}. Tocá para cambiarlo.`); }
+function openObjetivo(){ const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.alumnos.filter(a=>a.activo!==false).length;
+  openSheet(`<div style="display:grid;gap:4px;margin-bottom:12px"><span class="flabel">Tu meta</span><h2 class="disp">Objetivo de alumnos</h2></div><p class="small muted" style="margin:0 0 12px">Hoy tenés <b>${n}</b> alumnos activos (Jump + Espacio). ¿A cuántos querés llegar?</p>
+    <div class="seg" style="grid-template-columns:repeat(4,1fr);margin:0 0 12px">${[50,100,150,200].map(v=>`<button type="button" class="seg-b" data-act="objPick" data-v="${v}" aria-pressed="${v===meta}">${v}</button>`).join("")}</div>
+    <div class="field"><label for="objIn">Otro número</label><input id="objIn" type="number" inputmode="numeric" min="0" step="1" value="${meta||""}" placeholder="Ej: 120"></div>
+    <div class="btns" style="margin-top:14px">${meta?`<button class="btn sec2" data-act="objBorrar">Sacarlo</button>`:"<span></span>"}<button class="btn pri" data-act="objSave">Guardar</button></div>`); }
+async function guardarObjetivo(v){ if(await safe(()=>S.db.doc("config/general").set({...S.cfg,objetivoAlumnos:v}),v?`Objetivo: ${v} alumnos`:"Objetivo sacado")){ S.cfg={...S.cfg,objetivoAlumnos:v}; closeSheet(); render(); } }
 
 /* ---------- Sheets ---------- */
 let sheetRefresh=null;
@@ -849,6 +863,10 @@ document.addEventListener("click",async e=>{
     case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.hMovs=S.hMovs.filter(x=>x.id!==b.dataset.id); render(); await guardarHorasDoc(); break; }
     case "pagoTodo": { $("#ppMonto").value=Math.max(0,saldoProfe().saldo); break; }
     case "vhSave": { const v=Number($("#vh2").value)||0; if(await safe(()=>S.db.doc("config/general").set({...S.cfg,valorHora:v}),`Valor por hora: ${money(v)}`)) render(); break; }
+    case "objetivo": openObjetivo(); break;
+    case "objPick": { $("#objIn").value=b.dataset.v; b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); break; }
+    case "objSave": { const v=Math.max(0,Math.round(Number($("#objIn").value)||0)); await guardarObjetivo(v); break; }
+    case "objBorrar": await guardarObjetivo(0); break;
     case "pmDur":
     case "pmModo": { b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); const f=$("#fA"); if(f) f.dispatchEvent(new Event("input")); break; }
     case "ajuste": if(A) openAjuste(A); break;
