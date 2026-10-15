@@ -641,6 +641,9 @@ function render(){
   if(S.modo==="profe") html+=`<div class="notice" style="background:var(--surface-2);color:var(--muted);margin:0 0 12px">${S.esOwner?'Estás viendo los datos reales de Esteban. Lo que cambies acá se guarda en su cuenta. <button class="linkish" data-act="modoOwner">Volver a la tuya</button>':"Jump · vista de profe · <button class=\"linkish\" data-act=\"salir\">Cerrar sesión</button>"}</div>`;
   html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata})[S.tab]();
   const focused=document.activeElement&&document.activeElement.id==="q";
+  // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
+  if(focused&&S.tab==="alumnos"){ const tmp=document.createElement("div"); tmp.innerHTML=html; const nq=tmp.querySelector("#q"), lq=$("#q");
+    if(nq&&lq){ const ls=lq.parentElement; [...ls.childNodes].forEach(c=>{ if(c!==lq) c.remove(); }); nq.remove(); const ns=tmp.querySelector("section"); if(ns){ ls.append(...ns.childNodes); } return; } }
   $("#view").innerHTML=html;
   if(focused){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
 }
