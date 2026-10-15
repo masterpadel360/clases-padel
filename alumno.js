@@ -69,7 +69,7 @@ function misClases(dias = 14, rango = null) {
     (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: clubH(a, h), nivel: h.nivel || a.categoria || "", tipo: "fija" }));
   }
   P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= toISO(ini) && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
-  return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte)
+  return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte && (!a.inicio || c.fecha >= a.inicio))
     .map(c => { const vuelve = esVuelta(c.fecha, c.hora); return { ...c, vuelve, aus: vuelve ? null : P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }; })
     .sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
 }

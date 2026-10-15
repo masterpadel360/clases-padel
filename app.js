@@ -37,6 +37,12 @@ function activos(){ return byClub(S.alumnos.filter(a=>a.activo!==false)); }
 function pago(a,m=S.mes){ return a.pagos && a.pagos[m] && a.pagos[m].pagado; }
 function ocurrencias(dia,m){ const [y,mm]=m.split("-").map(Number); let n=0; const last=new Date(y,mm,0).getDate(); for(let d=1;d<=last;d++) if(new Date(y,mm-1,d).getDay()===dia) n++; return n; }
 function diasDe(a){ return [...new Set((a.horarios||[]).map(h=>h.dia))]; }
+function clasesDesde(a,f){ const d0=isoDate(f); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); const ds=diasDe(a); let n=0; for(let d=d0.getDate();d<=last;d++) if(ds.includes(new Date(d0.getFullYear(),d0.getMonth(),d).getDay())) n++; return n; }
+const mesSig=m=>mesKey(new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1));
+// Primer mes de un alumno nuevo: cuántas clases le quedan desde que empieza y qué paga cada mes.
+function planPrimerMes(a,ini,promo,modo){ const m=ini.slice(0,7), sig=mesSig(m); const quedan=clasesDesde(a,ini); const p=promo||a.precioClase||0; const dd=isoDate(ini); const fd=`${dd.getDate()}/${dd.getMonth()+1}`;
+  if(modo==="sig"){ const tot=(quedan+clasesMes(a,sig))*p; return {m,sig,quedan,p,pagos:{[m]:{pagado:true,monto:0,ajuste:0,nota:`Empieza el ${fd}: estas clases se pagan con ${mesSolo(sig)}`},[sig]:{ajuste:tot,nota:`${promo?"Promo · ":""}incluye ${quedan} clase${quedan===1?"":"s"} de ${mesSolo(m)}`}},txt:`${mesSolo(m)}: no paga (empieza el ${fd}). ${mesSolo(sig)}: ${quedan} + ${clasesMes(a,sig)} clases x ${money(p)} = ${money(tot)}${promo&&a.precioClase?`. Desde ${mesSolo(mesSig(sig))}: ${money(a.precioClase)} por clase`:""}`}; }
+  const tot=quedan*p; return {m,sig,quedan,p,pagos:{[m]:{ajuste:tot,nota:`${promo?"Promo · ":""}empieza el ${fd} (${quedan} clase${quedan===1?"":"s"})`}},txt:`${mesSolo(m)}: empieza el ${fd}, le quedan ${quedan} clase${quedan===1?"":"s"} x ${money(p)} = ${money(tot)}${a.precioClase?`. Desde ${mesSolo(sig)}: ${money(a.precioClase)} por clase`:""}`}; }
 function clasesMes(a,m=S.mes){ return diasDe(a).reduce((s,d)=>s+ocurrencias(d,m),0); }
 function cuotaMes(a,m=S.mes){ return a.precioClase>0 ? clasesMes(a,m)*a.precioClase : (a.cuota||0); }
 function extraDias(a,m=S.mes){ return diasDe(a).filter(d=>ocurrencias(d,m)===5); }
@@ -693,10 +699,11 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}"></div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
-    ${a.id?"":`<div class="field promo"><span class="flabel">Precio promo del primer mes (opcional)</span>
-      <div class="two"><div class="field"><label for="aPromo">Precio por clase</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Ej: 8000"></div>
-      <div class="field"><label for="aPromoMes">Mes de la promo</label><select id="aPromoMes">${[0,1].map(i=>{const d=new Date(now.getFullYear(),now.getMonth()+i,1);const m=mesKey(d);return `<option value="${m}">${mesSolo(m)}</option>`;}).join("")}</select></div></div>
-      <span class="small muted" id="aPromoCalc">Ese mes paga el precio promo. Desde el mes siguiente paga el precio normal solo.</span></div>`}
+    ${a.id?"":`<div class="field promo"><span class="flabel">Primer mes</span>
+      <div class="two"><div class="field"><label for="aIni">Empieza el</label><input id="aIni" type="date" value="${hoyISO}"></div>
+      <div class="field"><label for="aPromo">Precio promo por clase (opcional)</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Sin promo"></div></div>
+      <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="true">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="false">Las suma al mes siguiente</button></div>
+      <span class="small" id="aPromoCalc" style="line-height:1.5"></span></div>`}
     <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
     <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
@@ -708,8 +715,8 @@ function formAlumno(a={},leadId=""){
   </form>`);
   const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)}))};
     const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesMes(tmp)} clases = ${money(cuotaMes(tmp))}${ex?" (incluye clase extra)":""}`:"";
-    const pr=$("#aPromo"); if(pr){ const pv=Number(pr.value)||0, pm=$("#aPromoMes").value; const sig=mesKey(new Date(Number(pm.slice(0,4)),Number(pm.slice(5,7)),1));
-      $("#aPromoCalc").textContent=pv?`${mesSolo(pm)}: ${clasesMes(tmp,pm)} clases x ${money(pv)} = ${money(clasesMes(tmp,pm)*pv)}${tmp.precioClase?` · desde ${mesSolo(sig)}: ${money(tmp.precioClase)} por clase`:""}`:"Ese mes paga el precio promo. Desde el mes siguiente paga el precio normal solo."; } };
+    const pr=$("#aPromo"); if(pr){ const ini=$("#aIni").value||hoyISO; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este";
+      $("#aPromoCalc").textContent=(tmp.precioClase||Number(pr.value))&&tmp.horarios.length?planPrimerMes(tmp,ini,Number(pr.value)||0,modo).txt:"Cargá el precio por clase y los horarios y te calculo el primer mes."; } };
   calc(); $("#fA").addEventListener("input",calc); $("#fA").addEventListener("change",calc); $("#fA").addEventListener("click",()=>setTimeout(calc,0));
 }
 function formLead(l={}){
@@ -835,6 +842,7 @@ document.addEventListener("click",async e=>{
     case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.hMovs=S.hMovs.filter(x=>x.id!==b.dataset.id); render(); await guardarHorasDoc(); break; }
     case "pagoTodo": { $("#ppMonto").value=Math.max(0,saldoProfe().saldo); break; }
     case "vhSave": { const v=Number($("#vh2").value)||0; if(await safe(()=>S.db.doc("config/general").set({...S.cfg,valorHora:v}),`Valor por hora: ${money(v)}`)) render(); break; }
+    case "pmModo": { b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); const f=$("#fA"); if(f) f.dispatchEvent(new Event("input")); break; }
     case "ajuste": if(A) openAjuste(A); break;
     case "ajStep": { const i=$("#ajMonto"); i.value=Math.max(0,(Number(i.value)||0)+Number(b.dataset.d)); ajPreview(); break; }
     case "ajReset": { const a=S.alumnos.find(x=>x.id===$("#fAj").dataset.id); $("#ajMonto").value=cuotaMes(a); $("#ajNota").value=""; ajPreview(); break; }
@@ -891,7 +899,8 @@ document.addEventListener("submit",async e=>{
     const id=f.dataset.id,lead=f.dataset.lead;
     if(id){ data.activo=$("#aAct").checked; if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(id),data); pendA.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); },"Guardado")) closeSheet(); }
     else { data.activo=true; data.tipo="Grupal"; data.pagos={}; data.alta=hoyISO;
-      { const pv=Number(($("#aPromo")||{}).value)||0; if(pv>0){ const pm=$("#aPromoMes").value; data.pagos[pm]={ajuste:clasesMes(data,pm)*pv,nota:`Promo primer mes (${money(pv)} por clase)`}; data.promo={mes:pm,precioClase:pv}; } }
+      { const ini=($("#aIni")||{}).value||hoyISO; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este";
+        data.inicio=ini; if(data.horarios.length&&(data.precioClase||pv)){ const pl=planPrimerMes(data,ini,pv,modo); data.pagos=pl.pagos; if(pv) data.promo={precioClase:pv}; } }
       if(await safe(()=>colA().add(data),`${data.nombre} agregado`)){ if(lead) await safe(()=>colL().doc(lead).update({estado:"alumno",ganado:hoyISO})); closeSheet(); } }
   }
   if(f.id==="fL"){
