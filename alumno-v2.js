@@ -21,9 +21,6 @@
     const mo = new MutationObserver(pantallaVisible);
     ["staffApp", "portal", "login"].forEach(id => { const el = document.getElementById(id); if (el) mo.observe(el, { attributes: true, attributeFilter: ["hidden"] }); });
   });
-  const fl = document.createElement("link"); fl.rel = "stylesheet";
-  fl.href = "https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Hanken+Grotesk:wght@400;500;600;700&family=Pinyon+Script&display=swap";
-  document.head.appendChild(fl);
 
   const MESN = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
   const DC = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];

@@ -13,7 +13,13 @@
 <link rel="apple-touch-icon" href="icono-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://firestore.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Antonio:wght@200;300;400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap">
+<script>
+/* Diseño nuevo: se decide antes de dibujar nada, así no aparece primero el viejo. */
+(function(){try{var q=new URLSearchParams(location.search).get("nuevo");if(q==="1")localStorage.setItem("disenoAlumno","v2");if(q==="0")localStorage.removeItem("disenoAlumno");
+var v2=localStorage.getItem("disenoAlumno")==="v2";if(v2)document.documentElement.classList.add("v2");
+var l=document.createElement("link");l.rel="stylesheet";l.href=v2?"https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Hanken+Grotesk:wght@400;500;600;700&family=Pinyon+Script&display=swap":"https://fonts.googleapis.com/css2?family=Antonio:wght@200;300;400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap";document.head.appendChild(l);}catch(e){}})();
+</script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 body{margin:0;padding:0}
@@ -256,7 +262,7 @@ label.mini input[type=file]{display:none}
 .rec-top .big-num{font-size:60px;color:var(--warn)}
 
 </style>
-<link rel="stylesheet" href="alumno-v2.css?v=202610150012">
+<link rel="stylesheet" href="alumno-v2.css?v=202610151432">
 </head>
 <body>
 <div class="scene" aria-hidden="true"></div>
@@ -306,7 +312,7 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script>
 /* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
-window.APP_V = "202610150012";
+window.APP_V = "202610151432";
 (function () {
   let avisado = false;
   function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
@@ -328,11 +334,11 @@ window.APP_V = "202610150012";
   setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
 })();
 </script>
-<script src="config.js?v=202610150012"></script>
-<script src="app.js?v=202610150012"></script>
-<script src="staff-extra.js?v=202610150012"></script>
-<script src="alumno.js?v=202610150012"></script>
-<script src="alumno-v2.js?v=202610150012"></script>
-<script src="firebase.js?v=202610150012"></script>
+<script src="config.js?v=202610151432"></script>
+<script src="app.js?v=202610151432"></script>
+<script src="staff-extra.js?v=202610151432"></script>
+<script src="alumno.js?v=202610151432"></script>
+<script src="alumno-v2.js?v=202610151432"></script>
+<script src="firebase.js?v=202610151432"></script>
 </body>
 </html>

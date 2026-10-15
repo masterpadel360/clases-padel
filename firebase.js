@@ -145,7 +145,7 @@ async function iniciarStaff(perfil, u) {
   const db = fdb; S.db = db; S.downloads = DESCARGAS; S.perfil = perfil; S.uid = u.uid; S.user = null;
   S.esOwner = perfil.rol === "dueño";
   if (!S.esOwner) { S.modo = "profe"; S.tab = "horas"; }
-  const vis = () => { if ($("#overlay").hidden) render(); };
+  let visPend = false; const vis = () => { if (visPend) return; visPend = true; requestAnimationFrame(() => { visPend = false; if ($("#overlay").hidden) render(); }); };
   render();
   if (!S.esOwner) {
     db.doc("horas/" + S.uid).onSnapshot(d => { if (hPend > 0) return; S.horas = { ...((d.exists && d.data().dias) || {}) }; S.hVal = { ...((d.exists && d.data().valores) || {}) }; S.hMovs = [...((d.exists && d.data().movs) || [])]; vis(); }, () => {});

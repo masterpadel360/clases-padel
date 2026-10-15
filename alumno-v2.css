@@ -12,7 +12,7 @@ html.v2{
 html.v2 body{background:var(--s-bg)}
 html.v2 #portal ~ *,html.v2 body{font-family:var(--s-body)}
 html.v2.v2-portal .scene{display:none}
-html.v2.v2-portal body{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");color:var(--s-ink)}
+html.v2.v2-portal body{color:var(--s-ink)}
 html.v2 #portal .top{display:none}
 html.v2 #portal .app{max-width:480px;padding-block:8px 120px}
 html.v2 #pView{display:block!important}
@@ -262,7 +262,7 @@ html.v2 .toast{background:var(--s-olive);color:var(--s-cream)}
    PANEL DE GABRIEL Y ESTEBAN (#staffApp) con el mismo diseño
    ===================================================================== */
 html.v2.v2-staff .scene{display:none}
-html.v2.v2-staff body{color:var(--s-ink);font-family:var(--s-body);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+html.v2.v2-staff body{color:var(--s-ink);font-family:var(--s-body)}
 html.v2 #staffApp{--glass:var(--s-card);--glass-2:var(--s-bg);--glass-strong:var(--s-card);--line:var(--s-line);--line-2:var(--s-line);--ink:var(--s-ink);--muted:var(--s-dim);--paper:var(--s-ink);--btn:var(--s-olive);--btn-ink:var(--s-cream);--sun:var(--s-rojo);--ok:var(--s-fui);--ok-soft:rgba(79,138,44,.14);--warn:var(--s-falta);--warn-soft:rgba(208,64,47,.12);--f-display:var(--s-sport);--f-body:var(--s-body);--r:14px}
 html.v2 #staffApp *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 html.v2 #staffApp .app{max-width:560px}
@@ -337,7 +337,7 @@ html.v2 #staffApp #tabs .tab[aria-selected="true"]{background:var(--s-lima);colo
    PANTALLA DE ENTRAR (usuario y contraseña)
    ===================================================================== */
 html.v2.v2-login .scene{display:none}
-html.v2.v2-login body{color:var(--s-ink);font-family:var(--s-body);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+html.v2.v2-login body{color:var(--s-ink);font-family:var(--s-body)}
 html.v2 #login{--warn:var(--s-falta)}
 html.v2 #login .login-card{position:relative;overflow:hidden;background:var(--s-olive)!important;color:var(--s-cream);border:0!important;border-radius:16px!important;-webkit-backdrop-filter:none;backdrop-filter:none;padding:28px 22px 24px!important;gap:16px!important;box-shadow:0 30px 50px -30px rgba(20,30,18,.7)!important;isolation:isolate}
 html.v2 #login .login-card::before{content:"";position:absolute;inset:8px;border:1px solid rgba(239,233,218,.14);border-radius:11px;pointer-events:none}
@@ -357,3 +357,9 @@ html.v2 #login .field input:focus{outline:none;border-color:var(--s-lima);backgr
 html.v2 #login #lgErr{color:#f08a7e!important}
 html.v2 #login .btn.pri{background:var(--s-lima);color:var(--s-olive);border-radius:10px;padding:16px;font-family:var(--s-sport);font-stretch:85%;font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:.95rem;box-shadow:0 12px 24px -12px rgba(207,224,74,.5)}
 html.v2 #login .linkish{color:var(--s-brass-l)}
+
+/* ===== rendimiento: sin desenfoques ni texturas pesadas, toques sin demora ===== */
+html.v2 *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+html.v2 button,html.v2 a,html.v2 [data-pa],html.v2 [data-act],html.v2 .tab{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html.v2 button:active,html.v2 .tab:active{opacity:.85}
+html.v2 .v2-sec,html.v2 #staffApp .sec{content-visibility:auto;contain-intrinsic-size:auto 400px}

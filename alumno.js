@@ -36,7 +36,7 @@ function iniciarPortal(perfil, u) {
   const CK = "portal_" + id; let tGuardar = 0;
   try { const c = JSON.parse(localStorage.getItem(CK) || "null"); if (c && c.a) { Object.assign(P, { a: c.a, info: c.info || {}, turnos: c.turnos || {}, avisos: c.avisos || [], comps: c.comps || {}, reemp: c.reemp || {}, asis: c.asis || [], cargado: true }); } } catch (e) {}
   const guardar = () => { clearTimeout(tGuardar); tGuardar = setTimeout(() => { try { localStorage.setItem(CK, JSON.stringify({ a: P.a, info: P.info, turnos: P.turnos, avisos: P.avisos, comps: P.comps, reemp: P.reemp, asis: P.asis })); } catch (e) {} }, 800); };
-  const pr = () => { guardar(); if ($("#overlay").hidden) renderPortal(); };
+  let prPend = false; const pr = () => { guardar(); if (prPend) return; prPend = true; requestAnimationFrame(() => { prPend = false; if ($("#overlay").hidden) renderPortal(); }); };
   renderPortal();
   // Si la primera vez tarda mucho (mala señal), ofrecemos reintentar en vez de quedar trabado.
   setTimeout(() => { if (!P.cargado) { const v = $("#pView"); if (v) v.innerHTML = `<div class="notice" style="display:grid;gap:10px">Está tardando en cargar. Revisá la conexión.<button class="btn pri" onclick="location.reload()" style="justify-self:start">Reintentar</button></div>`; } }, 8000);
