@@ -167,6 +167,7 @@
 
   /* ---- Agenda del panel: una tarjeta por turno, alumnos en lista y lugares a la vista ---- */
   window.slotHTML = function (t, fecha) {
+    if (fecha) t = { ...t, al: t.al.filter(a => !a.inicio || a.inicio <= fecha) };
     const aj = fecha ? ajusteTurno(t, fecha) : { aus: new Set(), rec: [] };
     const van = t.al.length - aj.aus.size + aj.rec.length; const libres = CUPO - van;
     const f = fecha || hoyISO; const ini = new Date(`${f}T${t.hora}:00-03:00`).getTime(), ya = Date.now();

@@ -57,6 +57,13 @@ function planPrimerMes(a,ini,promo,modo,dur=1){ const m=ini.slice(0,7), sig=mesS
 function clasesMes(a,m=S.mes){ return diasDe(a).reduce((s,d)=>s+ocurrencias(d,m),0); }
 // Aumentos: cada alumno guarda [{desde:"YYYY-MM", precio, antes, monto, aplicado}]. Los futuros quedan programados y se aplican solos al llegar el mes.
 function aumentosDe(a){ return (a.aumentos||[]).filter(x=>x&&x.desde).slice().sort((x,y)=>x.desde.localeCompare(y.desde)); }
+// Datos del primer mes que se cargaron al darlo de alta (para poder cambiar la fecha de arranque después).
+function planGuardado(a){ if(!a||!a.inicio) return null; const act=mesKey(now); const m0=a.inicio.slice(0,7);
+  const pr=a.promo||{}; const p0=(a.pagos||{})[m0]||{};
+  const modo=pr.modo||(p0.pagado&&!p0.monto&&String(p0.nota||"").startsWith("Empieza el")?"sig":"este");
+  const meses=Object.keys(planPrimerMes(a,a.inicio,pr.precioClase||0,modo,pr.meses||1).pagos); if(meses.every(m=>m<act&&(a.pagos||{})[m]&&(a.pagos[m].pagado&&a.pagos[m].monto))) return null;
+  return {ini:a.inicio,promo:pr.precioClase||0,dur:pr.meses||1,modo}; }
+const pagoReal = p => !!(p&&p.pagado&&(p.monto>0||p.comprobante));
 function precioEn(a,m=S.mes){ const L=aumentosDe(a), act=mesKey(now);
   if(m>=act){ const f=L.filter(x=>!x.aplicado&&x.desde<=m).pop(); return f?f.precio:(a.precioClase||0); }
   const pas=L.filter(x=>x.desde<=m).pop(); if(pas&&pas.precio) return pas.precio; const sig=L.find(x=>x.desde>m&&x.aplicado); return sig&&sig.antes?sig.antes:(a.precioClase||0); }
@@ -603,7 +610,7 @@ function vAsist(){
   <p class="small muted" style="margin:18px 0 0"><b style="color:var(--ink)">Faltó</b>: no avisó, pierde la clase. <b style="color:var(--ink)">Recupera</b>: avisó a tiempo, le queda una clase pendiente. <b style="color:var(--ink)">🌧 Se suspendió</b>: marca a todo el turno como suspendido por lluvia y a cada uno le suma una clase para recuperar. Si alguien te avisa que no viene un día que todavía no pasó, andá a ese día con las flechas y marcalo <b style="color:var(--ink)">Recupera</b>.</p>`;
 }
 // Un turno en Asistencia: primero los que hay que marcar, después los que vienen a recuperar, los de prueba y al final los que avisaron que no vienen.
-function asistEstado(t){ const f=S.asFecha, h=t.hora;
+function asistEstado(t){ const f=S.asFecha, h=t.hora; t={...t,al:t.al.filter(a=>!a.inicio||a.inicio<=f)};
   const avisaron=t.al.filter(a=>avisoApp(a.id,f,h,"ausencia")&&!vuelveApp(a.id,f,h));
   const marcar=t.al.filter(a=>!avisaron.includes(a));
   const recs=S.avisos.filter(v=>v.tipo==="recupera"&&v.club===t.club&&v.fecha===f&&v.hora===h&&!vuelveApp(v.alumnoId,f,h)).map(v=>S.alumnos.find(x=>x.id===v.alumnoId)).filter(Boolean);
@@ -616,7 +623,7 @@ function asistPendHTML(slots){ if(S.asFecha>hoyISO) return `<div class="as-pend 
   const ya=slots.filter(t=>S.asFecha<hoyISO||t.hora<=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`);
   const n=ya.reduce((s,t)=>s+asistEstado(t).pend,0);
   return n?`<div class="as-pend">Te falta${n===1?"":"n"} marcar <b>${n}</b> ${n===1?"alumno":"alumnos"}</div>`:(ya.length?`<div class="as-pend ok">✓ Asistencia al día</div>`:""); }
-function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t); const mk=a=>S.asMarcas[`${a.id}|${h}`];
+function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t); t={...t,al:t.al.filter(a=>!a.inicio||a.inicio<=f)}; const mk=a=>S.asMarcas[`${a.id}|${h}`];
   const botones=a=>`<div class="seg">${Object.keys(ESTADOS).map(k=>`<button class="seg-b ${k}" data-act="marca" data-id="${a.id}" data-hora="${h}" data-e="${k}" aria-pressed="${mk(a)===k}">${ESTADOS[k]}</button>`).join("")}</div>`;
   const filaFija=a=>{ const e=mk(a); return `<div class="row as-row" data-k="${a.id}" style="grid-template-columns:1fr"><span class="name">${esc(a.nombre)}${e==="lluvia"?' <span class="tag lluvia">🌧 Lluvia · recupera</span>':""}${recN(a)?` <span class="tag rec">Debe ${recN(a)}</span>`:""}${tagAviso(a.id,f,h)}</span>${botones(a)}</div>`; };
   const filaRec=(a,app)=>{ const e=mk(a); const rp=(S.reemp||{})[`${a.id}|${f}|${h}`];
@@ -848,12 +855,13 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
-    ${a.id?"":`<div class="field promo"><span class="flabel">Primer mes</span>
-      <div class="two"><div class="field"><label for="aIni">Empieza el</label><input id="aIni" type="date" value="${hoyISO}"></div>
-      <div class="field"><label for="aPromo">Precio promo por clase (opcional)</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Sin promo"></div></div>
-      <div class="field" id="aDurBox" hidden style="margin:0"><label>¿Cuántas cuotas dura la promo?</label><div class="seg" style="grid-template-columns:repeat(3,1fr);margin:0">${[1,2,3].map(n=>`<button type="button" class="seg-b" data-act="pmDur" data-n="${n}" aria-pressed="${n===1}">${n===1?"1 mes":n+" meses"}</button>`).join("")}</div></div>
-      <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="true">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="false">Las suma al mes siguiente</button></div>
-      <span class="small" id="aPromoCalc" style="line-height:1.5"></span></div>`}
+    ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm) return "";
+      return `<div class="field promo"><span class="flabel">${a.id?"Fecha de arranque":"Primer mes"}</span>
+      <div class="two"><div class="field"><label for="aIni">Empieza el</label><input id="aIni" type="date" value="${pm?pm.ini:hoyISO}"></div>
+      <div class="field"><label for="aPromo">Precio promo por clase (opcional)</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Sin promo" value="${pm&&pm.promo?pm.promo:""}"></div></div>
+      <div class="field" id="aDurBox" hidden style="margin:0"><label>¿Cuántas cuotas dura la promo?</label><div class="seg" style="grid-template-columns:repeat(3,1fr);margin:0">${[1,2,3].map(n=>`<button type="button" class="seg-b" data-act="pmDur" data-n="${n}" aria-pressed="${n===((pm&&pm.dur)||1)}">${n===1?"1 mes":n+" meses"}</button>`).join("")}</div></div>
+      <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="${!pm||pm.modo!=="sig"}">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="${!!pm&&pm.modo==="sig"}">Las suma al mes siguiente</button></div>
+      <span class="small" id="aPromoCalc" style="line-height:1.5"></span>${a.id?'<span class="small muted">Si cambiás la fecha, la cuota del primer mes se recalcula sola (los meses que ya pagó no se tocan).</span>':""}</div>`; })()}
     <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
     <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
@@ -1061,10 +1069,16 @@ document.addEventListener("submit",async e=>{
     { const nuevoRec=Number($("#aRec").textContent)||0; Object.assign(data,recCambio(prevA,nuevoRec-recN(prevA))); }
     if(!data.nombre) return;
     const id=f.dataset.id,lead=f.dataset.lead;
+    if(id&&$("#aIni")){ const pm=planGuardado(prevA); const ini=$("#aIni").value||prevA.inicio; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este"; const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1;
+      if(pm&&(ini!==pm.ini||pv!==pm.promo||modo!==pm.modo||(pv&&dur!==pm.dur)||data.precioClase!==prevA.precioClase||JSON.stringify(data.horarios)!==JSON.stringify(prevA.horarios))&&data.horarios.length&&(data.precioClase||pv)){
+        const viejo=planPrimerMes(prevA,pm.ini,pm.promo,pm.modo,pm.dur).pagos, nuevo=planPrimerMes(data,ini,pv,modo,dur).pagos, pagos={...(prevA.pagos||{})};
+        Object.keys(viejo).forEach(m=>{ if(!pagoReal(pagos[m])) delete pagos[m]; });
+        Object.keys(nuevo).forEach(m=>{ if(!pagoReal(pagos[m])) pagos[m]=nuevo[m]; });
+        data.pagos=pagos; data.inicio=ini; data.promo=pv?{precioClase:pv,meses:dur,modo,hasta:Object.keys(nuevo).sort().pop()}:{modo}; } }
     if(id){ data.activo=$("#aAct").checked; if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(id),data); pendA.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); },"Guardado")) closeSheet(); }
     else { data.activo=true; data.tipo="Grupal"; data.pagos={}; data.alta=hoyISO;
       { const ini=($("#aIni")||{}).value||hoyISO; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este";
-        data.inicio=ini; if(data.horarios.length&&(data.precioClase||pv)){ const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1; const pl=planPrimerMes(data,ini,pv,modo,dur); data.pagos=pl.pagos; if(pv) data.promo={precioClase:pv,meses:pv?dur:0,hasta:Object.keys(pl.pagos).sort().pop()}; } }
+        data.inicio=ini; if(data.horarios.length&&(data.precioClase||pv)){ const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1; const pl=planPrimerMes(data,ini,pv,modo,dur); data.pagos=pl.pagos; data.promo=pv?{precioClase:pv,meses:dur,modo,hasta:Object.keys(pl.pagos).sort().pop()}:{modo}; } }
       if(await safe(()=>colA().add(data),`${data.nombre} agregado`)){ if(lead) await safe(()=>colL().doc(lead).update({estado:"alumno",ganado:hoyISO})); closeSheet(); } }
   }
   if(f.id==="fL"){
