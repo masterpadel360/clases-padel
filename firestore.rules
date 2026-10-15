@@ -142,6 +142,10 @@ service cloud.firestore {
       allow read: if tienePerfil();
       allow write: if esStaff();
     }
+    // Pruebas e invitados que Gabriel suma a un turno (ocupan lugar).
+    match /extras/{id} {
+      allow read, write: if esStaff();
+    }
     match /config/{id} {
       allow read, write: if esStaff();
     }

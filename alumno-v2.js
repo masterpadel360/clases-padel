@@ -169,21 +169,122 @@
     const van = t.al.length - aj.aus.size + aj.rec.length; const libres = CUPO - van;
     const f = fecha || hoyISO; const ini = new Date(`${f}T${t.hora}:00-03:00`).getTime(), ya = Date.now();
     const ahora = ya >= ini && ya < ini + 60 * 60 * 1000, paso = ya >= ini + 60 * 60 * 1000;
-    const cupo = Array.from({ length: CUPO }, (_, i) => `<i class="${i < van ? "si" : ""}"></i>`).join("");
+    const cupoHTML = n => Array.from({ length: CUPO }, (_, i) => `<i class="${i < n ? "si" : ""}"></i>`).join("");
     const ini2 = n => esc(String(n || "?").trim().split(/\s+/).map(x => x[0]).slice(0, 2).join("").toUpperCase());
     const fila = (a, extra, cls) => `<button class="tu-al ${cls}" data-act="editA" data-id="${a.id}"><span class="av">${ini2(a.nombre)}</span><span class="nm">${esc(a.nombre)}</span>${extra}</button>`;
+    escucharExtras();
+    const ext = (S.extras || []).filter(x => x.club === t.club && x.fecha === f && x.hora === t.hora);
+    const vanTot = van + ext.length; const libresTot = CUPO - vanTot;
+    const quitar = (k, id) => `<span class="tu-x" role="button" tabindex="0" data-xa="${k}" data-id="${id}" aria-label="Quitar">✕</span>`;
     const lista = t.al.map(a => fila(a, aj.aus.has(a.id) ? '<span class="bd no">No viene</span>' : esNuevo(a) ? '<span class="bd nv">Nuevo</span>' : "", aj.aus.has(a.id) ? "aus" : ""))
-      .concat(aj.rec.map(a => fila(a, '<span class="bd rc">Recupera</span>', "rec"))).join("");
+      .concat(aj.rec.map(a => { const v = S.avisos.find(x => x.tipo === "recupera" && x.alumnoId === a.id && x.fecha === f && x.hora === t.hora); return fila(a, '<span class="bd rc">Recupera</span>' + (v && !paso ? quitar("quitarRec", v.id) : ""), "rec"); }))
+      .concat(ext.map(x => `<div class="tu-al ext"><span class="av">${ini2(x.nombre)}</span><span class="nm">${esc(x.nombre)}${x.tel ? ` <small>${esc(x.tel)}</small>` : ""}</span><span class="bd pr">${x.tipo === "invitado" ? "Invitado" : "Prueba"}</span>${paso ? "" : quitar("quitarExtra", x.id)}</div>`)).join("");
     return `<div class="tu ${ahora ? "ahora" : ""} ${paso ? "paso" : ""}">
       <div class="tu-h"><span class="hr">${t.hora || "—"}</span>${ahora ? '<span class="vivo">Ahora</span>' : ""}</div>
       <div class="tu-c">
         <div class="tu-top">${S.club ? "" : `<span class="tag ${t.club}">${t.club === "ESPACIO" ? "Espacio" : "Jump"}</span>`}
           <button class="tu-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel ? esc(t.nivel) : "+ Categoría"} ✎</button>
-          <span class="tu-cupo ${libres > 0 ? "" : "lleno"}"><span class="pts">${cupo}</span>${libres > 0 ? `${libres} libre${libres > 1 ? "s" : ""}` : "Completo"}</span></div>
+          <span class="tu-cupo ${libresTot > 0 ? "" : "lleno"}"><span class="pts">${cupoHTML(vanTot)}</span>${libresTot > 0 ? `${libresTot} libre${libresTot > 1 ? "s" : ""}` : "Completo"}</span></div>
         <div class="tu-lista">${lista || '<span class="tu-vacio">Sin alumnos</span>'}</div>
-        <button class="tu-lluvia" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${f}">Suspender por lluvia</button>
+        <div class="tu-pie">${paso ? "" : `<button class="tu-sumar" data-xa="sumar" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${f}">+ Sumar a alguien</button>`}<button class="tu-lluvia" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${f}">Suspender por lluvia</button></div>
       </div></div>`;
   };
+
+
+  /* ---- Sumar a alguien a un turno (prueba, invitado o un alumno que recupera, aunque sea de otro club) ---- */
+  let extrasSub = false;
+  function escucharExtras() {
+    if (extrasSub || !window.MODO_STAFF || typeof fdb === "undefined" || !fdb) return; extrasSub = true;
+    const d = new Date(now); d.setDate(d.getDate() - 8);
+    fdb.collection("extras").where("fecha", ">=", toISO(d)).onSnapshot(s => { S.extras = s.docs.map(x => ({ id: x.id, ...x.data() })); if ($("#overlay").hidden) render(); }, e => console.error(e));
+  }
+  const FV = () => firebase.firestore.FieldValue;
+  const cupoRef = (c, f, h) => fdb.doc("cupos/" + `${c}_${f}_${hhmmDe(h)}`);
+  let SU = null;
+  function abrirSumar(b) {
+    SU = { club: b.dataset.club, dia: Number(b.dataset.dia), hora: b.dataset.hora, f: b.dataset.f, modo: SU && SU.modo || "prueba", al: null, q: "" };
+    pintarSumar();
+  }
+  function pintarSumar() {
+    const d = isoDate(SU.f);
+    const club = SU.club === "ESPACIO" ? "Espacio" : "Jump";
+    let cuerpo;
+    if (SU.modo === "prueba") cuerpo = `
+      <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button class="seg-b" data-xa="suTipo" data-t="prueba" aria-pressed="${SU.tipo !== "invitado"}">Clase de prueba</button><button class="seg-b" data-xa="suTipo" data-t="invitado" aria-pressed="${SU.tipo === "invitado"}">Invitado</button></div>
+      <div class="field"><label for="suNom">Nombre</label><input id="suNom" maxlength="40" autocomplete="off" placeholder="Nombre y apellido"></div>
+      <div class="field"><label for="suTel">WhatsApp (opcional)</label><input id="suTel" inputmode="tel" maxlength="20" placeholder="351…"></div>
+      <p class="small muted" style="margin:0">Ocupa un lugar en este turno: a los alumnos ya no les aparece libre.</p>`;
+    else {
+      const q = SU.q.toLowerCase(); const lista = S.alumnos.filter(a => a.activo !== false && (!q || (a.nombre || "").toLowerCase().includes(q))).sort((x, y) => (x.nombre || "").localeCompare(y.nombre || "")).slice(0, 8);
+      const a = SU.al && S.alumnos.find(x => x.id === SU.al); const n = a ? recN(a) : 0; const otro = a && !clubsDe(a).has(SU.club);
+      cuerpo = a ? `<div class="msg" style="gap:6px"><b>${esc(a.nombre)}</b><span class="small">${n ? `Tiene <b>${n}</b> ${n === 1 ? "clase" : "clases"} para recuperar.` : "No tiene clases para recuperar."}${otro ? " Es de otro club: lo sumás como excepción." : ""}</span>
+          <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="suDesc" ${n ? "checked" : "disabled"} style="width:18px;height:18px"> Descontarle una clase para recuperar</label>
+          <button class="linkish" data-xa="suOtro" style="justify-self:start">Elegir otro alumno</button></div>`
+        : `<input class="search" id="suQ" type="search" placeholder="Buscar alumno" value="${esc(SU.q)}" autocomplete="off">
+          <div class="list">${lista.map(x => `<button class="row" style="width:100%;background:none;border:0;text-align:left" data-xa="suAl" data-id="${x.id}"><span class="main"><span class="name">${esc(x.nombre)}</span><span class="meta">${tagsClub(x)}${recN(x) ? `<span class="tag rec">Recupera ${recN(x)}</span>` : ""}</span></span></button>`).join("") || '<div class="row"><span class="small muted">Nadie con ese nombre.</span></div>'}</div>`;
+    }
+    openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Sumar al turno</span><h2 class="disp">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${SU.hora}</h2><span class="small muted">${club}</span></div>
+      <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button class="seg-b" data-xa="suModo" data-m="prueba" aria-pressed="${SU.modo === "prueba"}">Prueba o invitado</button><button class="seg-b" data-xa="suModo" data-m="alumno" aria-pressed="${SU.modo === "alumno"}">Un alumno</button></div>
+      ${cuerpo}
+      <p class="small" id="suErr" style="margin:0;color:var(--warn)"></p>
+      <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-xa="cerrarSu">Cancelar</button><button class="btn pri" data-xa="suOk">Sumar</button></span></div>`);
+  }
+  async function guardarSumar(b) {
+    const err = $("#suErr"); const { club, dia, hora, f } = SU; const hh = hhmmDe(hora);
+    b.disabled = true; b.textContent = "Guardando…";
+    try {
+      const bt = fdb.batch();
+      if (SU.modo === "prueba") {
+        const nombre = ($("#suNom").value || "").trim().replace(/\s+/g, " "); if (nombre.length < 2) { err.textContent = "Escribí el nombre."; return; }
+        const id = `${club}_${f}_${hh}_${Date.now().toString(36)}`;
+        bt.set(fdb.doc("extras/" + id), { club, fecha: f, hora, hhmm: hh, dia, tipo: SU.tipo === "invitado" ? "invitado" : "prueba", nombre: nombre.slice(0, 40), tel: ($("#suTel").value || "").trim().slice(0, 20), creado: FV().serverTimestamp() });
+        bt.set(cupoRef(club, f, hora), { club, fecha: f, hora, dia, aus: FV().increment(0), rec: FV().increment(1) }, { merge: true });
+        await bt.commit(); closeSheet(); toast(`${nombre} sumado al turno de las ${hora}`);
+      } else {
+        const a = SU.al && S.alumnos.find(x => x.id === SU.al); if (!a) { err.textContent = "Elegí un alumno."; return; }
+        const avId = `${a.id}_${f}_${hh}_recupera`; if (S.avisos.some(v => v.id === avId)) { err.textContent = "Ya está anotado en ese turno."; return; }
+        const desc = !!($("#suDesc") && $("#suDesc").checked);
+        const t = (turnos(club).find(x => x.dia === dia && x.hora === hora) || {});
+        bt.set(fdb.doc("avisos/" + avId), { alumnoId: a.id, uid: S.uid, nombre: a.nombre, club, fecha: f, hora, hhmm: hh, dia, nivel: t.nivel || "", tipo: "recupera", conRecupero: false, por: "staff", descontado: desc,
+          inicio: firebase.firestore.Timestamp.fromDate(new Date(`${f}T${hora}:00-03:00`)), creado: FV().serverTimestamp(), visto: true, notificado: true, contado: false });
+        bt.set(cupoRef(club, f, hora), { club, fecha: f, hora, dia, aus: FV().increment(0), rec: FV().increment(1), ultimo: avId }, { merge: true });
+        if (desc) bt.update(fdb.doc("alumnos/" + a.id), recCambio(a, -1));
+        await bt.commit(); closeSheet(); toast(`${a.nombre} recupera a las ${hora}`);
+      }
+    } catch (x) { console.error(x); if (err) err.textContent = "No se pudo guardar. Probá de nuevo."; }
+    finally { b.disabled = false; b.textContent = "Sumar"; }
+  }
+  async function quitarExtra(id) {
+    const x = (S.extras || []).find(e => e.id === id); if (!x) return;
+    const bt = fdb.batch(); bt.delete(fdb.doc("extras/" + id)); bt.set(cupoRef(x.club, x.fecha, x.hora), { rec: FV().increment(-1) }, { merge: true });
+    await bt.commit(); toast(`Quitaste a ${x.nombre}`);
+  }
+  async function quitarRec(id) {
+    const v = S.avisos.find(e => e.id === id); if (!v) return; const a = S.alumnos.find(x => x.id === v.alumnoId);
+    const bt = fdb.batch(); bt.delete(fdb.doc("avisos/" + id)); bt.set(cupoRef(v.club, v.fecha, v.hora), { rec: FV().increment(-1) }, { merge: true });
+    if (a && v.descontado !== false) bt.update(fdb.doc("alumnos/" + a.id), recCambio(a, 1, v.fecha));
+    await bt.commit(); toast(`${a ? a.nombre : "El alumno"} ya no recupera en ese turno${a && v.descontado !== false ? " · le devolvimos la clase" : ""}`);
+  }
+  const confirmados = {};
+  document.addEventListener("click", async e => {
+    if (!window.MODO_STAFF) return;
+    const b = e.target.closest("[data-xa]"); if (!b) return; e.stopPropagation();
+    const k = b.dataset.xa;
+    if (k === "sumar") { SU = null; abrirSumar(b); return; }
+    if (k === "cerrarSu") { closeSheet(); return; }
+    if (k === "suModo") { SU.modo = b.dataset.m; SU.al = null; pintarSumar(); return; }
+    if (k === "suTipo") { SU.tipo = b.dataset.t; const n = $("#suNom").value, t = $("#suTel").value; pintarSumar(); $("#suNom").value = n; $("#suTel").value = t; return; }
+    if (k === "suAl") { SU.al = b.dataset.id; pintarSumar(); return; }
+    if (k === "suOtro") { SU.al = null; pintarSumar(); return; }
+    if (k === "suOk") { await guardarSumar(b); return; }
+    if (k === "quitarExtra" || k === "quitarRec") {
+      // Primer toque arma, segundo toque quita (sin ventanas de confirmación).
+      if (!confirmados[b.dataset.id]) { confirmados[b.dataset.id] = 1; b.classList.add("armado"); b.textContent = "Quitar"; setTimeout(() => { delete confirmados[b.dataset.id]; if (b.isConnected) { b.classList.remove("armado"); b.textContent = "✕"; } }, 3000); return; }
+      delete confirmados[b.dataset.id];
+      try { await (k === "quitarExtra" ? quitarExtra(b.dataset.id) : quitarRec(b.dataset.id)); } catch (x) { console.error(x); toast("No se pudo quitar. Probá de nuevo."); }
+    }
+  }, true);
+  document.addEventListener("input", e => { if (window.MODO_STAFF && e.target.id === "suQ" && SU) { SU.q = e.target.value; clearTimeout(SU.t); SU.t = setTimeout(() => { pintarSumar(); const q = $("#suQ"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 200); } });
 
   /* ---- Ausencias ---- */
   const ESTV = { vino: ["Fuiste", "fui"], recuperando: ["Recuperaste", "fui"], falto: ["Faltaste sin avisar", "falta"], recupera: ["Avisaste · recuperás", "aviso"], lluvia: ["Suspendida por lluvia · recuperás", "lluvia"] };
