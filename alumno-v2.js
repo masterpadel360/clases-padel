@@ -159,6 +159,7 @@
     } else if (est === "pendiente" && conPlazo(mes) && dias >= 0 && dias <= 3) {
       out.push(`<button class="v2-recordar suave" data-pa="pagar" data-m="${mes}">${icoP}<span class="tx"><b>${dias === 0 ? "Hoy vence tu cuota" : `Te ${dias === 1 ? "queda 1 día" : `quedan ${dias} días`} para pagar`}</b><small>La cuota de ${MESN[now.getMonth()]} vence el ${pagoVence(mes)}</small></span><span class="v2-cta">Pagar</span></button>`);
     }
+    { const px = aumentoProx(a); if (px && (tab === "inicio" || tab === "pagos")) out.push(`<div class="v2-recordar suave v2-aum">${icoP}<span class="tx"><b>Desde ${MESN[Number(px.desde.slice(5, 7)) - 1]} la clase pasa a ${money(px.precio).replace(/\$\s+/, "$")}</b><small>Hasta entonces seguís pagando ${money(px.antes).replace(/\$\s+/, "$")} por clase.</small></span></div>`); }
     if (rec) out.push(`<button class="v2-recordar" data-pa="${tab === "inicio" ? "irRec" : "v2irRec"}">${ico}<span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>`);
     return out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "";
   }
@@ -350,7 +351,7 @@
       ${otros.length ? `<section class="v2-sec"><div class="v2-head"><h2>Meses anteriores</h2><span class="k">${otros.length} sin pagar</span></div>
         <div class="v2-fichas">${otros.map(m => { const est = estPago(a, m); const n = clasesMes(a, m); const aj = ajusteDe(a, m) !== null; const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
           return `<div class="v2-ficha ${est === "vencido" ? "venc" : ""}"><div class="v2-fecha"><span>${MESN[Number(m.slice(5, 7)) - 1].slice(0, 3)}</span><b>${m.slice(2, 4)}</b></div>
-            <div class="v2-ficha-tx"><b>${money(montoMes(a, m)).replace(/\$\s+/, "$")}</b><span>${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : (a.precioClase ? `${n} clases × ${money(a.precioClase).replace(/\$\s+/, "$")}` : `${n} clases`)}</span>
+            <div class="v2-ficha-tx"><b>${money(montoMes(a, m)).replace(/\$\s+/, "$")}</b><span>${aj ? (p.nota ? esc(p.nota) : "Monto acordado") : (precioEn(a, m) ? `${n} clases × ${money(precioEn(a, m)).replace(/\$\s+/, "$")}` : `${n} clases`)}</span>
               ${est === "vencido" ? `<span class="st falta">Vencida el ${pagoVence(m)}</span>` : c && c.estado === "rechazado" ? '<span class="st falta">No se pudo confirmar el comprobante</span>' : ""}</div>
             <div class="v2-ficha-acc"><button class="v2-mini rojo" data-pa="pagar" data-m="${m}">Pagar</button></div></div>`; }).join("")}</div></section>` : ""}
       <section class="v2-sec"><div class="v2-head"><h2>Cómo pagar</h2></div>

@@ -451,3 +451,18 @@ html.v2 #staffApp .seg.fp .fp-pago[aria-pressed="true"]{background:var(--s-fui);
 .fp-res .small{display:block;margin-top:4px;opacity:.75}
 html.v2 #staffApp .fp-res.debe{background:rgba(123,38,32,.08);border-color:rgba(123,38,32,.25);color:var(--s-ink)}
 html.v2 #staffApp .fp-res.ok{background:rgba(79,138,44,.1);border-color:rgba(79,138,44,.3);color:var(--s-ink)}
+/* Aumentos */
+.aum-btn{justify-self:start;margin:0 0 10px}
+.aum-exp{margin:0;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,.04);line-height:1.45}
+.aum-sel{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.aum-q{display:flex;gap:12px;flex-wrap:wrap}
+.aum-q .linkish{font-size:13px}
+.aum-list{display:grid;gap:0;max-height:42vh;overflow:auto;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch}
+.aum-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;opacity:.55}
+.aum-row:last-child{border-bottom:0}
+.aum-row.on{opacity:1}
+.aum-row input{width:20px;height:20px;accent-color:var(--s-olive,#556b2f)}
+.aum-n{display:grid;min-width:0}
+.aum-n b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aum-n small{font-size:11.5px;opacity:.7}
+.aum-p{font-size:13px;white-space:nowrap;text-align:right}

@@ -53,7 +53,14 @@ function planPrimerMes(a,ini,promo,modo,dur=1){ const m=ini.slice(0,7), sig=mesS
   if(a.precioClase) lin.push(`Desde ${mesSolo(k)}: ${money(a.precioClase)} por clase${promo?" (precio normal)":""}`);
   return {m,sig,quedan,p,pagos,txt:lin.join(" · ")}; }
 function clasesMes(a,m=S.mes){ return diasDe(a).reduce((s,d)=>s+ocurrencias(d,m),0); }
-function cuotaMes(a,m=S.mes){ return a.precioClase>0 ? clasesMes(a,m)*a.precioClase : (a.cuota||0); }
+// Aumentos: cada alumno guarda [{desde:"YYYY-MM", precio, antes, monto, aplicado}]. Los futuros quedan programados y se aplican solos al llegar el mes.
+function aumentosDe(a){ return (a.aumentos||[]).filter(x=>x&&x.desde).slice().sort((x,y)=>x.desde.localeCompare(y.desde)); }
+function precioEn(a,m=S.mes){ const L=aumentosDe(a), act=mesKey(now);
+  if(m>=act){ const f=L.filter(x=>!x.aplicado&&x.desde<=m).pop(); return f?f.precio:(a.precioClase||0); }
+  const pas=L.filter(x=>x.desde<=m).pop(); if(pas&&pas.precio) return pas.precio; const sig=L.find(x=>x.desde>m&&x.aplicado); return sig&&sig.antes?sig.antes:(a.precioClase||0); }
+function ultimoAumento(a){ return aumentosDe(a).filter(x=>x.desde<=mesKey(now)).pop()||null; }
+function aumentoProx(a){ return aumentosDe(a).find(x=>!x.aplicado&&x.desde>mesKey(now))||null; }
+function cuotaMes(a,m=S.mes){ const p=precioEn(a,m); return p>0 ? clasesMes(a,m)*p : (a.cuota||0); }
 function extraDias(a,m=S.mes){ return diasDe(a).filter(d=>ocurrencias(d,m)===5); }
 function ajusteDe(a,m=S.mes){ const p=a.pagos&&a.pagos[m]; return p&&typeof p.ajuste==="number"?p.ajuste:null; }
 function montoMes(a,m=S.mes){ const aj=ajusteDe(a,m); return aj!==null?aj:cuotaMes(a,m); }
@@ -130,10 +137,10 @@ function msgCobro(a){
   const extra = ex.length ? ` (incluye ${ex.length===1?"una clase extra":ex.length+" clases extra"})` : "";
   const alias = S.cfg.alias ? ` Podés transferir al alias ${S.cfg.alias}.` : "";
   const aj=ajusteDe(a);
-  if(aj!==null){ const na=a.precioClase?aj/a.precioClase:0;
-    if(na>0&&Number.isInteger(na)) return fill(tpl("cobro"),{nombre:nombreCorto(a.nombre),mes:mesSolo(S.mes),clases:na,precio:money(a.precioClase),total:money(aj),extra:"",alias});
+  if(aj!==null){ const na=precioEn(a)?aj/precioEn(a):0;
+    if(na>0&&Number.isInteger(na)) return fill(tpl("cobro"),{nombre:nombreCorto(a.nombre),mes:mesSolo(S.mes),clases:na,precio:money(precioEn(a)),total:money(aj),extra:"",alias});
     return `Hola ${nombreCorto(a.nombre)}, ¿cómo estás? Te paso lo de ${mesSolo(S.mes)}: el total es ${money(aj)}.${alias}`.trim(); }
-  return fill(tpl("cobro"),{nombre:nombreCorto(a.nombre),mes:mesSolo(S.mes),clases:n,precio:money(a.precioClase),total:money(cuotaMes(a)),extra,alias});
+  return fill(tpl("cobro"),{nombre:nombreCorto(a.nombre),mes:mesSolo(S.mes),clases:n,precio:money(precioEn(a)),total:money(cuotaMes(a)),extra,alias});
 }
 function msgLluvia(a,hora){
   const h = hora || ((a.horarios||[]).find(x=>x.dia===now.getDay())||{}).hora || "";
@@ -260,6 +267,7 @@ function vAlumnos(){
       <span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(S.mes)}</span><button class="linkish" data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
     <div class="seg fp" role="group" aria-label="Filtrar por pago"><button type="button" class="seg-b" data-act="fPago" data-v="" aria-pressed="${!fp}">Todos</button><button type="button" class="seg-b fp-debe" data-act="fPago" data-v="debe" aria-pressed="${fp==="debe"}">No pagaron · ${deben.length}</button><button type="button" class="seg-b fp-pago" data-act="fPago" data-v="pago" aria-pressed="${fp==="pago"}">Pagaron · ${pagaron.length}</button></div>
     ${resumen}
+    ${S.esOwner&&S.modo!=="profe"&&!fp?`<button type="button" class="mini aum-btn" data-act="aumento">📈 Cargar aumento de cuota</button>`:""}
     ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:fp?"":(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}
     ${S.alumnos.length&&S.downloads?`<button class="linkish" data-act="csv" style="justify-self:start">Descargar lista (CSV)</button>`:""}
   </section>`;
@@ -345,14 +353,14 @@ function leadRow(l){
 }
 /* ---------- Ajuste de cobro ---------- */
 function ajPreview(){ const f=$("#fAj"); if(!f) return; const a=S.alumnos.find(x=>x.id===f.dataset.id); const v=Number($("#ajMonto").value)||0; const d=v-cuotaMes(a);
-  $("#ajDif").innerHTML = d===0?"Igual al calculado":`${d>0?"+":"−"}${money(Math.abs(d))} ${a.precioClase&&Number.isInteger(Math.abs(d)/a.precioClase)?`(${Math.abs(d)/a.precioClase} clase${Math.abs(d)/a.precioClase>1?"s":""} ${d>0?"de más":"de menos"})`:""} contra el calculado`; }
+  $("#ajDif").innerHTML = d===0?"Igual al calculado":`${d>0?"+":"−"}${money(Math.abs(d))} ${precioEn(a)&&Number.isInteger(Math.abs(d)/precioEn(a))?`(${Math.abs(d)/precioEn(a)} clase${Math.abs(d)/precioEn(a)>1?"s":""} ${d>0?"de más":"de menos"})`:""} contra el calculado`; }
 function openAjuste(a){
   const n=clasesMes(a), base=cuotaMes(a), cur=montoMes(a), p=a.pagos&&a.pagos[S.mes]||{}; const ex=extraDias(a).length;
   openSheet(`<form id="fAj" data-id="${a.id}" style="display:grid;gap:14px">
     <div style="display:grid;gap:4px"><span class="flabel">Cobro de ${mesLbl(S.mes)}</span><h2 class="disp">${esc(a.nombre)}</h2></div>
-    <dl class="kv" style="margin:0"><dt>Calculado</dt><dd class="num">${n} clases x ${money(a.precioClase)} = ${money(base)}</dd>${ex?`<dt></dt><dd class="small muted" style="font-weight:500">incluye ${ex===1?"una clase extra":ex+" clases extra"}</dd>`:""}</dl>
+    <dl class="kv" style="margin:0"><dt>Calculado</dt><dd class="num">${n} clases x ${money(precioEn(a))} = ${money(base)}</dd>${ex?`<dt></dt><dd class="small muted" style="font-weight:500">incluye ${ex===1?"una clase extra":ex+" clases extra"}</dd>`:""}</dl>
     <div class="field"><label for="ajMonto">Lo que te paga este mes</label><input id="ajMonto" type="number" inputmode="numeric" min="0" step="250" value="${cur}"><span class="small muted" id="ajDif"></span></div>
-    ${a.precioClase?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="mini" data-act="ajStep" data-d="-${a.precioClase}">− 1 clase</button><button type="button" class="mini" data-act="ajStep" data-d="${a.precioClase}">+ 1 clase</button><button type="button" class="mini" data-act="ajReset">Usar el calculado</button></div>`:""}
+    ${precioEn(a)?`<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="mini" data-act="ajStep" data-d="-${precioEn(a)}">− 1 clase</button><button type="button" class="mini" data-act="ajStep" data-d="${precioEn(a)}">+ 1 clase</button><button type="button" class="mini" data-act="ajReset">Usar el calculado</button></div>`:""}
     <div class="field"><label for="ajNota">Motivo (opcional)</label><input id="ajNota" value="${esc(p.nota||"")}" placeholder="Ej: avisó que no viene el 15"></div>
     <p class="small muted" style="margin:0">Este monto es el que cuenta en el total del mes y el que va en el mensaje de cobro. Solo cambia ${mesSolo(S.mes)}.</p>
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
@@ -682,6 +690,51 @@ function render(){
     off=Math.min(H,Math.max(0,off+d)); if(y<off) off=y; pintar(h,false);
     clearTimeout(tFin); tFin=setTimeout(()=>{ const h2=top(); if(!h2) return; off=(dir>0&&scrollY>H&&off>0)?H:0; pintar(h2,true); },140); }); },{passive:true}); }
 
+/* ---------- Aumentos de cuota ---------- */
+const mesCorto = m => `${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][Number(m.slice(5,7))-1]} ${m.slice(2,4)}`;
+const AUM={ desde:null, monto:2500, sel:null, filtro:"" };
+function aumPlan(a,desde,monto){ const act=mesKey(now); const prev=aumentosDe(a).find(x=>x.desde===desde);
+  if(desde<act){ const precio=prev?prev.precio:(precioEn(a,desde)||a.precioClase||0); return {desde,monto,precio,antes:Math.max(0,precio-monto),aplicado:true,tipo:"registro"}; }
+  const base=prev?prev.antes:(desde===act?(a.precioClase||0):precioEn(a,desde)); return {desde,monto,antes:base,precio:base+monto,aplicado:desde===act,tipo:desde===act?"ahora":"futuro"}; }
+function openAumento(){ const act=mesKey(now); if(!AUM.desde) AUM.desde=mesSig(act);
+  const al=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0).sort((x,y)=>(x.nombre||"").localeCompare(y.nombre||""));
+  if(!AUM.sel) AUM.sel=new Set(al.map(a=>a.id));
+  const ult=a=>{ const u=ultimoAumento(a); return u?mesCorto(u.desde):"—"; };
+  const meses=[...new Set(al.map(a=>(ultimoAumento(a)||{}).desde||"").filter(Boolean))].sort();
+  const tipo=AUM.desde<act?"registro":AUM.desde===act?"ahora":"futuro";
+  const exp=tipo==="registro"?`Queda anotado que en <b>${mesLbl(AUM.desde)}</b> les aumentaste <b>${money(AUM.monto)}</b> la clase. <b>No cambia</b> lo que cobrás hoy.`
+    :tipo==="ahora"?`El precio sube <b>${money(AUM.monto)}</b> la clase <b>desde este mes</b>. Las cuotas de ${mesSolo(act)} que todavía no pagaron se recalculan.`
+    :`El precio sube <b>${money(AUM.monto)}</b> la clase <b>desde ${mesLbl(AUM.desde)}</b>. Hasta entonces pagan lo mismo. A los alumnos les aparece el aviso en la app desde hoy y les llega una notificación.`;
+  const n=al.filter(a=>AUM.sel.has(a.id)).length;
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Cuotas</span><h2 class="disp">Aumento</h2></div>
+    <div class="two"><div class="field"><label for="aumDesde">Desde el mes</label><input id="aumDesde" type="month" value="${AUM.desde}"></div>
+      <div class="field"><label for="aumMonto">Sube por clase</label><input id="aumMonto" type="number" inputmode="numeric" min="0" step="500" value="${AUM.monto||""}" placeholder="Ej: 2500"></div></div>
+    <div class="seg" style="grid-template-columns:repeat(4,1fr);margin:0">${[1000,2000,2500,5000].map(v=>`<button type="button" class="seg-b" data-act="aumM" data-v="${v}" aria-pressed="${AUM.monto===v}">+${v/1000}k</button>`).join("")}</div>
+    <p class="small aum-exp">${exp}</p>
+    <div class="aum-sel"><span class="small"><b>${n}</b> de ${al.length} alumnos</span><span class="aum-q"><button type="button" class="linkish" data-act="aumQ" data-v="todos">Todos</button><button type="button" class="linkish" data-act="aumQ" data-v="nadie">Ninguno</button><button type="button" class="linkish" data-act="aumQ" data-v="JUMP">Jump</button><button type="button" class="linkish" data-act="aumQ" data-v="ESPACIO">Espacio</button></span></div>
+    ${meses.length?`<div class="aum-sel" style="margin-top:-4px"><span class="small muted">Último aumento:</span><span class="aum-q">${meses.map(m=>`<button type="button" class="linkish" data-act="aumQ" data-v="u:${m}">${mesCorto(m)}</button>`).join("")}<button type="button" class="linkish" data-act="aumQ" data-v="u:">Sin dato</button></span></div>`:""}
+    <div class="aum-list">${al.map(a=>{ const pl=aumPlan(a,AUM.desde,AUM.monto||0); const on=AUM.sel.has(a.id); const px=aumentoProx(a);
+      return `<label class="aum-row ${on?"on":""}"><input type="checkbox" data-act="aumT" data-id="${a.id}" ${on?"checked":""}><span class="aum-n"><b>${esc(a.nombre)}</b><small>Últ. aumento: ${ult(a)}${px&&px.desde!==AUM.desde?` · programado ${mesCorto(px.desde)}`:""}</small></span><span class="aum-p num">${tipo==="registro"?money(pl.precio):`${money(pl.antes)} → <b>${money(pl.precio)}</b>`}</span></label>`; }).join("")}</div>
+    <div class="btns" style="margin-top:12px"><button class="btn sec2" data-act="close">Cancelar</button><button class="btn pri" data-act="aumOk" ${n&&AUM.monto>0&&AUM.desde?"":"disabled"}>${tipo==="registro"?"Registrar":"Aplicar"} a ${n}</button></div>`,()=>openAumento()); }
+async function guardarAumento(b){ const act=mesKey(now); const al=S.alumnos.filter(a=>AUM.sel.has(a.id)&&a.activo!==false&&a.precioClase>0); if(!al.length||!(AUM.monto>0)) return;
+  b.disabled=true; b.textContent="Guardando…";
+  const ok=await safe(async()=>{ for(let i=0;i<al.length;i+=400){ const bt=S.db.batch();
+    al.slice(i,i+400).forEach(a=>{ const pl=aumPlan(a,AUM.desde,AUM.monto); const {tipo,...e}=pl; const L=aumentosDe(a).filter(x=>x.desde!==AUM.desde); L.push(e); L.sort((x,y)=>x.desde.localeCompare(y.desde));
+      const p={aumentos:L}; if(tipo==="ahora") p.precioClase=pl.precio; bt.update(colA().doc(a.id),p); });
+    await bt.commit(); } },`Aumento ${AUM.desde<act?"registrado":"aplicado"} a ${al.length} alumno${al.length===1?"":"s"}`);
+  if(ok){ AUM.sel=null; closeSheet(); } else { b.disabled=false; b.textContent="Aplicar"; } }
+document.addEventListener("change",e=>{ const t=e.target; if(!t||!$("#aumDesde")) return;
+  if(t.id==="aumDesde"&&t.value){ AUM.desde=t.value; const y=($(".aum-list")||{}).scrollTop||0; openAumento(); const l=$(".aum-list"); if(l) l.scrollTop=y; }
+  else if(t.id==="aumMonto"){ AUM.monto=Math.max(0,Math.round(Number(t.value)||0)); const y=($(".aum-list")||{}).scrollTop||0; openAumento(); const l=$(".aum-list"); if(l) l.scrollTop=y; }
+  else if(t.dataset&&t.dataset.act==="aumT"){ const id=t.dataset.id; if(t.checked) AUM.sel.add(id); else AUM.sel.delete(id); t.closest(".aum-row").classList.toggle("on",t.checked);
+    const n=S.alumnos.filter(a=>AUM.sel.has(a.id)&&a.activo!==false&&a.precioClase>0).length; const tot=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0).length;
+    const c=$(".aum-sel .small"); if(c) c.innerHTML=`<b>${n}</b> de ${tot} alumnos`; const b=$('[data-act="aumOk"]'); if(b){ b.textContent=b.textContent.replace(/\d+$/,n); b.disabled=!(n&&AUM.monto>0); } } });
+// Cuando llega el mes de un aumento programado, el precio pasa a ser el nuevo.
+let aumHecho=false;
+async function aplicarAumentosVencidos(){ if(aumHecho||!S.esOwner||S.modo==="profe") return; const act=mesKey(now);
+  const L=S.alumnos.filter(a=>aumentosDe(a).some(x=>!x.aplicado&&x.desde<=act)); if(!L.length){ aumHecho=true; return; } aumHecho=true;
+  try{ const bt=S.db.batch(); L.forEach(a=>{ const aus=aumentosDe(a).map(x=>(!x.aplicado&&x.desde<=act)?{...x,aplicado:true}:x); const ult=aus.filter(x=>x.desde<=act).pop(); bt.update(colA().doc(a.id),{aumentos:aus,precioClase:ult.precio}); }); await bt.commit(); }catch(e){ console.error(e); aumHecho=false; } }
+
 /* ---------- Objetivo de alumnos ---------- */
 const objMin=()=>{ try{ return localStorage.getItem("objMin")==="1"; }catch(e){ return false; } };
 function setObjMin(v){ try{ localStorage.setItem("objMin",v?"1":"0"); }catch(e){} objBar(); }
@@ -748,7 +801,7 @@ function formAlumno(a={},leadId=""){
     </div>
     <div class="two">
       <div class="field"><label for="aCat">Categoría</label><input id="aCat" list="cats" value="${esc(a.categoria)}" placeholder="octava, séptima…"><datalist id="cats"><option>inicial</option><option>niños</option><option>octava</option><option>séptima</option><option>sexta</option></datalist></div>
-      <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}"></div>
+      <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
     ${a.id?"":`<div class="field promo"><span class="flabel">Primer mes</span>
@@ -875,6 +928,11 @@ document.addEventListener("click",async e=>{
     case "dia": S.dia=Number(b.dataset.d); render(); break;
     case "fecha": { const st=document.getElementById("daysStrip"); const sl=st?st.scrollLeft:0; S.fecha=b.dataset.f; render(); const n=document.getElementById("daysStrip"); if(n) n.scrollLeft=sl; break; }
     case "fPago": S.fPago=b.dataset.v; render(); break;
+    case "aumento": AUM.sel=null; openAumento(); break;
+    case "aumM": AUM.monto=Number(b.dataset.v); openAumento(); break;
+    case "aumQ": { const v=b.dataset.v; const al=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0);
+      AUM.sel=new Set(v==="todos"?al.map(a=>a.id):v==="nadie"?[]:v.startsWith("u:")?al.filter(a=>((ultimoAumento(a)||{}).desde||"")===v.slice(2)).map(a=>a.id):al.filter(a=>enClub(a,v)).map(a=>a.id)); openAumento(); break; }
+    case "aumOk": await guardarAumento(b); break;
     case "pago": if(A){ const was=!!pago(A); if(await setPago(A,!was)) toast(was?`${A.nombre}: vuelve a deber`:`${A.nombre}: pagó ${money(montoMes(A))}`,()=>setPago(A,was)); } break;
     case "msg": if(A) openMensajes(A); break;
     case "copy": { const t=b.dataset.text; try{ await navigator.clipboard.writeText(t); toast("Mensaje copiado"); }catch(err){ const r=document.createRange(); const bub=b.closest(".msg")?.querySelector(".bubble"); if(bub){ r.selectNodeContents(bub); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Texto seleccionado, copialo"); } } break; }

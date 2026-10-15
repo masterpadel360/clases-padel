@@ -153,6 +153,19 @@ if (alumnosConApp.length) {
     const rec = normalizar(a, hoy); const nRec = rec.recuperar; const vences = Object.keys(rec.recVence);
     const mandar = async (id, msg, extra) => { const ok = await enviar(uid, msg); await marcar(id, { ok, ...extra }); enviados++; };
 
+    // Aumento programado: aviso apenas se carga y recordatorio desde el 20 del mes anterior (de 10 a 20 h).
+    {
+      const act = hoy.slice(0, 7); const px = (a.aumentos || []).filter(x => x && x.desde && !x.aplicado && x.desde > act && x.precio > 0).sort((x, y) => x.desde.localeCompare(y.desde))[0];
+      if (px && horaAR >= 10 && horaAR < 20) {
+        const MN = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][Number(px.desde.slice(5, 7)) - 1];
+        const id1 = `aum_${a.id}_${px.desde}_${px.precio}`;
+        const [yy, mm] = px.desde.split("-").map(Number); const mesAntes = `${mm === 1 ? yy - 1 : yy}-${pad(mm === 1 ? 12 : mm - 1)}`;
+        const id2 = `aum2_${a.id}_${px.desde}_${px.precio}`;
+        if (!(await yaEnviado(id1))) await mandar(id1, { title: `Nuevo precio desde ${MN}`, body: `${nombre}, desde ${MN} la clase pasa a ${plata(px.precio)}. Hasta entonces seguís pagando ${plata(px.antes || a.precioClase)}.`, tag: "aumento" });
+        else if (act === mesAntes && Number(hoy.slice(8)) >= 20 && !(await yaEnviado(id2))) await mandar(id2, { title: `Recordatorio: desde ${MN} cambia el precio`, body: `${nombre}, desde el 1 de ${MN} la clase pasa a ${plata(px.precio)}.`, tag: "aumento" });
+      }
+    }
+
     // Pago del mes: se paga del 1 al 13. Avisos el 1, el 10 y el 13; el 14 avisa que está vencido (de 10 a 20 h).
     {
       const mesAct = hoy.slice(0, 7); const dia = Number(hoy.slice(8)); const MESN = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][Number(hoy.slice(5, 7)) - 1];
