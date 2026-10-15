@@ -869,7 +869,7 @@ document.addEventListener("click",async e=>{
     default: if(window.accionExtra) await window.accionExtra(act,b,A); break;
   }
 });
-document.addEventListener("input",e=>{ if(!window.MODO_STAFF) return; if(e.target.id==="q"){ S.q=e.target.value; render(); } if(e.target.id==="recQ"){ openRecAdd(e.target.value); } });
+let tBusca=0; document.addEventListener("input",e=>{ if(!window.MODO_STAFF) return; if(e.target.id==="q"){ S.q=e.target.value; clearTimeout(tBusca); tBusca=setTimeout(render,180); } if(e.target.id==="recQ"){ openRecAdd(e.target.value); } });
 document.addEventListener("submit",async e=>{
   if(!window.MODO_STAFF) return;
   e.preventDefault(); const f=e.target;

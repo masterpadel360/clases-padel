@@ -11,8 +11,8 @@ html.v2{
 }
 html.v2 body{background:var(--s-bg)}
 html.v2 #portal ~ *,html.v2 body{font-family:var(--s-body)}
-html.v2 body:has(#portal:not([hidden])) .scene{display:none}
-html.v2 body:has(#portal:not([hidden])){background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");color:var(--s-ink)}
+html.v2.v2-portal .scene{display:none}
+html.v2.v2-portal body{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");color:var(--s-ink)}
 html.v2 #portal .top{display:none}
 html.v2 #portal .app{max-width:480px;padding-block:8px 120px}
 html.v2 #pView{display:block!important}
@@ -261,8 +261,8 @@ html.v2 .toast{background:var(--s-olive);color:var(--s-cream)}
 /* =====================================================================
    PANEL DE GABRIEL Y ESTEBAN (#staffApp) con el mismo diseño
    ===================================================================== */
-html.v2 body:has(#staffApp:not([hidden])) .scene{display:none}
-html.v2 body:has(#staffApp:not([hidden])){color:var(--s-ink);font-family:var(--s-body);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+html.v2.v2-staff .scene{display:none}
+html.v2.v2-staff body{color:var(--s-ink);font-family:var(--s-body);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
 html.v2 #staffApp{--glass:var(--s-card);--glass-2:var(--s-bg);--glass-strong:var(--s-card);--line:var(--s-line);--line-2:var(--s-line);--ink:var(--s-ink);--muted:var(--s-dim);--paper:var(--s-ink);--btn:var(--s-olive);--btn-ink:var(--s-cream);--sun:var(--s-rojo);--ok:var(--s-fui);--ok-soft:rgba(79,138,44,.14);--warn:var(--s-falta);--warn-soft:rgba(208,64,47,.12);--f-display:var(--s-sport);--f-body:var(--s-body);--r:14px}
 html.v2 #staffApp *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 html.v2 #staffApp .app{max-width:560px}
@@ -331,3 +331,29 @@ html.v2 #staffApp #tabs{background:rgba(28,38,25,.95)!important;border:0!importa
 html.v2 #staffApp #tabs .tab{color:rgba(239,233,218,.65);font-family:var(--s-sport);font-stretch:85%;font-weight:800;letter-spacing:.08em;border-radius:999px}
 html.v2 #staffApp #tabs .tab svg{stroke:currentColor}
 html.v2 #staffApp #tabs .tab[aria-selected="true"]{background:var(--s-lima);color:var(--s-olive)}
+
+
+/* =====================================================================
+   PANTALLA DE ENTRAR (usuario y contraseña)
+   ===================================================================== */
+html.v2.v2-login .scene{display:none}
+html.v2.v2-login body{color:var(--s-ink);font-family:var(--s-body);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+html.v2 #login{--warn:var(--s-falta)}
+html.v2 #login .login-card{position:relative;overflow:hidden;background:var(--s-olive)!important;color:var(--s-cream);border:0!important;border-radius:16px!important;-webkit-backdrop-filter:none;backdrop-filter:none;padding:28px 22px 24px!important;gap:16px!important;box-shadow:0 30px 50px -30px rgba(20,30,18,.7)!important;isolation:isolate}
+html.v2 #login .login-card::before{content:"";position:absolute;inset:8px;border:1px solid rgba(239,233,218,.14);border-radius:11px;pointer-events:none}
+html.v2 #login .login-card::after{content:"";position:absolute;right:-50px;bottom:-40px;width:260px;height:160px;opacity:.14;transform:rotate(-8deg);pointer-events:none;z-index:-1;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 120'><g fill='none' stroke='%23efe9da' stroke-width='2'><rect x='4' y='4' width='192' height='112'/><line x1='100' y1='0' x2='100' y2='120' stroke-width='4'/><line x1='36' y1='4' x2='36' y2='116'/><line x1='164' y1='4' x2='164' y2='116'/><line x1='36' y1='60' x2='164' y2='60'/></g></svg>") center/contain no-repeat}
+html.v2 #login .login-brand{display:flex!important;flex-direction:column;align-items:flex-start;gap:4px}
+html.v2 #login .login-brand .wm{font-family:var(--s-sport);font-stretch:85%;font-weight:800;font-size:.8rem;letter-spacing:.24em;color:var(--s-cream)}
+html.v2 #login .login-brand .wm::before{content:"";display:block;width:58px;height:58px;border-radius:50%;margin-bottom:14px;
+  background:radial-gradient(circle at 34% 28%,#f3fb9a 0%,#d9ec54 38%,#b7cc33 70%,#8ea224 100%);box-shadow:inset -8px -10px 16px rgba(60,70,10,.35),inset 6px 6px 12px rgba(255,255,230,.35),0 12px 22px -10px rgba(0,0,0,.6)}
+html.v2 #login .login-brand .wm-sub{color:var(--s-brass-l);margin:0}
+html.v2 #login .login-card h2{font-family:var(--s-sport);font-stretch:72%;font-weight:900;font-style:italic;font-size:3.4rem;line-height:.85;color:var(--s-cream)!important;text-transform:uppercase;margin:4px 0 0}
+html.v2 #login .login-card h2::after{content:"";display:block;width:80px;height:4px;margin-top:12px;background:linear-gradient(90deg,var(--s-lima) 0 60%,transparent 60% 66%,var(--s-lima) 66% 78%,transparent 78% 84%,var(--s-lima) 84% 90%,transparent 90%);transform:skewX(-20deg)}
+html.v2 #login .small,html.v2 #login .muted{color:rgba(239,233,218,.7)!important}
+html.v2 #login .field label{color:var(--s-brass-l);letter-spacing:.2em}
+html.v2 #login .field input{background:rgba(239,233,218,.08);border:1px solid rgba(239,233,218,.2);color:var(--s-cream);border-radius:10px;padding:14px;font-size:16px}
+html.v2 #login .field input:focus{outline:none;border-color:var(--s-lima);background:rgba(239,233,218,.12)}
+html.v2 #login #lgErr{color:#f08a7e!important}
+html.v2 #login .btn.pri{background:var(--s-lima);color:var(--s-olive);border-radius:10px;padding:16px;font-family:var(--s-sport);font-stretch:85%;font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:.95rem;box-shadow:0 12px 24px -12px rgba(207,224,74,.5)}
+html.v2 #login .linkish{color:var(--s-brass-l)}

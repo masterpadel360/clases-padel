@@ -11,6 +11,16 @@
     if (localStorage.getItem("disenoAlumno") !== "v2") return;
   } catch (e) { return; }
   document.documentElement.classList.add("v2");
+  // Marca qué pantalla está a la vista (login, alumno o panel) para el estilo, sin selectores pesados.
+  function pantallaVisible() {
+    const h = document.documentElement, vis = id => { const el = document.getElementById(id); return el && !el.hidden; };
+    h.classList.toggle("v2-staff", vis("staffApp")); h.classList.toggle("v2-portal", vis("portal")); h.classList.toggle("v2-login", vis("login"));
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    pantallaVisible();
+    const mo = new MutationObserver(pantallaVisible);
+    ["staffApp", "portal", "login"].forEach(id => { const el = document.getElementById(id); if (el) mo.observe(el, { attributes: true, attributeFilter: ["hidden"] }); });
+  });
   const fl = document.createElement("link"); fl.rel = "stylesheet";
   fl.href = "https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=Hanken+Grotesk:wght@400;500;600;700&family=Pinyon+Script&display=swap";
   document.head.appendChild(fl);
