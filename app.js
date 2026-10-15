@@ -660,16 +660,26 @@ function render(){
 }
 
 /* ---------- Objetivo de alumnos ---------- */
+const objMin=()=>{ try{ return localStorage.getItem("objMin")==="1"; }catch(e){ return false; } };
+function setObjMin(v){ try{ localStorage.setItem("objMin",v?"1":"0"); }catch(e){} objBar(); }
 function objBar(){ const b=$("#objBar"); if(!b) return; const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.alumnos.filter(a=>a.activo!==false).length;
   b.hidden=S.modo==="profe"||!S.esOwner||S.dbState!=="ok";
-  if(!meta){ b.innerHTML=`<span class="obj-k">Objetivo</span><span class="obj-t">Poné cuántos alumnos querés tener</span><span class="obj-go">Elegir</span>`; return; }
+  const min=objMin(); b.classList.toggle("min",min);
+  if(min){ b.innerHTML=`<span class="obj-mini">🎯 <b class="num">${n}</b>${meta?`/<span class="num">${meta}</span>`:""}${meta&&n<meta?` · faltan <b class="num">${meta-n}</b>`:""}</span><span class="obj-mbar"><i style="width:${meta?Math.min(100,Math.round(n/meta*100)):0}%"></i></span>`; b.setAttribute("aria-label","Mostrar objetivo de alumnos"); return; }
+  if(!meta){ b.innerHTML=`<span class="obj-k">Objetivo</span><span class="obj-t">Poné cuántos alumnos querés tener</span><span class="obj-go">Elegir</span><span class="obj-grip" aria-hidden="true"></span>`; return; }
   const falta=Math.max(0,meta-n), pct=Math.min(100,Math.round(n/meta*100));
-  b.innerHTML=`<span class="obj-wm num" aria-hidden="true">${meta}</span><span class="obj-k">Objetivo ${meta}</span><span class="obj-t"><b class="num">${n}</b> alumnos · ${falta?`faltan <b class="num">${falta}</b>`:`¡llegaste! 🎯${n>meta?` +${n-meta}`:""}`}</span><span class="obj-pct num">${pct}%</span><span class="obj-bar"><i style="width:${pct}%"></i></span>`;
-  b.setAttribute("aria-label",`Objetivo ${meta} alumnos. Tenés ${n}${falta?`, faltan ${falta}`:", llegaste"}. Tocá para cambiarlo.`); }
+  b.innerHTML=`<span class="obj-wm num" aria-hidden="true">${meta}</span><span class="obj-k">Objetivo ${meta}</span><span class="obj-t"><b class="num">${n}</b> alumnos · ${falta?`faltan <b class="num">${falta}</b>`:`¡llegaste! 🎯${n>meta?` +${n-meta}`:""}`}</span><span class="obj-pct num">${pct}%</span><span class="obj-bar"><i style="width:${pct}%"></i></span><span class="obj-grip" aria-hidden="true"></span>`;
+  b.setAttribute("aria-label",`Objetivo ${meta} alumnos. Tenés ${n}${falta?`, faltan ${falta}`:", llegaste"}. Tocá para cambiarlo, deslizá para arriba para esconderlo.`); }
+// Deslizar para arriba: se achica. Para abajo (o tocar la rayita): vuelve.
+{ let y0=null, swiped=false; const bar=()=>$("#objBar");
+  document.addEventListener("touchstart",e=>{ const b=bar(); if(b&&b.contains(e.target)){ y0=e.touches[0].clientY; swiped=false; } else y0=null; },{passive:true});
+  document.addEventListener("touchmove",e=>{ if(y0===null) return; const dy=e.touches[0].clientY-y0; if(dy<-25&&!objMin()){ swiped=true; y0=null; setObjMin(true); } else if(dy>25&&objMin()){ swiped=true; y0=null; setObjMin(false); } },{passive:true});
+  document.addEventListener("click",e=>{ const b=bar(); if(swiped&&b&&b.contains(e.target)){ e.stopPropagation(); e.preventDefault(); swiped=false; } },true); }
 function openObjetivo(){ const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.alumnos.filter(a=>a.activo!==false).length;
   openSheet(`<div style="display:grid;gap:4px;margin-bottom:12px"><span class="flabel">Tu meta</span><h2 class="disp">Objetivo de alumnos</h2></div><p class="small muted" style="margin:0 0 12px">Hoy tenés <b>${n}</b> alumnos activos (Jump + Espacio). ¿A cuántos querés llegar?</p>
     <div class="seg" style="grid-template-columns:repeat(4,1fr);margin:0 0 12px">${[50,100,150,200].map(v=>`<button type="button" class="seg-b" data-act="objPick" data-v="${v}" aria-pressed="${v===meta}">${v}</button>`).join("")}</div>
     <div class="field"><label for="objIn">Otro número</label><input id="objIn" type="number" inputmode="numeric" min="0" step="1" value="${meta||""}" placeholder="Ej: 120"></div>
+    <p class="small muted" style="margin:12px 0 0">Tip: deslizá la franja para arriba y se achica; para abajo, vuelve.</p>
     <div class="btns" style="margin-top:14px">${meta?`<button class="btn sec2" data-act="objBorrar">Sacarlo</button>`:"<span></span>"}<button class="btn pri" data-act="objSave">Guardar</button></div>`); }
 async function guardarObjetivo(v){ if(await safe(()=>S.db.doc("config/general").set({...S.cfg,objetivoAlumnos:v}),v?`Objetivo: ${v} alumnos`:"Objetivo sacado")){ S.cfg={...S.cfg,objetivoAlumnos:v}; closeSheet(); render(); } }
 
@@ -863,7 +873,7 @@ document.addEventListener("click",async e=>{
     case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.hMovs=S.hMovs.filter(x=>x.id!==b.dataset.id); render(); await guardarHorasDoc(); break; }
     case "pagoTodo": { $("#ppMonto").value=Math.max(0,saldoProfe().saldo); break; }
     case "vhSave": { const v=Number($("#vh2").value)||0; if(await safe(()=>S.db.doc("config/general").set({...S.cfg,valorHora:v}),`Valor por hora: ${money(v)}`)) render(); break; }
-    case "objetivo": openObjetivo(); break;
+    case "objetivo": if(objMin()) setObjMin(false); else openObjetivo(); break;
     case "objPick": { $("#objIn").value=b.dataset.v; b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); break; }
     case "objSave": { const v=Math.max(0,Math.round(Number($("#objIn").value)||0)); await guardarObjetivo(v); break; }
     case "objBorrar": await guardarObjetivo(0); break;

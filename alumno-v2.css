@@ -429,3 +429,12 @@ html.v2 .sheet .list{background:var(--s-card);border:0;border-radius:12px;box-sh
 html.v2 #staffApp .obj{background:var(--s-card);border-color:var(--s-line);color:var(--s-ink)}
 html.v2 #staffApp .obj-k,html.v2 #staffApp .obj-pct{font-family:var(--s-sport)}
 html.v2 #staffApp .obj-bar i{background:linear-gradient(90deg,var(--s-olive),var(--s-lima,var(--s-olive)))}
+.obj{touch-action:pan-x;transition:padding .2s,margin .2s}
+.obj-grip{grid-column:1/-1;justify-self:center;width:34px;height:4px;border-radius:9px;background:currentColor;opacity:.18;margin-top:8px}
+.obj.min{display:flex;align-items:center;gap:10px;padding:5px 14px;margin-top:8px;border-radius:999px}
+.obj.min[hidden]{display:none}
+.obj-mini{font-size:13px;white-space:nowrap;opacity:.85}
+.obj-mini b{font-weight:800}
+.obj-mbar{flex:1;height:4px;border-radius:9px;background:rgba(0,0,0,.08);overflow:hidden}
+.obj-mbar i{display:block;height:100%;background:var(--s-olive,#556b2f)}
+html.v2 #staffApp .obj-mbar i{background:linear-gradient(90deg,var(--s-olive),var(--s-lima))}
