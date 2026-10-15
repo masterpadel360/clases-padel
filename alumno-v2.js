@@ -195,6 +195,7 @@
 
   /* ---- Sumar a alguien a un turno (prueba, invitado o un alumno que recupera, aunque sea de otro club) ---- */
   let extrasSub = false;
+  window.escucharExtras = () => escucharExtras();
   function escucharExtras() {
     if (extrasSub || !window.MODO_STAFF || typeof fdb === "undefined" || !fdb) return; extrasSub = true;
     const d = new Date(now); d.setDate(d.getDate() - 8);

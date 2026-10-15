@@ -519,3 +519,14 @@ html.v2 #staffApp button:active{transform:scale(.97);filter:brightness(.92)}
 html.v2 #staffApp .list>.row{content-visibility:auto;contain-intrinsic-size:auto 92px}
 html.v2 #staffApp .tu{content-visibility:auto;contain-intrinsic-size:auto 300px}
 html.v2 #staffApp .sec{contain:layout style}
+/* Asistencia: quién marcar, quién recupera, quién avisó */
+.as-pend{margin:10px 0 0;padding:12px 14px;border-radius:12px;font-weight:700;text-align:center;background:#fbe4e1;color:#a51f1f;border:1px solid #c62828}
+.as-pend.ok{background:#e3f1df;color:#1f6b24;border-color:#2e7d32}
+.as-pend.fut{background:#e2eaf6;color:#23497f;border-color:#2c5aa0;font-weight:600}
+.as-res{margin:-4px 0 8px;color:var(--k-dim,#465041)}
+html.v2 #staffApp .row.as-rec{box-shadow:inset 5px 0 0 var(--k-amb,#b86e00);background:#fdf6e8}
+html.v2 #staffApp .row.as-prueba{box-shadow:inset 5px 0 0 var(--k-jump,#2c5aa0)}
+html.v2 #staffApp .row.as-aviso{box-shadow:inset 5px 0 0 #9aa391;background:#f1f2ec}
+html.v2 #staffApp .row.as-aviso .name{color:#5d6657}
+html.v2 #staffApp .tag.no{background:#fbe4e1;color:#a51f1f}
+.as-cambiar{justify-self:start;font-size:13px}
