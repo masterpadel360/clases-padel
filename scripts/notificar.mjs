@@ -39,6 +39,20 @@ async function enviar(uid, { title, body, tag }) {
   return res.successCount;
 }
 
+/* ---------- 0) Lluvia: avisar a cada alumno que se suspendió su clase ---------- */
+{
+  const porAlumno = {}; Object.entries(tokens).forEach(([uid, t]) => { if (t.rol === "alumno" && t.alumnoId && t.tokens && t.tokens.length) (porAlumno[t.alumnoId] = porAlumno[t.alumnoId] || []).push(uid); });
+  const pend = (await db.collection("lluvias").where("notificado", "==", false).get()).docs;
+  for (const d of pend) {
+    const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
+    if (!ok) continue;
+    const l = d.data(); const cuando = l.fecha === hoy ? "de hoy" : `del ${fechaTxt(l.fecha).replace(/^el /, "")}`;
+    let n = 0;
+    for (const aid of l.alumnos || []) for (const uid of porAlumno[aid] || []) n += await enviar(uid, { title: `🌧 Se suspendió tu clase ${cuando} ${l.hora}`, body: `Por lluvia. Te queda una clase para recuperar: reservala desde la app cuando quieras.`, tag: "lluvia" });
+    console.log(`Lluvia ${l.fecha} ${l.hora} ${l.club}: ${n} notificaciones`);
+  }
+}
+
 /* ---------- 1) Avisos para Gabriel ---------- */
 const staff = Object.entries(tokens).filter(([, t]) => t.rol === "dueño").map(([uid]) => uid);
 const desde = admin.firestore.Timestamp.fromDate(new Date(ahora.getTime() - 6 * 3600e3));

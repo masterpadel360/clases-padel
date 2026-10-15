@@ -128,7 +128,7 @@
 
   window.vInicio = function (a, wa) {
     const rg = rangoMes(); const cl = misClases(0, rg).filter(c => c.fecha.startsWith(mesKey(now)));
-    const prox = misClases(70).find(c => !c.aus && inicioDe(c.fecha, c.hora).getTime() > Date.now());
+    const mk0 = marcasAl(a); const prox = misClases(70).find(c => !c.aus && mk0[`${c.fecha}|${c.hora}`] !== "lluvia" && inicioDe(c.fecha, c.hora).getTime() > Date.now());
     const marcas = marcasAl(a); const proxKey = prox ? `${prox.fecha}|${prox.hora}` : "";
     const rec = recAl().reduce((s, x) => s + x.n, 0); const bk = recAl();
     const estMes = estPago(a, mesKey(now));
@@ -159,6 +159,8 @@
     } else if (est === "pendiente" && conPlazo(mes) && dias >= 0 && dias <= 3) {
       out.push(`<button class="v2-recordar suave" data-pa="pagar" data-m="${mes}">${icoP}<span class="tx"><b>${dias === 0 ? "Hoy vence tu cuota" : `Te ${dias === 1 ? "queda 1 día" : `quedan ${dias} días`} para pagar`}</b><small>La cuota de ${MESN[now.getMonth()]} vence el ${pagoVence(mes)}</small></span><span class="v2-cta">Pagar</span></button>`);
     }
+    { const mk = marcasAl(a); const ll = Object.keys(mk).filter(k => mk[k] === "lluvia" && k.slice(0, 10) >= hoyISO).sort();
+      ll.forEach(k => { const [f, h] = k.split("|"); const d = isoDate(f); out.push(`<div class="v2-recordar suave"><span class="ico" style="font-size:20px">🌧</span><span class="tx"><b>Se suspendió tu clase ${f === hoyISO ? "de hoy" : `del ${DC[d.getDay()].toLowerCase()} ${d.getDate()}`} ${h}</b><small>Por lluvia. Te queda para recuperar.</small></span></div>`); }); }
     { const px = aumentoProx(a); if (px && (tab === "inicio" || tab === "pagos")) out.push(`<div class="v2-recordar suave v2-aum">${icoP}<span class="tx"><b>Desde ${MESN[Number(px.desde.slice(5, 7)) - 1]} la clase pasa a ${money(px.precio).replace(/\$\s+/, "$")}</b><small>Hasta entonces seguís pagando ${money(px.antes).replace(/\$\s+/, "$")} por clase.</small></span></div>`); }
     if (rec) out.push(`<button class="v2-recordar" data-pa="${tab === "inicio" ? "irRec" : "v2irRec"}">${ico}<span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>`);
     return out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "";

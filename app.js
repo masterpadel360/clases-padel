@@ -235,7 +235,7 @@ function vHoy(){
   ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño"):""}
   ${avisosHoyHTML()}
 
-  ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:""}
+  ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><span style="display:flex;gap:14px;align-items:center"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></span></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:""}
 
   ${recs.length?`<section class="sec"><div class="sec-head"><h3>Tienen clases para recuperar</h3><button class="linkish" data-act="tab" data-t="recuperar">Ver todo</button></div><div class="list">${recs.slice(0,5).map(recRow).join("")}</div></section>`:""}
 
@@ -307,6 +307,7 @@ function vAgenda(){
   <section class="sec" style="margin-top:4px">
     <div class="days" id="daysStrip">${fechas.map((f,i)=>{const k=toISO(f);const n=slotsDe(f.getDay()).length;const mes=(i===0||f.getDate()===1)?`<span class="mes">${f.toLocaleDateString("es-AR",{month:"short"}).replace(".","")}</span>`:"";return `<button class="day ${k===hoyISO?"hoy":""}" data-act="fecha" data-f="${k}" aria-pressed="${k===iso}" aria-label="${DIAS_LARGO[f.getDay()]} ${f.getDate()}">${mes}<small>${DIAS[f.getDay()]}</small><b class="num">${f.getDate()}</b><span class="cnt num">${n?n+" t":"–"}</span></button>`}).join("")}</div>
     <div class="sec-head" style="margin-top:6px"><h2 class="disp">${DIAS_LARGO[S.dia]} ${sel.getDate()}</h2><span class="small muted num">${extra}<span style="text-transform:capitalize">${mesTxt}</span> · ${S.modo==="profe"?`${slots.length} hora${slots.length===1?"":"s"} de clase · ${al} alumnos`:`${slots.length} turnos · ${al} alumnos · ${lib} libres`}</span></div>
+    ${slots.length&&iso>=hoyISO?`<button class="mini lluvia-btn" data-act="lluvia" data-f="${iso}">🌧 Suspender por lluvia</button>`:""}
     ${slots.length?`<div class="list">${slots.map(t=>slotHTML(t,iso)).join("")}</div>`:`<div class="empty">Sin clases ${DIAS_LARGO[S.dia].toLowerCase()}${S.club?" en "+S.club:""}.</div>`}
   </section>`;
 }
@@ -637,21 +638,52 @@ function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t);
     <p class="small as-res num">${res}${E.pend?` · <b class="due">${E.pend} sin marcar</b>`:""}</p>
     <div class="list">${E.marcar.map(filaFija).join("")}${E.recs.map(a=>filaRec(a,true)).join("")}${E.manual.map(a=>filaRec(a,false)).join("")}${E.prueba.map(filaPrueba).join("")}${E.avisaron.map(filaAviso).join("")}${!t.al.length&&!E.recs.length&&!E.manual.length&&!E.prueba.length?'<div class="empty">Sin alumnos en este turno.</div>':""}</div></section>`; }
 
+/* ---------- Lluvia: suspender varios turnos de una y avisar a los alumnos ---------- */
+const LL={fecha:null,club:"",sel:new Set(),ya:new Set()};
+async function openLluvia(fecha){ LL.fecha=fecha||hoyISO; LL.club=S.modo==="profe"?"JUMP":(S.club||""); LL.ya=new Set();
+  for(const c of ["JUMP","ESPACIO"]){ try{ const d=await S.db.collection("asistencia").doc(`${LL.fecha}_${c}`).get(); const mk=(d.exists&&d.data().marcas)||{}; Object.keys(mk).forEach(k=>{ if(mk[k]==="lluvia") LL.ya.add(`${c}|${k.split("|")[1]}`); }); }catch(e){} }
+  const ahora=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`;
+  LL.sel=new Set(lluviaTurnos().filter(t=>!LL.ya.has(`${t.club}|${t.hora}`)&&(LL.fecha>hoyISO||t.hora>ahora)).map(t=>`${t.club}|${t.hora}`)); pintarLluvia(); }
+function lluviaTurnos(){ const dow=isoDate(LL.fecha).getDay(); return turnos(LL.club).filter(t=>t.dia===dow).map(t=>({...t,al:t.al.filter(a=>!a.inicio||a.inicio<=LL.fecha)})).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
+function pintarLluvia(){ const ts=lluviaTurnos(); const d=isoDate(LL.fecha); const n=ts.filter(t=>LL.sel.has(`${t.club}|${t.hora}`)).reduce((s,t)=>s+t.al.length,0); const nt=ts.filter(t=>LL.sel.has(`${t.club}|${t.hora}`)).length;
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">🌧 Lluvia</span><h2 class="disp">Suspender clases</h2></div>
+    <div class="two"><div class="field"><label for="llF">Día</label><input id="llF" type="date" value="${LL.fecha}" min="${hoyISO}"></div>
+    <div class="field"><label>Club</label><div class="seg" style="grid-template-columns:repeat(${S.modo==="profe"?1:3},1fr);margin:0">${(S.modo==="profe"?[["JUMP","Jump"]]:[["","Los dos"],["JUMP","Jump"],["ESPACIO","Espacio"]]).map(([v,l])=>`<button type="button" class="seg-b" data-act="llClub" data-v="${v}" aria-pressed="${LL.club===v}">${l}</button>`).join("")}</div></div></div>
+    <div class="aum-list">${ts.length?ts.map(t=>{ const k=`${t.club}|${t.hora}`, ya=LL.ya.has(k), on=LL.sel.has(k);
+      return `<label class="aum-row ${on||ya?"on":""}"><input type="checkbox" data-act="llT" data-k="${k}" ${on||ya?"checked":""} ${ya?"disabled":""}><span class="aum-n"><b>${t.hora} · ${t.club==="ESPACIO"?"Espacio":"Jump"}</b><small>${ya?"Ya está suspendida":`${t.al.length} alumno${t.al.length===1?"":"s"}${t.nivel?" · "+esc(t.nivel):""}`}</small></span><span class="tag ${t.club}">${t.club==="ESPACIO"?"Espacio":"Jump"}</span></label>`; }).join(""):`<div class="empty">No hay turnos ${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}.</div>`}</div>
+    <p class="small aum-exp">A cada alumno de los turnos elegidos se le suma <b>una clase para recuperar</b> (2 semanas) y le llega una <b>notificación</b> al celular avisándole que se suspendió.</p>
+    <div class="btns"><button class="btn sec2" data-act="close">Cancelar</button><button class="btn pri" data-act="llOk" ${nt?"":"disabled"}>Suspender ${nt} turno${nt===1?"":"s"} · ${n} alumnos</button></div>`); }
+async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(`${t.club}|${t.hora}`)&&!LL.ya.has(`${t.club}|${t.hora}`)); if(!ts.length) return;
+  b.disabled=true; b.textContent="Suspendiendo…"; let tot=0; const lineas=[];
+  for(const t of ts){ const ids=await lluviaTurno(t.club,LL.fecha,t.hora,true); if(!ids) continue; tot+=ids.length; lineas.push(`${t.hora} (${t.club==="ESPACIO"?"Espacio La 10":"Jump"})`);
+    await safe(()=>S.db.doc(`lluvias/${LL.fecha}_${t.club}_${hhmmDe(t.hora)}`).set({club:t.club,fecha:LL.fecha,hora:t.hora,alumnos:ids,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})); }
+  const d=isoDate(LL.fecha); const cuando=LL.fecha===hoyISO?"hoy":`el ${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth()+1}`;
+  const msg=`🌧 Por la lluvia se suspenden las clases de ${cuando}: ${lineas.join(", ")}. A cada uno le queda la clase para recuperar en las próximas 2 semanas, la reservan desde la app.`;
+  render(); openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🌧</div><h2 class="disp" style="margin:0">Clases suspendidas</h2>
+    <p class="small" style="margin:0">${lineas.length} turno${lineas.length===1?"":"s"} · ${tot} alumnos con clase para recuperar. La notificación les llega en unos minutos.</p>
+    <div class="msg" style="text-align:left;width:100%"><span class="small muted">Si querés avisar también en el grupo de WhatsApp:</span><div class="bubble">${esc(msg)}</div><button class="mini" data-act="copy" data-text="${esc(msg)}">Copiar mensaje</button></div>
+    <button class="btn pri" data-act="close" style="width:100%">Listo</button></div>`); }
+
 // Suspender un turno por lluvia (o deshacerlo): queda marcado en la asistencia y cada alumno suma (o resta) una clase para recuperar.
-async function lluviaTurno(club,fecha,hora){
-  const t=turnos(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return;
+async function lluviaTurno(club,fecha,hora,auto=false){
+  let t=turnos(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return; t={...t,al:t.al.filter(a=>!a.inicio||a.inicio<=fecha)};
   const ref=S.db.collection("asistencia").doc(`${fecha}_${club}`); let mk={};
   if(S.asKey===`${fecha}_${club}`) mk={...S.asMarcas}; else { try{ const d=await ref.get(); mk={...((d.exists&&d.data().marcas)||{})}; }catch(e){} }
-  const quitar=t.al.length&&t.al.every(a=>mk[`${a.id}|${hora}`]==="lluvia");
-  if(!confirm(quitar?`¿Quitar la suspensión por lluvia de las ${hora}? A cada uno se le descuenta la clase para recuperar.`:`¿Se suspendió por lluvia la clase de las ${hora}? Queda anotado en la asistencia y a cada alumno (${t.al.length}) le suma una clase para recuperar.`)) return;
+  const quitar=!auto&&t.al.length&&t.al.every(a=>mk[`${a.id}|${hora}`]==="lluvia");
+  if(!auto&&!confirm(quitar?`¿Quitar la suspensión por lluvia de las ${hora}? A cada uno se le descuenta la clase para recuperar.`:`¿Se suspendió por lluvia la clase de las ${hora}? Queda anotado en la asistencia y a cada alumno (${t.al.length}) le suma una clase para recuperar.`)) return;
   const cambios=[];
   t.al.forEach(a=>{ const k=`${a.id}|${hora}`; const prev=mk[k];
     const avA=avisoApp(a.id,fecha,hora,"ausencia"); const yaTiene=prev==="recupera"||(avA&&avA.conRecupero&&!vuelveApp(a.id,fecha,hora));
     if(quitar){ delete mk[k]; if(!yaTiene) cambios.push([a,-1]); }
     else if(prev!=="lluvia"){ mk[k]="lluvia"; if(!yaTiene) cambios.push([a,1]); } });
+  // Los que venían a recuperar en ese turno: también se les devuelve la clase.
+  const recs=S.avisos.filter(v=>v.tipo==="recupera"&&v.club===club&&v.fecha===fecha&&v.hora===hora&&!vuelveApp(v.alumnoId,fecha,hora)).map(v=>S.alumnos.find(x=>x.id===v.alumnoId)).filter(Boolean);
+  recs.forEach(a=>{ const k=`${a.id}|${hora}`; if(quitar){ if(mk[k]==="lluvia"){ delete mk[k]; cambios.push([a,-1]); } } else if(mk[k]!=="lluvia"){ mk[k]="lluvia"; cambios.push([a,1]); } });
   if(S.asKey===`${fecha}_${club}`){ S.asMarcas=mk; if(!(await guardarAsist())) return; }
   else if(!(await safe(()=>ref.set({fecha,club,marcas:mk},{merge:false})))) return;
   for(const [a,d] of cambios) await setRec(a,d,fecha);
+  if(quitar) { try{ const lr=S.db.doc(`lluvias/${fecha}_${club}_${hhmmDe(hora)}`); const ld=await lr.get(); if(ld.exists&&!ld.data().notificado) await lr.delete(); }catch(e){} }
+  if(auto) return [...t.al.filter(a=>{ const v=avisoApp(a.id,fecha,hora,"ausencia"); return !(v&&v.conRecupero&&!vuelveApp(a.id,fecha,hora)); }),...recs].map(a=>a.id);
   render(); toast(quitar?`Se quitó la lluvia de las ${hora}`:`${hora} suspendida por lluvia · ${cambios.length} con clase para recuperar`);
 }
 function openAsRecAdd(hora){
@@ -754,6 +786,9 @@ async function guardarAumento(b){ const act=mesKey(now); const al=S.alumnos.filt
       const p={aumentos:L}; if(tipo==="ahora") p.precioClase=pl.precio; bt.update(colA().doc(a.id),p); });
     await bt.commit(); } },`Aumento ${AUM.desde<act?"registrado":"aplicado"} a ${al.length} alumno${al.length===1?"":"s"}`);
   if(ok){ AUM.sel=null; closeSheet(); } else { b.disabled=false; b.textContent="Aplicar"; } }
+document.addEventListener("change",async e=>{ const t=e.target; if(!t||!$("#llF")) return;
+  if(t.id==="llF"&&t.value){ await openLluvia(t.value); return; }
+  if(t.dataset&&t.dataset.act==="llT"){ if(t.checked) LL.sel.add(t.dataset.k); else LL.sel.delete(t.dataset.k); pintarLluvia(); } });
 document.addEventListener("change",e=>{ const t=e.target; if(!t||!$("#aumDesde")) return;
   if(t.id==="aumDesde"&&t.value){ AUM.desde=t.value; const y=($(".aum-list")||{}).scrollTop||0; openAumento(); const l=$(".aum-list"); if(l) l.scrollTop=y; }
   else if(t.id==="aumMonto"){ AUM.monto=Math.max(0,Math.round(Number(t.value)||0)); const y=($(".aum-list")||{}).scrollTop||0; openAumento(); const l=$(".aum-list"); if(l) l.scrollTop=y; }
@@ -1032,6 +1067,9 @@ document.addEventListener("click",async e=>{
     case "asAbrir": { S.asAbrir=S.asAbrir||new Set(); S.asAbrir.add(`${b.dataset.id}|${b.dataset.hora}`); render(); break; }
     case "asRecNo": if(A){ const k=`${A.id}|${b.dataset.hora}`; if(S.asMarcas[k]==="falto") delete S.asMarcas[k]; else S.asMarcas[k]="falto"; render(); if(await guardarAsist()&&S.asMarcas[k]) toast(`${A.nombre} no vino a recuperar: pierde esa clase`); } break;
     case "asLluvia": await lluviaTurno(S.asClub,S.asFecha,b.dataset.hora); break;
+    case "lluvia": await openLluvia(b.dataset.f||hoyISO); break;
+    case "llClub": LL.club=b.dataset.v; { const ahora=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`; LL.sel=new Set(lluviaTurnos().filter(t=>!LL.ya.has(`${t.club}|${t.hora}`)&&(LL.fecha>hoyISO||t.hora>ahora)).map(t=>`${t.club}|${t.hora}`)); } pintarLluvia(); break;
+    case "llOk": await confirmarLluvia(b); break;
     case "asRecSel": if(A){ S.asMarcas[`${A.id}|${b.dataset.hora}`]="recuperando"; closeSheet(); if(await guardarAsist()){ await setRec(A,-1); toast(`${A.nombre} recupera hoy`); } } break;
     case "asRecQuitar": if(A){ delete S.asMarcas[`${A.id}|${b.dataset.hora}`]; render(); if(await guardarAsist()&&!avisoApp(A.id,S.asFecha,b.dataset.hora,"recupera")) await setRec(A,1,S.asFecha); } break;
     case "recMenos": if(A){ const prev=recPrev(A); if(await setRec(A,-1)) toast(`${A.nombre}: recuperó una clase`,()=>recVolver(A,prev)); } break;
