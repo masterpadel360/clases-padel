@@ -659,14 +659,16 @@ function render(){
   if(focused){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
 }
 
-/* ---------- Encabezado que se esconde al bajar y vuelve al subir ---------- */
-{ let yAnt=0, acc=0, tick=false;
+/* ---------- Encabezado que acompaña el dedo: se va yendo al bajar, vuelve al subir y al soltar se acomoda suave ---------- */
+{ let yAnt=scrollY, off=0, H=0, tick=false, tFin=null, dir=0;
+  const top=()=>document.querySelector("#staffApp .top");
+  const pintar=(h,anim)=>{ h.style.transition=anim?"transform .45s cubic-bezier(.22,1,.36,1), opacity .45s cubic-bezier(.22,1,.36,1)":"none";
+    h.style.transform=off?`translate3d(0,${-off}px,0)`:""; h.style.opacity=H?String(1-.55*(off/H)):""; h.classList.toggle("oculto",off>=H-1); };
   addEventListener("scroll",()=>{ if(tick) return; tick=true; requestAnimationFrame(()=>{ tick=false;
-    const h=document.querySelector("#staffApp .top"); if(!h||$("#staffApp").hidden) return;
-    const y=Math.max(0,scrollY), d=y-yAnt; yAnt=y;
-    if(y<60){ h.classList.remove("oculto"); acc=0; return; }
-    acc=(Math.sign(d)===Math.sign(acc)?acc:0)+d;
-    if(acc>12) h.classList.add("oculto"); else if(acc<-12) h.classList.remove("oculto"); }); },{passive:true}); }
+    const h=top(); if(!h||$("#staffApp").hidden||!$("#overlay").hidden) { yAnt=scrollY; return; }
+    H=h.offsetHeight+8; const y=Math.max(0,scrollY), d=y-yAnt; yAnt=y; if(Math.abs(d)>1) dir=Math.sign(d);
+    off=Math.min(H,Math.max(0,off+d)); if(y<off) off=y; pintar(h,false);
+    clearTimeout(tFin); tFin=setTimeout(()=>{ const h2=top(); if(!h2) return; off=(dir>0&&scrollY>H&&off>0)?H:0; pintar(h2,true); },140); }); },{passive:true}); }
 
 /* ---------- Objetivo de alumnos ---------- */
 const objMin=()=>{ try{ return localStorage.getItem("objMin")==="1"; }catch(e){ return false; } };

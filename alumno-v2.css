@@ -439,5 +439,5 @@ html.v2 #staffApp .obj-bar i{background:linear-gradient(90deg,var(--s-olive),var
 .obj-mbar i{display:block;height:100%;background:var(--s-olive,#556b2f)}
 html.v2 #staffApp .obj-mbar i{background:linear-gradient(90deg,var(--s-olive),var(--s-lima))}
 /* Encabezado del panel: se esconde al bajar */
-#staffApp .top{transition:transform .25s ease,box-shadow .25s;will-change:transform}
-#staffApp .top.oculto{transform:translateY(calc(-100% - env(safe-area-inset-top,0px) - 4px))}
+#staffApp .top{will-change:transform,opacity;backface-visibility:hidden}
+#staffApp .top.oculto{pointer-events:none}
