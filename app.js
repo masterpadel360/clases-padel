@@ -236,7 +236,7 @@ function vHoy(){
     <div class="bar" aria-label="${pct}% cobrado"><i style="width:${pct}%"></i></div>
     <div class="hero-foot num"><span>Cobrado <b>${money(cobrado)}</b></span><span>Falta <b style="color:var(--sun)">${money(pend)}</b></span></div>
   </section>
-  ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño")+gananciaHTML():""}
+  ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño")+libresHoyHTML()+gananciaHTML():""}
   ${avisosHoyHTML()}
 
   ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><span style="display:flex;gap:14px;align-items:center"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></span></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:""}
@@ -353,6 +353,25 @@ function vRecuperar(){
     ${Object.keys(grupos).length?`<div class="list">${Object.keys(grupos).sort().map(k=>`<div class="row" style="grid-template-columns:1fr"><div class="main" style="gap:6px"><span class="name" style="text-transform:capitalize">${esc(k)}</span><div class="who" style="display:flex;flex-wrap:wrap;gap:6px">${grupos[k].sort((x,y)=>ordenSemana(x)-ordenSemana(y)).map(t=>`<span class="pill">${DIAS[t.dia]} ${t.hora} · <b class="free">${CUPO-t.al.length}</b></span>`).join("")}</div></div></div>`).join("")}</div>`:`<div class="empty">Todos los turnos están completos.</div>`}
   </section>`;
 }
+/* ---------- Lugares libres para ofrecer a gente nueva ---------- */
+const capCat=c=>c?c.charAt(0).toUpperCase()+c.slice(1):"Sin categoría";
+function libresPorCat(club){ const g={};
+  turnos(club).filter(t=>t.al.length<CUPO).forEach(t=>{ const k=t.nivel?catNorm(t.nivel):""; (g[k]=g[k]||{nombre:t.nivel?String(t.nivel).trim():"",ts:[]}).ts.push(t); });
+  Object.values(g).forEach(x=>x.ts.sort((a,b)=>(a.dia||7)-(b.dia||7)||a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club)));
+  return Object.keys(g).sort((a,b)=>(!a)-(!b)||a.localeCompare(b)).map(k=>({k,...g[k],n:g[k].ts.reduce((s,t)=>s+CUPO-t.al.length,0)})); }
+function libresHoyHTML(){ const gs=libresPorCat(S.club); const n=gs.reduce((s,g)=>s+g.n,0); if(!n) return "";
+  return `<button class="row lib-card" data-act="libres" style="width:100%;text-align:left;margin-top:14px"><span class="main"><span class="name">Lugares libres para ofrecer</span><span class="meta">${gs.slice(0,4).map(g=>`<span class="tag">${esc(capCat(g.nombre))} · ${g.n}</span>`).join("")}${gs.length>4?`<span>+${gs.length-4} más</span>`:""}</span></span><span class="lib-n"><b class="num free">${n}</b><small>ver ›</small></span></button>`; }
+const LIB={club:""};
+function msgLibres(g){ const cl=c=>c==="ESPACIO"?"Espacio La 10":"Jump";
+  return `Hola! Te paso los horarios con lugar para ${g.nombre?`nivel ${g.nombre}`:"clases"}:\n${g.ts.map(t=>`• ${DIAS_LARGO[t.dia]} ${t.hora} en ${cl(t.club)}${CUPO-t.al.length===1?" (queda 1 lugar)":""}`).join("\n")}\n\nSon grupos de hasta ${CUPO}. ¿Cuál te queda mejor?`; }
+function openLibres(){ const gs=libresPorCat(LIB.club); const n=gs.reduce((s,g)=>s+g.n,0);
+  openSheet(`<div style="display:grid;gap:12px">
+    <div style="display:grid;gap:4px"><span class="flabel">Para gente que quiere empezar</span><h2 class="disp">Lugares libres</h2><span class="small muted">${(()=>{ const nt=gs.reduce((s,g)=>s+g.ts.length,0); return `${n} lugar${n===1?"":"es"} en ${nt} turno${nt===1?"":"s"}.`; })()} Tocá <b>Copiar</b> o <b>WhatsApp</b> en una categoría y se lo mandás tal cual.</span></div>
+    <div class="seg" style="grid-template-columns:repeat(3,1fr);margin:0">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button type="button" class="seg-b" data-act="libClub" data-v="${v}" aria-pressed="${LIB.club===v}">${l}</button>`).join("")}</div>
+    ${gs.length?gs.map(g=>{ const txt=msgLibres(g); return `<div class="list lib-cat"><div class="lib-h"><b>${esc(capCat(g.nombre))}</b><span class="small muted num">${g.n} lugar${g.n===1?"":"es"}</span></div>
+      <div class="lib-ts">${g.ts.map(t=>`<span class="pill"><b>${DIAS[t.dia]} ${t.hora}</b>${LIB.club?"":` <span class="tag ${t.club}">${t.club==="ESPACIO"?"ESP":"JUMP"}</span>`} <b class="free">${CUPO-t.al.length}</b></span>`).join("")}</div>
+      <div class="lib-acc"><button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button><a class="mini go" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">WhatsApp →</a></div></div>`; }).join(""):`<div class="empty">Todos los turnos están completos.</div>`}
+    <div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div></div>`); }
 function openRecAdd(q=""){
   const list=activos().filter(a=>!q||a.nombre.toLowerCase().includes(q.toLowerCase())).sort((x,y)=>x.nombre.localeCompare(y.nombre)).slice(0,40);
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Anotar para recuperar</h2><span class="small muted">Tocá quién faltó. Le suma una clase a recuperar.</span></div>
@@ -1137,6 +1156,8 @@ document.addEventListener("click",async e=>{
     case "copy": { const t=b.dataset.text; try{ await navigator.clipboard.writeText(t); toast("Mensaje copiado"); }catch(err){ const r=document.createRange(); const bub=b.closest(".msg")?.querySelector(".bubble"); if(bub){ r.selectNodeContents(bub); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Texto seleccionado, copialo"); } } break; }
     case "recMas": if(A){ if(await setRec(A,1)){ toast(`${A.nombre}: +1 clase a recuperar (hasta el ${fechaDM(venceDe(hoyISO))})`); if($("#recQ")) openRecAdd($("#recQ").value); } } break;
     case "recAdd": openRecAdd(); break;
+    case "libres": LIB.club=S.club||""; openLibres(); break;
+    case "libClub": LIB.club=b.dataset.v; openLibres(); break;
     case "pagoNuevo": openPagoProfe(); break;
     case "verComp": if(A) verComprobante(A); break;
     case "turnoCat": openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;

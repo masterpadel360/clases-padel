@@ -582,3 +582,9 @@ html.v2 #staffApp .row.gc-row{display:grid;grid-template-columns:1fr auto;align-
 .gan-top{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .gan-top .big-num{font-size:clamp(20px,6.4vw,28px);white-space:nowrap}
 .gan-top .lbl{font-size:11px}
+.lib-card{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;border-radius:18px}
+.lib-n{display:grid;justify-items:end;line-height:1}.lib-n b{font-size:28px}.lib-n small{font-size:11px;color:var(--muted);margin-top:4px}
+.lib-cat{padding:14px;display:grid;gap:10px}
+.lib-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.lib-h b{font-size:16px}
+.lib-ts{display:flex;flex-wrap:wrap;gap:6px}.lib-ts .tag{font-size:9.5px;padding:1px 6px}
+.lib-acc{display:flex;gap:8px;justify-content:flex-end}
