@@ -530,3 +530,18 @@ html.v2 #staffApp .row.as-aviso{box-shadow:inset 5px 0 0 #9aa391;background:#f1f
 html.v2 #staffApp .row.as-aviso .name{color:#5d6657}
 html.v2 #staffApp .tag.no{background:#fbe4e1;color:#a51f1f}
 .as-cambiar{justify-self:start;font-size:13px}
+/* Asistencia práctica: una línea por alumno con ✓ / ✗ */
+html.v2 #staffApp .row.as-l{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:10px 12px 10px 16px}
+html.v2 #staffApp .row.as-l .name{font-size:16px;line-height:1.3}
+.as-bt{display:flex;gap:6px}
+.as-b{width:58px;height:50px;border-radius:12px;font-size:22px;font-weight:900;line-height:1;display:grid;place-items:center;gap:0;padding:4px 0;border:1.5px solid}
+.as-b small{font-size:10.5px;font-weight:800;letter-spacing:.02em}
+html.v2 #staffApp .as-b.ok{color:var(--k-ok);border-color:var(--k-ok);background:var(--k-ok-s)}
+html.v2 #staffApp .as-b.no{color:var(--k-no);border-color:var(--k-no);background:var(--k-no-s)}
+html.v2 #staffApp .as-b.ok[aria-pressed="true"]{background:var(--k-ok);color:#fff}
+html.v2 #staffApp .as-b.no[aria-pressed="true"]{background:var(--k-no);color:#fff}
+html.v2 #staffApp .as-b[aria-pressed="false"]{opacity:.9}
+.as-todos{width:100%;min-height:52px;margin:0 0 10px;border-radius:12px;border:0;background:var(--k-ok,#2e7d32);color:#fff;font-weight:800;font-size:16px}
+.as-todos small{opacity:.85;font-weight:600}
+html.v2 #staffApp .row.as-l .name{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+html.v2 #staffApp .row.as-l .name .tag{white-space:normal;max-width:100%;overflow:visible;text-overflow:clip;letter-spacing:.02em;text-transform:none;font-size:12px}

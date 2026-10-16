@@ -69,8 +69,10 @@ async function procesar(env) {
   const primerNombre = n => String(n || "").trim().split(/\s+/)[0].replace(/^./, c => c.toUpperCase());
 
   const todos = (await fs.query("avisos", { fieldFilter: { field: { fieldPath: "fecha" }, op: "GREATER_THAN_OR_EQUAL", value: { stringValue: hoy } } })).map(d => d.data);
-  const staff = (await fs.list("tokens")).filter(t => t.data.rol === "dueño" && Array.isArray(t.data.tokens));
-  if (!staff.length) return;
+  const toks = await fs.list("tokens");
+  const staff = toks.filter(t => t.data.rol === "dueño" && Array.isArray(t.data.tokens));
+  const profes = toks.filter(t => t.data.rol === "profe" && Array.isArray(t.data.tokens));
+  if (!staff.length && !profes.length) return;
 
   const porAlumno = {};
   tomados.forEach(v => { (porAlumno[v.alumnoId] = porAlumno[v.alumnoId] || []).push(v); });
@@ -87,7 +89,8 @@ async function procesar(env) {
       const aus = lista.filter(v => v.tipo === "ausencia"), rec = lista.filter(v => v.tipo === "recupera");
       msg = { title: `${n}: ${lista.length} avisos`, body: [aus.length ? `no va ${aus.map(v => `${fechaTxt(v.fecha)} ${v.hora}`).join(", ")}` : "", rec.length ? `recupera ${rec.map(v => `${fechaTxt(v.fecha)} ${v.hora}`).join(", ")}` : ""].filter(Boolean).join(" · ") };
     }
-    for (const s of staff) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { ...msg, tag: "aviso-" + lista[0].alumnoId });
+    const quienes = lista.some(v => v.club === "JUMP") ? [...staff, ...profes] : staff;
+    for (const s of quienes) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { ...msg, tag: "aviso-" + lista[0].alumnoId });
   }
 }
 

@@ -55,6 +55,7 @@ async function enviar(uid, { title, body, tag }) {
 
 /* ---------- 1) Avisos para Gabriel ---------- */
 const staff = Object.entries(tokens).filter(([, t]) => t.rol === "dueño").map(([uid]) => uid);
+const profes = Object.entries(tokens).filter(([, t]) => t.rol === "profe").map(([uid]) => uid);
 const desde = admin.firestore.Timestamp.fromDate(new Date(ahora.getTime() - 6 * 3600e3));
 const pendientes = (await db.collection("avisos").where("creado", ">=", desde).get()).docs.filter(d => !d.data().notificado);
 // Los marcamos notificados antes de mandar: si el aviso al instante (Cloudflare) ya lo mandó, no sale repetido.
@@ -81,6 +82,8 @@ if (nuevos.length) {
       msg = { title: `${n}: ${lista.length} avisos`, body: [aus.length ? `no va ${aus.map(v => `${fechaTxt(v.fecha)} ${v.hora}`).join(", ")}` : "", rec.length ? `recupera ${rec.map(v => `${fechaTxt(v.fecha)} ${v.hora}`).join(", ")}` : ""].filter(Boolean).join(" · ") };
     }
     for (const uid of staff) await enviar(uid, { ...msg, tag: "aviso-" + lista[0].alumnoId });
+    // A Esteban (profe de Jump) también le llega lo de sus turnos.
+    if (lista.some(v => v.club === "JUMP")) for (const uid of profes) await enviar(uid, { ...msg, tag: "aviso-" + lista[0].alumnoId });
   }
   console.log(`Avisos notificados: ${nuevos.length}`);
 }
