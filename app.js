@@ -217,26 +217,41 @@ const PADDLE_SVG = `<svg class="paddle" viewBox="0 0 200 260" aria-hidden="true"
 <rect x="49" y="240" width="22" height="8" rx="3" fill="#0C1712"/></g>
 <g transform="translate(40 190)"><circle r="26" fill="#D6EE3B"/><path d="M-22 -13C-8 -5 -8 9 -20 17M22 -14C9 -6 8 8 21 16" fill="none" stroke="#F7FBE6" stroke-width="3.5" stroke-linecap="round"/><circle r="26" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="2"/></g></svg>`;
 const COURT_SVG = `<span class="hero-glow" aria-hidden="true"></span>`;
+/* ---------- Hoy: la clase de ahora, el resto del día y lo que hay que resolver ---------- */
+const sumMin=(h,m)=>{ const [a,b]=h.split(":").map(Number); const x=a*60+b+m; return `${pad(Math.floor(x/60))}:${pad(x%60)}`; };
+const clubN=c=>c==="ESPACIO"?"Espacio":"Jump";
+function estHoy(t){ const f=hoyISO, h=t.hora; const al=t.al.filter(a=>!a.inicio||a.inicio<=f);
+  const aus=al.filter(a=>avisoApp(a.id,f,h,"ausencia")&&!vuelveApp(a.id,f,h));
+  const recs=S.avisos.filter(v=>v.tipo==="recupera"&&v.club===t.club&&v.fecha===f&&v.hora===h&&!vuelveApp(v.alumnoId,f,h)).map(v=>S.alumnos.find(x=>x.id===v.alumnoId)).filter(Boolean);
+  const mk=(S.asMes||{})[`${t.club}|${f}`]||{}; const marcas=Object.keys(mk).filter(k=>k.endsWith("|"+h)); const lluvia=marcas.length&&marcas.every(k=>mk[k]==="lluvia");
+  const vienen=al.length-aus.length+recs.length; return {al,aus,recs,vienen,libres:Math.max(0,CUPO-vienen),tomada:marcas.length>0,lluvia}; }
 function vHoy(){
-  const al=activos(); const dow=now.getDay(); const clases=S.mes===mesKey(now)?slotsDe(dow):[];
-  const recs=al.filter(a=>recN(a)>0); const owner=S.esOwner&&S.modo!=="profe";
+  const owner=S.esOwner&&S.modo!=="profe"; escucharAsMes(mesKey(now));
+  const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const ts=turnos("").filter(t=>t.dia===now.getDay()).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
+  const ahora=ts.find(t=>sumMin(t.hora,60)>hhmm&&!t.e.lluvia);
+  const nom=a=>esc(nombreCorto(a.nombre));
+  const card=ahora?(()=>{ const e=ahora.e; const enCurso=ahora.hora<=hhmm; const chips=[`${e.vienen} vienen`,...e.aus.map(a=>`${nom(a)} avisó que no`),...e.recs.map(a=>`${nom(a)} recupera`),e.libres?`${e.libres} libre${e.libres===1?"":"s"}`:""].filter(Boolean);
+    return `<section class="hoy-now"><div class="hn-top"><span class="hn-k">${enCurso?"Ahora":"Próxima"} · ${clubN(ahora.club)}${ahora.nivel?` · ${esc(ahora.nivel)}`:""}</span><span class="hn-h num">${ahora.hora}</span></div>
+      <div class="hn-chips">${chips.map(c=>`<span>${c}</span>`).join("")}</div>
+      <button class="hn-btn" data-act="irAsist" data-f="${hoyISO}" data-c="${ahora.club}">${e.tomada?"✓ Asistencia tomada · ver":"Tomar asistencia"}</button></section>`; })()
+    :`<section class="hoy-now fin"><span class="hn-k">${ts.length?"Clases de hoy terminadas":"Hoy no hay clases"}</span><span class="hn-t">${ts.length?`${ts.filter(t=>t.e.tomada).length} de ${ts.length} turnos con asistencia`:"Disfrutá el día"}</span></section>`;
+  const filas=ts.filter(t=>t!==ahora).map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm;
+    const est=e.lluvia?`<span class="muted">🌧 Suspendida</span>`:e.tomada?`<span class="ok">✓ Tomada</span>`:fin?`<span class="no">Falta asistencia</span>`:`<span class="muted">${e.vienen} vienen${e.libres?` · ${e.libres} libre${e.libres===1?"":"s"}`:""}</span>`;
+    return `<button class="hoy-row" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}" data-k="hr-${t.club}-${t.hora}"><span><b class="num">${t.hora}</b> · ${clubN(t.club)}${t.nivel?` · ${esc(t.nivel)}`:""}</span>${est}</button>`; }).join("");
   return `
+  ${card}
+  ${filas?`<section class="sec"><div class="sec-head"><h3>Resto del día</h3><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button></div><div class="list">${filas}</div></section>`:ts.length?`<section class="sec" style="margin-top:8px;text-align:right"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Suspender por lluvia</button></section>`:""}
   ${owner?pendDuenoHTML():""}
   ${owner?tarjetaNotif("dueño"):""}
   <div id="secAvisos">${avisosHoyHTML()}</div>
-  ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><span style="display:flex;gap:14px;align-items:center"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></span></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:`<section class="sec"><div class="empty">Hoy no hay clases.</div></section>`}
   ${owner?libresHoyHTML():""}
-  ${recs.length?`<section class="sec"><div class="sec-head"><h3>Tienen clases para recuperar</h3><button class="linkish" data-act="tab" data-t="recuperar">Ver todo</button></div><div class="list">${recs.slice(0,5).map(recRow).join("")}</div></section>`:""}
-  ${al.length?"":emptyAlumnos()}`;
+  ${S.alumnos.length?"":emptyAlumnos()}`;
 }
 /* ---------- Pendientes de Gabriel (arriba de Hoy): lo que hay que hacer, y se va solo cuando está hecho ---------- */
 function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAct); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const item=(color,txt,btn)=>it.push(`<div class="pd-i"><i style="background:${color}"></i><span>${txt}</span>${btn||""}</div>`);
   const clubN=c=>c==="ESPACIO"?"Espacio":"Jump";
-  // 1) Asistencia de hoy de turnos que ya terminaron
-  if(S.asMes&&asMesKey===mAct){ slotsDe(now.getDay()).forEach(t=>{ const fin=(()=>{ const [h,m]=t.hora.split(":").map(Number); const x=h*60+m+60; return `${pad(Math.floor(x/60))}:${pad(x%60)}`; })();
-    if(hhmm<fin) return; const mk=S.asMes[`${t.club}|${hoyISO}`]||{}; if(Object.keys(mk).some(k=>k.endsWith("|"+t.hora))) return;
-    item("var(--k-no)",`<b>Tomar asistencia</b> ${t.hora} · ${clubN(t.club)}`,`<button class="mini go" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}">Abrir</button>`); }); }
   // 2) Avisos de alumnos sin ver
   const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
   if(nAv) item("var(--k-amb)",`<b>${nAv} aviso${nAv===1?"":"s"}</b> de alumnos sin ver`,`<a class="mini" href="#secAvisos">Ver</a>`);
@@ -252,27 +267,38 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
   // 6) Fin de mes: canchas y Esteban del mes anterior sin pagar (primeros 15 días)
   if(d<=15){ const mA=mesAnt(mAct); CANCHAS.forEach(([c])=>{ const C=canchaDe(c); const pg=C.pagos[mA]; const tot=canchaTotal(c,mA); if(tot>0&&!(pg&&pg.pagado)) item("var(--k-amb)",`<b>Pagar cancha ${esc(C.lugar)}</b> de ${mesSolo(mA)} · ${money(tot)}`,`<button class="mini" data-act="tab" data-t="dinero">Ver</button>`); });
     if(S.equipo[0]){ const {saldo}=saldoProfe(); if(saldo>0) item("var(--k-amb)",`<b>Pagarle a ${esc(nP)}</b> · le debés ${money(saldo)}`,`<button class="mini" data-act="tab" data-t="equipo">Ver</button>`); } }
-  return `<section class="sec pd" style="margin-top:4px"><div class="sec-head"><h3>Para hacer</h3><span class="small muted">${it.length?`${it.length} pendiente${it.length===1?"":"s"}`:""}</span></div>
-    ${it.length?`<div class="list pd-l">${it.join("")}</div>`:`<div class="pd-ok">Todo al día ✓</div>`}</section>`; }
+  if(!it.length) return `<div class="pd-ok">✓ Nada pendiente</div>`;
+  return `<section class="sec pd"><div class="sec-head"><h3>Para resolver</h3><span class="small muted num">${it.length}</span></div><div class="list pd-l">${it.join("")}</div></section>`; }
 
-/* ---------- Plata: cobros del mes, tu ganancia y las canchas, todo junto ---------- */
+/* ---------- Plata: lo que te queda, cómo vienen los cobros (los pagos entran solos por la app) y lo que pagás ---------- */
 function vDinero(){
-  const al=activos(); const pag=al.filter(a=>pago(a)); const deben=al.filter(a=>!pago(a)&&montoMes(a)>0);
-  const cobrado=pag.reduce((s,a)=>s+cobradoDe(a),0); const pend=deben.reduce((s,a)=>s+montoMes(a),0);
-  const pct=al.length?Math.round(pag.length/al.length*100):0; S.gMes=S.mes;
+  const m=S.mes; escucharAsMes(m); const al=S.alumnos.filter(a=>a.activo!==false&&!(a.inicio&&a.inicio.slice(0,7)>m));
+  const cobran=al.filter(a=>montoMes(a,m)>0); const pag=cobran.filter(a=>pago(a)); const deben=cobran.filter(a=>!pago(a));
+  const ing=cobran.reduce((t,a)=>t+montoMes(a,m),0), cob=pag.reduce((t,a)=>t+cobradoDe(a,m),0);
+  const eq=S.equipo[0]; const nP=(eq&&S.nombres[eq.id]||"Esteban").split(" ")[0]; const hE=eq?horasMes(eq.dias,m):0; const pE=eq?ganadoEn(m):0;
+  const cs=CANCHAS.map(([c])=>{ const C=canchaDe(c); const [y,mm]=m.split("-").map(Number); let hl=0,hs=0; for(let d=1;d<=new Date(y,mm,0).getDate();d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); hl+=u.luz; hs+=u.sin; } return {c,C,h:hl+hs,tot:canchaTotal(c,m),pg:C.pagos[m]&&C.pagos[m].pagado,sinPrecio:!C.luz&&!C.sin}; });
+  const gastos=pE+cs.reduce((t,x)=>t+x.tot,0); const pct=cobran.length?Math.round(pag.length/cobran.length*100):0;
+  const mny=v=>(v<0?"− ":"")+money(Math.abs(v));
+  const comps=Object.values(S.comps||{}).filter(c=>c.mes===m&&c.estado!=="rechazado").sort((a,b)=>((b.creado&&b.creado.seconds)||0)-((a.creado&&a.creado.seconds)||0)).slice(0,5);
+  const cuando=c=>{ const s=c.creado&&c.creado.seconds; if(!s) return ""; const d=new Date(s*1000); const f=toISO(d); return f===hoyISO?`hoy ${pad(d.getHours())}:${pad(d.getMinutes())}`:fmtCorto(f); };
   return `
-  <section class="hero" aria-label="Cobros del mes">${COURT_SVG}
-    <div class="month"><button data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="pill-date">${mesLbl(S.mes)}</span><button data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></div>
-    <div class="hero-main"><div class="mega num">${String(pag.length).padStart(2,"0")}<small style="font-size:.35em;opacity:.6">/${al.length}</small></div><div class="spec"><span class="spec-k">Pagaron</span><span>${S.club?S.club:`Jump ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"JUMP")).length} · Espacio ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"ESPACIO")).length}`}</span><span class="spec-k" style="margin-top:8px">Total del mes</span><span class="num">${money(cobrado+pend)}</span></div></div>
-    <div class="bar" aria-label="${pct}% cobrado"><i style="width:${pct}%"></i></div>
-    <div class="hero-foot num"><span>Cobrado <b>${money(cobrado)}</b></span><span>Falta <b style="color:var(--sun)">${money(pend)}</b></span></div>
-    ${deben.length?`<button class="btn pri" data-act="verDeben" style="justify-self:start;margin-top:4px">Ver quién debe (${deben.length}) ›</button>`:""}
-  </section>
-  ${gananciaHTML()}
-  <section class="sec"><div class="sec-head"><h3>Canchas · ${mesSolo(S.mes)}</h3></div><p class="small muted" style="margin:0">Las horas se cargan solas con cada asistencia tomada (lluvia no cuenta).</p></section>
-  ${CANCHAS.filter(([c])=>!S.club||S.club===c).map(([c])=>canchaHTML(c,S.mes)).join("")}
-  <section class="sec"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button></section>`;
+  <div class="pl-mes"><button class="icon-btn" data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span>${(t=>t.charAt(0).toUpperCase()+t.slice(1))(mesLbl(m))}</span><button class="icon-btn" data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></div>
+  <section class="pl-big"><span class="pl-k">Te queda este mes</span><b class="num">${mny(ing-gastos)}</b><span class="pl-s">Si cobrás todo. Con lo cobrado hasta hoy: <b class="num">${mny(cob-gastos)}</b></span></section>
+  <section class="sec"><div class="list pl-cob">
+    <div class="pl-cob-h"><b>Cobros</b><span><b class="num">${pag.length}</b> de ${cobran.length} pagaron</span></div>
+    <div class="pl-bar"><i style="width:${pct}%"></i></div>
+    <div class="pl-cob-n num"><span>Cobrado <b>${money(cob)}</b></span><span>Falta <b>${money(ing-cob)}</b></span></div>
+    <div class="pl-btns"><button class="pl-b no" data-act="verDeben" ${deben.length?"":"disabled"}>${deben.length?`Deben ${deben.length} ›`:"Nadie debe ✓"}</button><button class="pl-b" data-act="verPagaron">Pagaron ${pag.length} ›</button></div>
+    <span class="small muted">${m>="2026-11"?"Pagan del 1 al 13 por la app: cuando suben el comprobante, queda pagado solo.":"Desde noviembre pagan por la app y se marca solo."}</span>
+  </div></section>
+  ${comps.length?`<section class="sec"><div class="sec-head"><h3>Últimos pagos</h3></div><div class="list">${comps.map(c=>{ const a=S.alumnos.find(x=>x.id===c.alumnoId); return a?`<button class="pl-row" data-act="verComp" data-id="${a.id}"><span>${esc(a.nombre)} <small class="muted">${cuando(c)}</small></span><b class="num">${money(c.monto||montoMes(a,m))}</b></button>`:""; }).join("")}</div></section>`:""}
+  <section class="sec"><div class="sec-head"><h3>Lo que pagás</h3><span class="small muted num">${money(gastos)}</span></div><div class="list">
+    <button class="pl-row" data-act="tab" data-t="equipo"><span>${esc(nP)} <small class="muted">${fmtH(hE)} h</small></span><b class="num">${money(pE)} ›</b></button>
+    ${cs.map(x=>`<button class="pl-row" data-act="verCancha" data-club="${x.c}"><span>Cancha ${esc(x.C.lugar)} <small class="${x.sinPrecio?"no":"muted"}">${x.sinPrecio?"cargá el precio":`${x.h} h`}</small></span><b class="num">${x.pg?'<span class="ok">✓ Pagado</span>':money(x.tot)} ›</b></button>`).join("")}
+  </div></section>
+  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button></section>`;
 }
+function openCancha(club){ const r=()=>{ openSheet(`<div style="display:grid;gap:4px"><span class="flabel">${mesLbl(S.mes)}</span><h2 class="disp">Cancha ${esc(canchaDe(club).lugar)}</h2></div>${canchaHTML(club,S.mes)}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`,r); }; gcAb.add("d-"+club); r(); }
 function vEquipo(){ return vEsteban()+avisoOwner(); }
 function emptyAlumnos(){ return `<div class="empty">Todavía no hay alumnos. Tocá <b>Alumno +</b>: nombre, club, horario y precio por clase.</div>`; }
 
@@ -474,7 +500,7 @@ async function guardarCancha(club,patch,msg){ const g={...(S.cancha||{})}; const
   if(patch.ajustes) cur.ajustes={...(cur.ajustes||{}),...patch.ajustes}; if(patch.pagos) cur.pagos={...(cur.pagos||{}),...patch.pagos};
   Object.keys(patch).forEach(k=>{ if(k!=="ajustes"&&k!=="pagos") cur[k]=patch[k]; });
   Object.keys(cur.ajustes||{}).forEach(k=>{ if(cur.ajustes[k]===null) delete cur.ajustes[k]; });
-  g.clubes={...(g.clubes||{}),[club]:cur}; S.cancha=g; render();
+  g.clubes={...(g.clubes||{}),[club]:cur}; S.cancha=g; render(); if(sheetRefresh) sheetRefresh();
   return safe(()=>S.db.doc("gestion/cancha").set(g),msg); }
 
 /* ---------- Pestaña Esteban: horas por día y si tomó asistencia ---------- */
@@ -876,8 +902,8 @@ function render(){
   document.querySelectorAll("#clubs .chip").forEach(b=>b.setAttribute("aria-pressed",b.dataset.club===S.club));
   $("#fab").hidden=S.modo==="profe"||S.tab!=="alumnos";
   const subAl=S.modo!=="profe"&&(S.tab==="alumnos"||S.tab==="recuperar");
-  { const fa=$("#fabAs"); if(fa) fa.hidden=S.modo==="profe"||S.tab==="asist"||S.tab==="alumnos"; }
-  $("#clubs").hidden=S.tab==="asist"||S.modo==="profe";
+  { const fa=$("#fabAs"); if(fa) fa.hidden=S.modo==="profe"||["asist","alumnos","dinero","equipo","recuperar","hoy"].includes(S.tab); }
+  $("#clubs").hidden=S.modo==="profe"||!["alumnos","agenda","recuperar"].includes(S.tab);
   let html="";
   if(S.dbState==="sin-db") html+=`<div class="notice">No se pudo conectar con la base de datos. Revisá tu conexión y volvé a abrir la app.</div>`;
   else if(S.dbState==="cargando") html+=`<p class="small muted" style="margin:16px 0 0">Cargando tus alumnos…</p>`;
@@ -957,7 +983,7 @@ async function aplicarAumentosVencidos(){ if(aumHecho||!S.esOwner||S.modo==="pro
 const objMin=()=>{ try{ return localStorage.getItem("objMin")==="1"; }catch(e){ return false; } };
 function setObjMin(v){ try{ localStorage.setItem("objMin",v?"1":"0"); }catch(e){} objBar(); }
 function objBar(){ const b=$("#objBar"); if(!b) return; const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.alumnos.filter(a=>a.activo!==false).length;
-  b.hidden=S.modo==="profe"||!S.esOwner||S.dbState!=="ok";
+  b.hidden=S.modo==="profe"||!S.esOwner||S.dbState!=="ok"||S.tab!=="alumnos";
   const min=objMin(); b.classList.toggle("min",min);
   if(min){ b.innerHTML=`<span class="obj-mini">🎯 <b class="num">${n}</b>${meta?`/<span class="num">${meta}</span>`:""}${meta&&n<meta?` · faltan <b class="num">${meta-n}</b>`:""}</span><span class="obj-mbar"><i style="width:${meta?Math.min(100,Math.round(n/meta*100)):0}%"></i></span>`; b.setAttribute("aria-label","Mostrar objetivo de alumnos"); return; }
   if(!meta){ b.innerHTML=`<span class="obj-k">Objetivo</span><span class="obj-t">Poné cuántos alumnos querés tener</span><span class="obj-go">Elegir</span><span class="obj-grip" aria-hidden="true"></span>`; return; }
@@ -1174,6 +1200,8 @@ document.addEventListener("click",async e=>{
     case "dia": S.dia=Number(b.dataset.d); render(); break;
     case "fecha": { const st=document.getElementById("daysStrip"); const sl=st?st.scrollLeft:0; S.fecha=b.dataset.f; render(); const n=document.getElementById("daysStrip"); if(n) n.scrollLeft=sl; break; }
     case "fPago": S.fPago=b.dataset.v; render(); break;
+    case "verPagaron": S.fPago="pago"; S.tab="alumnos"; render(); scrollTo(0,0); break;
+    case "verCancha": openCancha(b.dataset.club); break;
     case "verDeben": S.fPago="debe"; S.tab="alumnos"; render(); scrollTo(0,0); break;
     case "aumento": AUM.sel=null; openAumento(); break;
     case "aumM": AUM.monto=Number(b.dataset.v); openAumento(); break;
