@@ -90,7 +90,11 @@ function montoClub(a,club,m=S.mes){ const hs=a.horarios||[]; if(!hs.length) retu
    recN(a) = cuántas tiene. a.recVence = {"2026-10-31": 2, ...} = hasta cuándo vale cada una. */
 // Las clases son de lunes a viernes: si el vencimiento cae sábado o domingo, vence el viernes anterior.
 function habil(f){ const d=isoDate(f); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); return toISO(d); }
-function venceDe(f){ const d=isoDate(f); d.setDate(d.getDate()-((d.getDay()+6)%7)+18); return toISO(d); }
+// Arranque con la app: lo que se debe de antes de noviembre (cargado a mano o faltas de octubre) vale hasta el 30/11.
+// Desde noviembre, cada falta se recupera en 2 semanas.
+const REC_INI={corte:"2026-11-01",vence:"2026-11-30",desde:"2026-10-16",hasta:"2026-11-20"};
+const recIni=k=>(k>=REC_INI.desde&&k<REC_INI.hasta)?REC_INI.vence:k;
+function venceDe(f){ if(f<REC_INI.corte) return REC_INI.vence; const d=isoDate(f); d.setDate(d.getDate()-((d.getDay()+6)%7)+18); return toISO(d); }
 const fechaDM = f => { const d=isoDate(f); return `${d.getDate()}/${d.getMonth()+1}`; };
 // Faltas avisadas por la app que todavía no se ubicaron en su mes (las ubica el proceso automático o la próxima edición).
 function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P.avisos:S.avisos)||[];
@@ -98,7 +102,7 @@ function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P
 // Devuelve las vigentes: [{vence, n}] ordenadas. a.recuperar manda en la cantidad; si tiene menos, se descuentan las que vencen antes.
 function recBuckets(a,pend=recPendAvisos(a).map(v=>v.fecha)){
   const tot=Math.max(0,a.recuperar||0); const m={};
-  Object.entries(a.recVence||{}).forEach(([k,n])=>{ n=Number(n)||0; if(n>0){ k=habil(k); m[k]=(m[k]||0)+n; } });
+  Object.entries(a.recVence||{}).forEach(([k,n])=>{ n=Number(n)||0; if(n>0){ k=recIni(habil(k)); m[k]=(m[k]||0)+n; } });
   pend.forEach(f=>{ const k=venceDe(f); m[k]=(m[k]||0)+1; });
   const sum=Object.values(m).reduce((s,n)=>s+n,0);
   if(tot>sum){ const k=venceDe(hoyISO); m[k]=(m[k]||0)+tot-sum; }
@@ -270,7 +274,8 @@ function vAlumnos(){
   const actv=list.filter(a=>a.activo!==false), sinEntrar=S.esOwner&&S.modo!=="profe"?S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&!ING[a.id]):[], sinNotif=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&ING[a.id]&&!ING[a.id].notif);
   if(fp==="app") list=sinEntrar.filter(a=>!S.q||(a.nombre||"").toLowerCase().includes(S.q.toLowerCase())); else if(fp==="notif") list=sinNotif;
   const nAlu=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)).length, nEnt=nAlu-sinEntrar.length;
-  const appRes=S.esOwner&&S.modo!=="profe"&&(conUsr.size||Object.keys(ING).length)?`<div class="app-res">📱 App: <b class="num">${nEnt}</b> de ${nAlu} entraron${sinEntrar.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="app"?"":"app"}">${fp==="app"?"Ver todos":`Ver quién falta (${sinEntrar.length})`}</button>`:" 🎉"}${sinNotif.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="notif"?"":"notif"}">${fp==="notif"?"Ver todos":`${sinNotif.length} sin notificaciones`}</button>`:""}</div>`:"";
+  const sinAcc=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&!a.usuario).length;
+  const appRes=S.esOwner&&S.modo!=="profe"?`<div class="app-res">📱 App: <b class="num">${nEnt}</b> de ${nAlu} entraron${sinAcc?` · <button class="linkish" data-act="accMasivo">Mandar accesos (${sinAcc} sin usuario)</button>`:""}${sinEntrar.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="app"?"":"app"}">${fp==="app"?"Ver todos":`Ver quién falta (${sinEntrar.length})`}</button>`:" 🎉"}${sinNotif.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="notif"?"":"notif"}">${fp==="notif"?"Ver todos":`${sinNotif.length} sin notificaciones`}</button>`:""}</div>`:"";
   const venc=S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13));
   const resumen=fp==="debe"?(deben.length?`<div class="fp-res debe"><b>${deben.length}</b> ${deben.length===1?"alumno debe":"alumnos deben"} · faltan cobrar <b class="num">${money(deben.reduce((t,a)=>t+montoMes(a),0))}</b>${venc?" · <b>vencido</b>":""}<span class="small">Tocá el ícono de WhatsApp de cada uno para mandarle el recordatorio.</span></div>`:`<div class="fp-res ok">🎉 Todos pagaron ${mesSolo(S.mes)}.</div>`)
     :fp==="pago"?`<div class="fp-res ok"><b>${pagaron.length}</b> ${pagaron.length===1?"pagó":"pagaron"} · cobrado <b class="num">${money(pagaron.reduce((t,a)=>t+cobradoDe(a),0))}</b></div>`:"";

@@ -46,9 +46,46 @@ function accesoHTML(a) {
     ? `<span class="small">Usuario: <b>${esc(a.usuario)}</b> <span class="muted">(lo puede cambiar desde su app, en Mi cuenta)</span></span><span class="small muted">Si se olvidó la contraseña, generale una nueva y se la mandás por WhatsApp.</span><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="mini go" data-act="accClave" data-uid="${a.uid || ""}" data-id="${a.id}">Contraseña nueva</button><button type="button" class="linkish" style="font-size:12px" data-act="accesoCrear" data-id="${a.id}">Crear un acceso nuevo de cero</button></div>`
     : `<span class="small muted">Con un usuario y contraseña ve sus clases, asistencia y pagos, avisa si no va y reserva para recuperar.</span><button type="button" class="mini go" data-act="accesoCrear" data-id="${a.id}" style="justify-self:start">Crear acceso</button>`}</div>`;
 }
-function msgAcceso(nombre, usuario, clave) {
-  return `Hola ${nombreCorto(nombre)}! Ya podés ver tus clases, tu asistencia y tus pagos en la app de las clases. Desde ahí también avisás si no venís y reservás para recuperar.\n\nEntrá acá: ${LINK_APP}\nUsuario: ${usuario}\nContraseña: ${clave}\n\nTip: agregala a la pantalla de inicio del celu para tenerla a mano.`;
+function msgAcceso(nombre, usuario, clave, a) {
+  const bk = a ? recBuckets(a) : []; const n = bk.reduce((t, b) => t + b.n, 0);
+  const rec = n ? `\n\nTenés ${n === 1 ? "1 clase" : n + " clases"} para recuperar: ${bk.map(b => `${bk.length > 1 ? b.n + " " : ""}${bk.length > 1 ? "valen" : n === 1 ? "vale" : "valen"} hasta el ${fechaDM(b.vence)}`).join(" y ")}. Las reservás desde la app, en Recuperar, eligiendo un horario con lugar.` : "";
+  return `Hola ${nombreCorto(nombre)}! Ya podés ver tus clases, tu asistencia y tus pagos en la app de las clases. Desde ahí también avisás si no venís y reservás para recuperar.\n\nEntrá acá: ${LINK_APP}\nUsuario: ${usuario}\nContraseña: ${clave}${rec}\n\nDesde noviembre:\n• La cuota se paga del 1 al 13 de cada mes, desde la app (transferís y subís el comprobante).\n• Si no podés venir, avisá por la app con al menos 24 h: esa clase la recuperás dentro de las 2 semanas siguientes.\n\nTip: agregala a la pantalla de inicio del celu y activá las notificaciones (la campanita) para que te lleguen los recordatorios.`;
 }
+// Crear acceso en un toque (usuario y contraseña automáticos). Si el usuario ya existe, le agrega un número.
+async function accesoRapido(a) {
+  const base = slugUsuario(a.nombre).slice(0, 21); const clave = claveNueva(); let usuario = base, uid = null;
+  for (let i = 0; i < 6 && !uid; i++) {
+    try { uid = await crearCuenta(usuario, clave); }
+    catch (x) { if (x && x.code === "auth/email-already-in-use") { usuario = `${base}.${i + 2}`; continue; } throw x; }
+  }
+  if (!uid) throw { code: "auth/email-already-in-use" };
+  if (a.uid) { try { await fdb.doc("usuarios/" + a.uid).delete(); } catch (x) {} }
+  await fdb.doc("usuarios/" + uid).set({ rol: "alumno", alumnoId: a.id, usuario, nombre: a.nombre, alta: hoyISO });
+  await fdb.doc("alumnos/" + a.id).set({ uid, usuario }, { merge: true }); a.uid = uid; a.usuario = usuario;
+  return { usuario, clave };
+}
+const ACC_HECHO = {};
+function filaAcceso(a) {
+  const h = ACC_HECHO[a.id]; const n = recN(a);
+  const meta = `${tagsClub(a)}${n ? `<span class="tag rec">Recupera ${n}</span>` : ""}${a.tel ? "" : '<span class="due">Sin teléfono</span>'}`;
+  let acc;
+  if (h) { const txt = msgAcceso(a.nombre, h.usuario, h.clave, a); const url = waURL(a.tel, txt);
+    acc = `${url ? `<a class="mini go" href="${url}" target="_blank" rel="noopener" data-accwa="${a.id}">${h.mandado ? "✓ Mandado" : "WhatsApp →"}</a>` : ""}<button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button>`; }
+  else if (a.usuario) acc = `<span class="small muted">Ya tiene: ${esc(a.usuario)}</span>`;
+  else acc = `<button class="mini go" data-act="accRapido" data-id="${a.id}">Crear acceso</button>`;
+  return `<div class="row" data-k="acc-${a.id}" id="acc-${a.id}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${meta}${h ? `<span>Usuario <b>${esc(h.usuario)}</b> · clave <b>${esc(h.clave)}</b></span>` : ""}</span></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${acc}</span></div>`;
+}
+function openAccesosMasivo() {
+  const al = S.alumnos.filter(a => a.activo !== false && enClub(a, S.club)).sort((x, y) => (!!x.usuario - !!y.usuario) || x.nombre.localeCompare(y.nombre));
+  const sin = al.filter(a => !a.usuario && !ACC_HECHO[a.id]).length;
+  openSheet(`<div style="display:grid;gap:12px">
+    <div style="display:grid;gap:4px"><span class="flabel">App de los alumnos</span><h2 class="disp">Mandar accesos</h2>
+      <span class="small muted">Tocá <b>Crear acceso</b> y después <b>WhatsApp</b>: le llega el link, su usuario y contraseña${al.some(a => recN(a)) ? ", las clases que tiene para recuperar" : ""} y cómo funciona desde noviembre. ${sin} sin acceso.</span>
+      <span class="small muted">Las contraseñas se ven solo mientras esta ventana está abierta. Si se pierde, desde la ficha le generás una nueva.</span></div>
+    <div class="list" id="accList">${al.map(filaAcceso).join("")}</div>
+    <div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div></div>`);
+}
+document.addEventListener("click", e => { const l = e.target.closest("a[data-accwa]"); if (l && ACC_HECHO[l.dataset.accwa]) { ACC_HECHO[l.dataset.accwa].mandado = true; setTimeout(() => { l.textContent = "✓ Mandado"; }, 300); } });
 function openAcceso(a, tipo = "alumno") {
   const sug = tipo === "alumno" ? slugUsuario(a.nombre) : "";
   openSheet(`<form id="fAcc" data-id="${a ? a.id : ""}" data-tipo="${tipo}" style="display:grid;gap:14px">
@@ -80,7 +117,7 @@ document.addEventListener("submit", async e => {
       if (a.uid) { try { await fdb.doc("usuarios/" + a.uid).delete(); } catch (x) {} }
       await fdb.doc("usuarios/" + uid).set({ rol: "alumno", alumnoId: a.id, usuario, nombre: a.nombre, alta: hoyISO });
       await fdb.doc("alumnos/" + a.id).set({ uid, usuario }, { merge: true });
-      const txt = msgAcceso(a.nombre, usuario, clave); const url = waURL(a.tel, txt);
+      const txt = msgAcceso(a.nombre, usuario, clave, a); const url = waURL(a.tel, txt);
       openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Acceso creado</span><h2 class="disp">${esc(a.nombre)}</h2></div>
         <div class="msg"><div class="bubble">${esc(txt)}</div><div class="msg-actions">${url ? `<a class="cta wa" href="${url}" target="_blank" rel="noopener">Mandar por WhatsApp <i>→</i></a>` : `<span class="small due">Falta el teléfono</span>`}<button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button></div></div>
         <p class="small muted" style="margin:0">Guardá la contraseña: después no se puede volver a ver.</p>
@@ -104,7 +141,7 @@ function cfgExtraHTML() {
   const conAcceso = S.alumnos.filter(a => a.usuario).length;
   return `<div class="msg" style="gap:10px"><div class="msg-k"><b>App de los alumnos</b></div>
       <span class="small">Link para mandarles: <b>${esc(LINK_APP)}</b></span>
-      <span class="small muted">${conAcceso} de ${S.alumnos.filter(a => a.activo !== false).length} alumnos tienen acceso. Se crea desde la ficha de cada alumno.</span>
+      <span class="small muted">${conAcceso} de ${S.alumnos.filter(a => a.activo !== false).length} alumnos tienen acceso.</span><button type="button" class="mini go" data-act="accMasivo" style="justify-self:start">Mandar accesos a los alumnos</button>
       <div class="field"><label for="cTelG">Tu WhatsApp (para que los alumnos te escriban)</label><div style="display:flex;gap:8px"><input id="cTelG" inputmode="tel" value="${esc(S.cfg.telGabriel || "")}" placeholder="351…" style="flex:1"><button type="button" class="mini go" data-act="telGSave">Guardar</button></div></div>
       <button type="button" class="mini" data-act="copy" data-text="${esc(LINK_APP)}" style="justify-self:start">Copiar link</button></div>
     <div class="msg" style="gap:10px"><div class="msg-k"><b>Profes</b></div>
@@ -139,6 +176,10 @@ window.accionExtra = async (act, b, A) => {
       try { const bt = fdb.batch(); ids.forEach(id => bt.update(fdb.doc("avisos/" + id), { visto: true })); await bt.commit(); } catch (e) {} break; }
     case "asRecApp": if (A) { S.asMarcas[`${A.id}|${b.dataset.hora}`] = "recuperando"; render(); if (await guardarAsist()) { toast(`${A.nombre} vino a recuperar`); avisarDueno(`${nomProfe()}: ${A.nombre} vino a recuperar`, `${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub === "ESPACIO" ? "Espacio" : "Jump"}`); } } break;
     case "accesoCrear": if (A) openAcceso(A, "alumno"); break;
+    case "accMasivo": openAccesosMasivo(); break;
+    case "accRapido": if (A) { b.disabled = true; b.textContent = "Creando…";
+      try { ACC_HECHO[A.id] = await accesoRapido(A); } catch (x) { console.error(x); toast(x && x.code && String(x.code).startsWith("auth/") ? errorAuth(x) : "No se pudo crear. Probá de nuevo."); b.disabled = false; b.textContent = "Crear acceso"; break; }
+      const row = document.getElementById("acc-" + A.id); if (row) row.outerHTML = filaAcceso(A); } break;
     case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
     case "profeCrear": openAcceso(null, "profe"); break;
     case "accClave": await claveNuevaPara(b.dataset.uid, A); break;

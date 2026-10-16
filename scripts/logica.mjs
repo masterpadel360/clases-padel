@@ -10,7 +10,10 @@ export const diaSemana = f => { const [y, m, d] = partes(f); return new Date(Dat
 // Cada clase se recupera en las 2 semanas siguientes a la falta: vence el viernes de la segunda semana después.
 // Las clases son de lunes a viernes: habil() lleva al viernes anterior una fecha que caiga sábado o domingo.
 export function habil(f) { while ([0, 6].includes(diaSemana(f))) f = sumarDias(f, -1); return f; }
-export function venceDe(f) { return sumarDias(f, 18 - ((diaSemana(f) + 6) % 7)); }
+// Arranque: lo que se debe de antes de noviembre vale hasta el 30/11 (igual que en app.js).
+const REC_INI = { corte: "2026-11-01", vence: "2026-11-30", desde: "2026-10-16", hasta: "2026-11-20" };
+const recIni = k => (k >= REC_INI.desde && k < REC_INI.hasta) ? REC_INI.vence : k;
+export function venceDe(f) { if (f < REC_INI.corte) return REC_INI.vence; return sumarDias(f, 18 - ((diaSemana(f) + 6) % 7)); }
 
 // Ordena las clases para recuperar según cuándo vencen.
 // a.recuperar = cuántas tiene (lo que manda). a.recVence = {"AAAA-MM-DD": cantidad}.
@@ -18,7 +21,7 @@ export function venceDe(f) { return sumarDias(f, 18 - ((diaSemana(f) + 6) % 7));
 // Devuelve { recVence, recuperar } solo con las vigentes (las vencidas se pierden).
 export function normalizar(a, hoy, pend = []) {
   const tot = Math.max(0, Number(a.recuperar) || 0); const m = {};
-  Object.entries(a.recVence || {}).forEach(([k, n]) => { n = Number(n) || 0; if (n > 0) { k = habil(k); m[k] = (m[k] || 0) + n; } });
+  Object.entries(a.recVence || {}).forEach(([k, n]) => { n = Number(n) || 0; if (n > 0) { k = recIni(habil(k)); m[k] = (m[k] || 0) + n; } });
   pend.forEach(f => { const k = venceDe(f); m[k] = (m[k] || 0) + 1; });
   const sum = Object.values(m).reduce((s, n) => s + n, 0);
   if (tot > sum) { const k = venceDe(hoy); m[k] = (m[k] || 0) + tot - sum; }
