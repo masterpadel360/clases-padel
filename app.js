@@ -232,7 +232,7 @@ function vHoy(){
     <div class="bar" aria-label="${pct}% cobrado"><i style="width:${pct}%"></i></div>
     <div class="hero-foot num"><span>Cobrado <b>${money(cobrado)}</b></span><span>Falta <b style="color:var(--sun)">${money(pend)}</b></span></div>
   </section>
-  ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño"):""}
+  ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño")+gananciaHTML():""}
   ${avisosHoyHTML()}
 
   ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><span style="display:flex;gap:14px;align-items:center"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></span></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:""}
@@ -397,7 +397,9 @@ function usoAuto(club,f,desde){ const mk=((S.asMes||{})[`${club}|${f}`])||null; 
 function usoDia(C,f){ const a=C.aj[f]; if(a) return {luz:Number(a.luz)||0,sin:Number(a.sin)||0,manual:true}; const u=usoAuto(C.club,f,C.desde); return {...u,manual:false}; }
 let asMesUnsub=null, asMesKey="";
 function escucharAsMes(m){ if(asMesKey===m||!S.db) return; asMesKey=m; if(asMesUnsub) asMesUnsub(); const [y,mm]=m.split("-").map(Number);
-  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${m}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if(S.tab==="gestion"&&$("#overlay").hidden) render(); },e=>console.error(e)); }
+  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${m}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
+function canchaTotal(club,m){ const C=canchaDe(club); const pg=C.pagos[m]; if(pg&&pg.pagado&&pg.monto!==undefined) return Number(pg.monto)||0;
+  const [y,mm]=m.split("-").map(Number); let hl=0,hs=0; for(let d=1;d<=new Date(y,mm,0).getDate();d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); hl+=u.luz; hs+=u.sin; } return hl*C.luz+hs*C.sin; }
 function canchaHTML(club,m){ const C=canchaDe(club); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate(); let hl=0,hs=0; const filas=[];
   for(let d=1;d<=ult;d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); const dow=isoDate(f).getDay(); const hayTurnos=turnos(club).some(t=>t.dia===dow);
     if(!u.manual&&!u.luz&&!u.sin&&!hayTurnos) continue; hl+=u.luz; hs+=u.sin;
@@ -446,7 +448,24 @@ function vEsteban(){
   ${panelEquipo()}`;
 }
 
-/* ---------- Panel Esteban / ganancia ---------- */
+/* ---------- Tu ganancia (solo Gabriel, en Hoy) ---------- */
+function gananciaHTML(){ const m=S.mes; escucharAsMes(m); const c=S.club; const al=S.alumnos.filter(a=>a.activo!==false);
+  const ing=al.reduce((t,a)=>t+(c?montoClub(a,c,m):montoMes(a,m)),0);
+  const cob=al.filter(a=>pago(a)).reduce((t,a)=>t+(c?montoClub(a,c,m)*(montoMes(a,m)?cobradoDe(a,m)/montoMes(a,m):1):cobradoDe(a,m)),0);
+  const prof=(!c||c==="JUMP")&&S.equipo.length?ganadoEn(m):0; const nP=(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0];
+  const cj=(!c||c==="JUMP")?canchaTotal("JUMP",m):0, ce=(!c||c==="ESPACIO")?canchaTotal("ESPACIO",m):0; const gastos=prof+cj+ce;
+  const mny=v=>(v<0?"−":"")+money(Math.abs(v)).replace("$ ","$"); const fila=(k,v,neg)=>`<dt>${k}</dt><dd class="num">${neg&&v?"− ":""}${money(v)}</dd>`;
+  return `<section class="sec"><div class="sec-head"><h3>Tu ganancia · ${mesSolo(m)}${c?` · ${c==="JUMP"?"Jump":"Espacio"}`:""}</h3><button class="linkish" data-act="tab" data-t="gestion">Gestión ›</button></div>
+    <div class="list gan" style="padding:16px;display:grid;gap:12px">
+      <div class="gan-top">
+        <div class="stat"><div class="big-num num" style="color:${ing-gastos<0?"var(--k-no)":"var(--k-ok)"}">${mny(ing-gastos)}</div><div class="lbl" style="color:var(--muted)">Te queda si cobrás todo</div></div>
+        <div class="stat"><div class="big-num num" style="${cob-gastos<0?"color:var(--k-no)":""}">${mny(cob-gastos)}</div><div class="lbl" style="color:var(--muted)">Con lo cobrado hasta hoy</div></div>
+      </div>
+      <dl class="kv" style="margin:0">${fila("Cuotas del mes",ing)}${fila("Ya cobrado",cob)}${(!c||c==="JUMP")&&S.equipo.length?fila(`Pago a ${esc(nP)}`,prof,1):""}${!c||c==="JUMP"?fila("Cancha Jump",cj,1):""}${!c||c==="ESPACIO"?fila("Cancha Espacio La 10",ce,1):""}</dl>
+      <p class="small muted" style="margin:0">${c==="ESPACIO"?"Las horas":`Las horas de ${esc(nP)} y las`} de cancha se suman solas a medida que avanza el mes.</p>
+    </div></section>`; }
+
+/* ---------- Panel Esteban (en Gestión) ---------- */
 let aumPct=10;
 function panelEquipo(){
   const tot=activos().reduce((s,a)=>s+montoMes(a),0); const totJ=S.alumnos.filter(a=>a.activo!==false).reduce((s,a)=>s+montoClub(a,"JUMP"),0);
@@ -455,18 +474,13 @@ function panelEquipo(){
   const pagoE=S.equipo.length?ganadoEn(S.mes):0, neta=tot-pagoE, pct=tot?pagoE/tot*100:0, pctJ=totJ?pagoE/totJ*100:0;
   const nuevoV=Math.round(vh*(1+aumPct/100)), nuevoP=h*nuevoV;
   const nombre=eq.map(x=>S.nombres[x.id]).filter(Boolean).join(", ")||"Esteban";
-  return `<section class="sec"><div class="sec-head"><h3>${esc(nombre)} y tu ganancia · ${mesSolo(S.mes)}</h3></div>
+  return `<section class="sec"><div class="sec-head"><h3>Pago a ${esc(nombre.split(" ")[0])} · ${mesSolo(S.mes)}</h3></div>
     <div class="list" style="padding:16px;display:grid;gap:16px">
       <div class="hero-stats" style="grid-template-columns:repeat(3,1fr)">
         <div class="stat"><div class="big-num num">${fmtH(h)}</div><div class="lbl" style="color:var(--muted)">Horas · antes ${fmtH(hp)}</div></div>
         <div class="stat"><div class="big-num num">${money(pagoE).replace("$ ","$")}</div><div class="lbl" style="color:var(--muted)">Le pagás</div></div>
-        <div class="stat"><div class="big-num num" style="color:var(--sun)">${money(neta).replace("$ ","$")}</div><div class="lbl" style="color:var(--muted)">Te queda</div></div>
+        <div class="stat"><div class="big-num num">${money(vh).replace("$ ","$")}</div><div class="lbl" style="color:var(--muted)">Por hora</div></div>
       </div>
-      <dl class="kv" style="margin:0">
-        <dt>Total del mes (todos los alumnos)</dt><dd class="num">${money(tot)}</dd>
-        <dt>Lo de ${esc(nombre)} sobre el total</dt><dd class="num">${fmtH(Math.round(pct*10)/10)}%</dd>
-        <dt>Sobre lo que factura Jump (${money(totJ)})</dt><dd class="num">${fmtH(Math.round(pctJ*10)/10)}%</dd>
-      </dl>
       ${S.equipo[0]?(()=>{ const ds=Object.keys(S.equipo[0].dias||{}).filter(k=>S.equipo[0].dias[k]).sort().reverse().slice(0,7);
         return ds.length?`<div><span class="flabel">Últimos días cargados</span><div class="hs-dias">${ds.map(k=>`<span><small>${diaTxt(k)}</small><b class="num">${fmtH(S.equipo[0].dias[k])} h</b></span>`).join("")}</div></div>`:""; })():""}
       ${S.equipo[0]?`${cuentaHTML(true)}<button class="linkish" data-act="modoProfe" style="justify-self:start">Ver y revisar las horas que cargó día por día</button>`:""}
@@ -474,12 +488,12 @@ function panelEquipo(){
       ${vh?`<div class="msg" style="gap:8px"><div class="msg-k"><b>Calcular aumento</b></div>
         <div style="display:flex;align-items:center;gap:8px"><input id="aumPct" type="number" inputmode="numeric" value="${aumPct}" style="width:80px;padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface)"><span>% de aumento</span></div>
         <dl class="kv" style="margin:0" id="aumOut">${aumKV(vh,nuevoV,h,nuevoP,tot)}</dl>
-        <button class="mini" data-act="aumSave" style="justify-self:start">Aplicar este aumento</button></div>`:`<p class="small muted" style="margin:0">Cargá cuánto le pagás por hora y te calculo cuánto le toca, cuánto te queda y el aumento.</p>`}
+        <button class="mini" data-act="aumSave" style="justify-self:start">Aplicar este aumento</button></div>`:`<p class="small muted" style="margin:0">Cargá cuánto le pagás por hora y te calculo cuánto le toca y el aumento.</p>`}
       ${S.equipo[0]?(()=>{ const mv=(S.finEq[S.equipo[0].id]||[]).filter(x=>x.fecha.startsWith(S.mes)); const g=mv.filter(x=>x.tipo==="gasto").reduce((t,x)=>t+x.monto,0); return `<p class="small muted" style="margin:0">Gastos que anotó en ${mesSolo(S.mes)}: <b style="color:var(--ink)">${money(g)}</b> (${mv.length} movimientos) · <button class="linkish" data-act="verGastos">Ver todo</button></p>`; })():""}
       ${S.equipo.length?"":`<p class="small muted" style="margin:0">Cuando ${esc(nombre)} cargue sus horas desde su cuenta, se suman acá solas.</p>`}
     </div></section>`;
 }
-function aumKV(vh,nv,h,np,tot){ return `<dt>Nuevo valor por hora</dt><dd class="num">${money(nv)} <span class="muted" style="font-weight:500">(antes ${money(vh)})</span></dd><dt>Con ${fmtH(h)} h le pagarías</dt><dd class="num">${money(np)}</dd><dt>Te quedaría</dt><dd class="num" style="color:var(--sun)">${money(tot-np)}</dd>`; }
+function aumKV(vh,nv,h,np,tot){ return `<dt>Nuevo valor por hora</dt><dd class="num">${money(nv)} <span class="muted" style="font-weight:500">(antes ${money(vh)})</span></dd><dt>Con ${fmtH(h)} h le pagarías</dt><dd class="num">${money(np)}</dd><dt>Diferencia por mes</dt><dd class="num">+ ${money(np-h*vh)}</dd>`; }
 document.addEventListener("input",e=>{ if(e.target.id==="aumPct"){ aumPct=Number(e.target.value)||0; const vh=S.cfg.valorHora||0; const eq=S.equipo.length?S.equipo:[{dias:{}}]; const h=eq.reduce((s,x)=>s+horasMes(x.dias,S.mes),0); const tot=activos().reduce((s,a)=>s+montoMes(a),0); const nv=Math.round(vh*(1+aumPct/100)); $("#aumOut").innerHTML=aumKV(vh,nv,h,h*nv,tot); } });
 /* ---------- Horas del profe ---------- */
 const mesAnt = m => { const [y,mm]=m.split("-").map(Number); return mesKey(new Date(y,mm-2,1)); };
@@ -498,7 +512,7 @@ function avisarDueno(titulo,cuerpo){ if(S.esOwner||!S.db) return;
   S.db.collection("staffAvisos").add({titulo,cuerpo,de:S.uid||"",notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})
     .then(()=>{ try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){} }).catch(e=>console.error(e)); }
 const tHorasAviso={};
-function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Hoy → ${nomProfe()} y tu ganancia.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
+function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Gestión → Profe.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
 const valorDia = f => S.hVal[f] || S.cfg.valorHora || 0;
 function ganadoEn(pref){ return Object.keys(S.horas).filter(k=>k.startsWith(pref)).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); }
 function saldoProfe(){ const gan=ganadoEn(""); const pag=S.hMovs.reduce((t,x)=>t+(Number(x.monto)||0),0); return {gan,pag,saldo:gan-pag}; }

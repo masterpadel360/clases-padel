@@ -579,3 +579,6 @@ html.v2 #staffApp .row.gc-row{display:grid;grid-template-columns:1fr auto;align-
 .gc-sec{margin-top:10px}
 .gc-dias{margin-top:6px}
 .gc-dias summary{font-weight:700;cursor:pointer;padding:8px 2px}
+.gan-top{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.gan-top .big-num{font-size:clamp(20px,6.4vw,28px);white-space:nowrap}
+.gan-top .lbl{font-size:11px}
