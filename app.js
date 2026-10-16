@@ -218,39 +218,62 @@ const PADDLE_SVG = `<svg class="paddle" viewBox="0 0 200 260" aria-hidden="true"
 <g transform="translate(40 190)"><circle r="26" fill="#D6EE3B"/><path d="M-22 -13C-8 -5 -8 9 -20 17M22 -14C9 -6 8 8 21 16" fill="none" stroke="#F7FBE6" stroke-width="3.5" stroke-linecap="round"/><circle r="26" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="2"/></g></svg>`;
 const COURT_SVG = `<span class="hero-glow" aria-hidden="true"></span>`;
 function vHoy(){
-  const al=activos(); const pag=al.filter(a=>pago(a)); const deben=al.filter(a=>!pago(a));
-  const cobrado=pag.reduce((s,a)=>s+cobradoDe(a),0);
-  const pend=deben.reduce((s,a)=>s+montoMes(a),0);
-  const pct=al.length?Math.round(pag.length/al.length*100):0;
-  const dow=now.getDay(); const clases=S.mes===mesKey(now)?slotsDe(dow):[];
-  const recs=al.filter(a=>recN(a)>0);
+  const al=activos(); const dow=now.getDay(); const clases=S.mes===mesKey(now)?slotsDe(dow):[];
+  const recs=al.filter(a=>recN(a)>0); const owner=S.esOwner&&S.modo!=="profe";
   return `
-  <section class="hero" aria-label="Resumen del mes">${COURT_SVG}
+  ${owner?pendDuenoHTML():""}
+  ${owner?tarjetaNotif("dueño"):""}
+  <div id="secAvisos">${avisosHoyHTML()}</div>
+  ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><span style="display:flex;gap:14px;align-items:center"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></span></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:`<section class="sec"><div class="empty">Hoy no hay clases.</div></section>`}
+  ${owner?libresHoyHTML():""}
+  ${recs.length?`<section class="sec"><div class="sec-head"><h3>Tienen clases para recuperar</h3><button class="linkish" data-act="tab" data-t="recuperar">Ver todo</button></div><div class="list">${recs.slice(0,5).map(recRow).join("")}</div></section>`:""}
+  ${al.length?"":emptyAlumnos()}`;
+}
+/* ---------- Pendientes de Gabriel (arriba de Hoy): lo que hay que hacer, y se va solo cuando está hecho ---------- */
+function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAct); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const item=(color,txt,btn)=>it.push(`<div class="pd-i"><i style="background:${color}"></i><span>${txt}</span>${btn||""}</div>`);
+  const clubN=c=>c==="ESPACIO"?"Espacio":"Jump";
+  // 1) Asistencia de hoy de turnos que ya terminaron
+  if(S.asMes&&asMesKey===mAct){ slotsDe(now.getDay()).forEach(t=>{ const fin=(()=>{ const [h,m]=t.hora.split(":").map(Number); const x=h*60+m+60; return `${pad(Math.floor(x/60))}:${pad(x%60)}`; })();
+    if(hhmm<fin) return; const mk=S.asMes[`${t.club}|${hoyISO}`]||{}; if(Object.keys(mk).some(k=>k.endsWith("|"+t.hora))) return;
+    item("var(--k-no)",`<b>Tomar asistencia</b> ${t.hora} · ${clubN(t.club)}`,`<button class="mini go" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}">Abrir</button>`); }); }
+  // 2) Avisos de alumnos sin ver
+  const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
+  if(nAv) item("var(--k-amb)",`<b>${nAv} aviso${nAv===1?"":"s"}</b> de alumnos sin ver`,`<a class="mini" href="#secAvisos">Ver</a>`);
+  // 3) Esteban: días sin horas o sin asistencia
+  const fl=faltantes().filter(x=>!x.esHoy&&(x.sinAsist.length||x.sinHoras)); const nP=(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0];
+  if(fl.length) item("var(--k-no)",`<b>${esc(nP)}</b> no cargó ${fl.length===1?`el ${fmtCorto(fl[0].fecha)}`:`${fl.length} días`} (${textoFaltan(fl[0])})`,`<button class="mini" data-act="tab" data-t="equipo">Ver</button>`);
+  // 4) Cobros
+  const d=now.getDate(); if(S.mes===mAct&&d>=10){ const deb=activos().filter(a=>montoMes(a)>0&&!pago(a)&&!(a.inicio&&a.inicio.slice(0,7)>mAct));
+    if(deb.length) item(d>13&&mAct>="2026-11"?"var(--k-no)":"var(--k-amb)",`<b>${deb.length} ${deb.length===1?"alumno debe":"alumnos deben"}</b> ${mAct<"2026-11"?` ${mesSolo(mAct)}`:d>13?" la cuota (vencida)":" la cuota · vence el 13"}`,`<button class="mini" data-act="verDeben">Cobrar</button>`); }
+  // 5) Recuperaciones que vencen en los próximos 4 días
+  const lim=toISO(new Date(now.getFullYear(),now.getMonth(),now.getDate()+4)); const pv=activos().filter(a=>recBuckets(a).some(b=>b.vence<=lim));
+  if(pv.length) item("var(--k-amb)",`<b>${pv.length} alumno${pv.length===1?"":"s"}</b> con clases a recuperar que vencen esta semana`,`<button class="mini" data-act="tab" data-t="recuperar">Ofrecer</button>`);
+  // 6) Fin de mes: canchas y Esteban del mes anterior sin pagar (primeros 15 días)
+  if(d<=15){ const mA=mesAnt(mAct); CANCHAS.forEach(([c])=>{ const C=canchaDe(c); const pg=C.pagos[mA]; const tot=canchaTotal(c,mA); if(tot>0&&!(pg&&pg.pagado)) item("var(--k-amb)",`<b>Pagar cancha ${esc(C.lugar)}</b> de ${mesSolo(mA)} · ${money(tot)}`,`<button class="mini" data-act="tab" data-t="dinero">Ver</button>`); });
+    if(S.equipo[0]){ const {saldo}=saldoProfe(); if(saldo>0) item("var(--k-amb)",`<b>Pagarle a ${esc(nP)}</b> · le debés ${money(saldo)}`,`<button class="mini" data-act="tab" data-t="equipo">Ver</button>`); } }
+  return `<section class="sec pd" style="margin-top:4px"><div class="sec-head"><h3>Para hacer</h3><span class="small muted">${it.length?`${it.length} pendiente${it.length===1?"":"s"}`:""}</span></div>
+    ${it.length?`<div class="list pd-l">${it.join("")}</div>`:`<div class="pd-ok">Todo al día ✓</div>`}</section>`; }
+
+/* ---------- Plata: cobros del mes, tu ganancia y las canchas, todo junto ---------- */
+function vDinero(){
+  const al=activos(); const pag=al.filter(a=>pago(a)); const deben=al.filter(a=>!pago(a)&&montoMes(a)>0);
+  const cobrado=pag.reduce((s,a)=>s+cobradoDe(a),0); const pend=deben.reduce((s,a)=>s+montoMes(a),0);
+  const pct=al.length?Math.round(pag.length/al.length*100):0; S.gMes=S.mes;
+  return `
+  <section class="hero" aria-label="Cobros del mes">${COURT_SVG}
     <div class="month"><button data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="pill-date">${mesLbl(S.mes)}</span><button data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></div>
-    <div class="hero-main"><div class="mega num">${String(al.length).padStart(2,"0")}</div><div class="spec"><span class="spec-k">Alumnos activos</span><span>${S.club?S.club:`Jump ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"JUMP")).length} · Espacio ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"ESPACIO")).length}`}</span><span class="spec-k" style="margin-top:8px">Total del mes</span><span class="num">${money(cobrado+pend)}</span></div></div>
-    <div class="hero-stats">
-      <div class="stat"><div class="val num">${al.length}</div><div class="lbl">Alumnos</div></div>
-      <div class="stat"><div class="val num">${pag.length}<small>/${al.length}</small></div><div class="lbl">Pagaron</div></div>
-      <button class="stat" data-act="tab" data-t="recuperar" style="background:none;border:0;padding:0;text-align:left;color:inherit"><div class="val num">${recs.reduce((s,a)=>s+recN(a),0)}</div><div class="lbl">A recuperar ›</div></button>
-    </div>
+    <div class="hero-main"><div class="mega num">${String(pag.length).padStart(2,"0")}<small style="font-size:.35em;opacity:.6">/${al.length}</small></div><div class="spec"><span class="spec-k">Pagaron</span><span>${S.club?S.club:`Jump ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"JUMP")).length} · Espacio ${S.alumnos.filter(a=>a.activo!==false&&enClub(a,"ESPACIO")).length}`}</span><span class="spec-k" style="margin-top:8px">Total del mes</span><span class="num">${money(cobrado+pend)}</span></div></div>
     <div class="bar" aria-label="${pct}% cobrado"><i style="width:${pct}%"></i></div>
     <div class="hero-foot num"><span>Cobrado <b>${money(cobrado)}</b></span><span>Falta <b style="color:var(--sun)">${money(pend)}</b></span></div>
+    ${deben.length?`<button class="btn pri" data-act="verDeben" style="justify-self:start;margin-top:4px">Ver quién debe (${deben.length}) ›</button>`:""}
   </section>
-  ${S.esOwner&&S.modo!=="profe"?tarjetaNotif("dueño")+libresHoyHTML()+gananciaHTML():""}
-  ${avisosHoyHTML()}
-
-  ${clases.length?`<section class="sec"><div class="sec-head"><h3>Clases de hoy · ${DIAS_LARGO[dow]}</h3><span style="display:flex;gap:14px;align-items:center"><button class="linkish" data-act="lluvia" data-f="${hoyISO}">🌧 Lluvia</button><button class="linkish" data-act="tab" data-t="agenda">Ver semana</button></span></div><div class="list">${clases.map(t=>slotHTML(t,hoyISO)).join("")}</div></section>`:""}
-
-  ${recs.length?`<section class="sec"><div class="sec-head"><h3>Tienen clases para recuperar</h3><button class="linkish" data-act="tab" data-t="recuperar">Ver todo</button></div><div class="list">${recs.slice(0,5).map(recRow).join("")}</div></section>`:""}
-
-
-  ${avisoOwner()}
-
-  <section class="sec">
-    <div class="sec-head"><h3>Deben ${mesSolo(S.mes)}</h3><span class="small muted">${deben.length}</span></div>
-    ${deben.length?`<div class="list">${deben.map(alRow).join("")}</div>`:al.length?`<div class="empty"><b>Todos al día.</b> Nadie debe este mes.</div>`:emptyAlumnos()}
-  </section>`;
+  ${gananciaHTML()}
+  <section class="sec"><div class="sec-head"><h3>Canchas · ${mesSolo(S.mes)}</h3></div><p class="small muted" style="margin:0">Las horas se cargan solas con cada asistencia tomada (lluvia no cuenta).</p></section>
+  ${CANCHAS.filter(([c])=>!S.club||S.club===c).map(([c])=>canchaHTML(c,S.mes)).join("")}
+  <section class="sec"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button></section>`;
 }
+function vEquipo(){ return vEsteban()+avisoOwner(); }
 function emptyAlumnos(){ return `<div class="empty">Todavía no hay alumnos. Tocá <b>Alumno +</b>: nombre, club, horario y precio por clase.</div>`; }
 
 function alRow(a){
@@ -421,7 +444,7 @@ function usoAuto(club,f,desde){ const mk=((S.asMes||{})[`${club}|${f}`])||null; 
 function usoDia(C,f){ const a=C.aj[f]; if(a) return {luz:Number(a.luz)||0,sin:Number(a.sin)||0,manual:true}; const u=usoAuto(C.club,f,C.desde); return {...u,manual:false}; }
 let asMesUnsub=null, asMesKey="";
 function escucharAsMes(m){ if(asMesKey===m||!S.db) return; asMesKey=m; if(asMesUnsub) asMesUnsub(); const [y,mm]=m.split("-").map(Number);
-  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${m}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
+  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${m}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy"||S.tab==="dinero")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
 function canchaTotal(club,m){ const C=canchaDe(club); const pg=C.pagos[m]; if(pg&&pg.pagado&&pg.monto!==undefined) return Number(pg.monto)||0;
   const [y,mm]=m.split("-").map(Number); let hl=0,hs=0; for(let d=1;d<=new Date(y,mm,0).getDate();d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); hl+=u.luz; hs+=u.sin; } return hl*C.luz+hs*C.sin; }
 function canchaHTML(club,m){ const C=canchaDe(club); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate(); let hl=0,hs=0; const filas=[];
@@ -479,7 +502,7 @@ function gananciaHTML(){ const m=S.mes; escucharAsMes(m); const c=S.club; const 
   const prof=(!c||c==="JUMP")&&S.equipo.length?ganadoEn(m):0; const nP=(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0];
   const cj=(!c||c==="JUMP")?canchaTotal("JUMP",m):0, ce=(!c||c==="ESPACIO")?canchaTotal("ESPACIO",m):0; const gastos=prof+cj+ce;
   const mny=v=>(v<0?"−":"")+money(Math.abs(v)).replace("$ ","$"); const fila=(k,v,neg)=>`<dt>${k}</dt><dd class="num">${neg&&v?"− ":""}${money(v)}</dd>`;
-  return `<section class="sec"><div class="sec-head"><h3>Tu ganancia · ${mesSolo(m)}${c?` · ${c==="JUMP"?"Jump":"Espacio"}`:""}</h3><button class="linkish" data-act="tab" data-t="gestion">Gestión ›</button></div>
+  return `<section class="sec"><div class="sec-head"><h3>Tu ganancia · ${mesSolo(m)}${c?` · ${c==="JUMP"?"Jump":"Espacio"}`:""}</h3></div>
     <div class="list gan" style="padding:16px;display:grid;gap:12px">
       <div class="gan-top">
         <div class="stat"><div class="big-num num" style="color:${ing-gastos<0?"var(--k-no)":"var(--k-ok)"}">${mny(ing-gastos)}</div><div class="lbl" style="color:var(--muted)">Te queda si cobrás todo</div></div>
@@ -536,7 +559,7 @@ function avisarDueno(titulo,cuerpo){ if(S.esOwner||!S.db) return;
   S.db.collection("staffAvisos").add({titulo,cuerpo,de:S.uid||"",notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})
     .then(()=>{ try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){} }).catch(e=>console.error(e)); }
 const tHorasAviso={};
-function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Gestión → Profe.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
+function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Equipo.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
 const valorDia = f => S.hVal[f] || S.cfg.valorHora || 0;
 function ganadoEn(pref){ return Object.keys(S.horas).filter(k=>k.startsWith(pref)).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); }
 function saldoProfe(){ const gan=ganadoEn(""); const pag=S.hMovs.reduce((t,x)=>t+(Number(x.monto)||0),0); return {gan,pag,saldo:gan-pag}; }
@@ -836,19 +859,23 @@ const TAB_ICON={
   horas:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>'};
 TAB_ICON.plata='<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>';
 TAB_ICON.gestion='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 15v-3M12 15V9M16 15v-5"/></svg>';
+TAB_ICON.dinero=TAB_ICON.plata; TAB_ICON.equipo='<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><path d="M15 6h6M15 10h6M17 14h4"/></svg>';
 TAB_ICON.esteban='<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/><path d="M17 3.5l2 2"/></svg>';
-const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
-const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","recuperar","gestion"];
+const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",dinero:"Plata",equipo:"Equipo",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
+const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","dinero","equipo"];
 function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=`repeat(${t.length},1fr)`;
-  nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
+  const sel=k=>S.tab===k||(k==="alumnos"&&S.tab==="recuperar"&&S.modo!=="profe");
+  nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${sel(k)}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
 function render(){
-  if(!tabsDe().includes(S.tab)&&!(S.tab==="asist"&&S.modo!=="profe")) S.tab=tabsDe()[0];
+  if(S.modo!=="profe"){ if(S.tab==="gestion") S.tab="dinero"; if(S.tab==="esteban") S.tab="equipo"; }
+  if(!tabsDe().includes(S.tab)&&!(S.modo!=="profe"&&(S.tab==="asist"||S.tab==="recuperar"))) S.tab=tabsDe()[0];
 
   if(S.modo==="profe"){ S.club="JUMP"; S.asClub="JUMP"; }
   renderTabs(); $("#cfgBtn").hidden=!S.esOwner; objBar();
-  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab));
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab||(b.dataset.tab==="alumnos"&&S.tab==="recuperar"&&S.modo!=="profe")));
   document.querySelectorAll("#clubs .chip").forEach(b=>b.setAttribute("aria-pressed",b.dataset.club===S.club));
   $("#fab").hidden=S.modo==="profe"||S.tab!=="alumnos";
+  const subAl=S.modo!=="profe"&&(S.tab==="alumnos"||S.tab==="recuperar");
   { const fa=$("#fabAs"); if(fa) fa.hidden=S.modo==="profe"||S.tab==="asist"||S.tab==="alumnos"; }
   $("#clubs").hidden=S.tab==="asist"||S.modo==="profe";
   let html="";
@@ -857,7 +884,8 @@ function render(){
   if(S.tab==="asist"||(S.modo==="profe"&&S.asFecha===hoyISO)) subAsist();
   if(S.modo==="profe") html+=`<div class="notice" style="background:var(--surface-2);color:var(--muted);margin:0 0 12px">${S.esOwner?'Estás viendo los datos reales de Esteban. Lo que cambies acá se guarda en su cuenta. <button class="linkish" data-act="modoOwner">Volver a la tuya</button>':"Jump · vista de profe · <button class=\"linkish\" data-act=\"salir\">Cerrar sesión</button>"}</div>`;
   if(S.tab==="asist"&&S.modo!=="profe") html+=`<div class="as-top"><span><b>Asistencia</b> · tomala y volvé</span><button class="btn pri as-listo" data-act="asCerrar">✕ Listo</button></div>`;
-  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion})[S.tab]();
+  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion,dinero:vDinero,equipo:vEquipo})[S.tab]();
+  if(subAl) html=`<div class="seg al-sub" role="group" aria-label="Sección"><button type="button" class="seg-b" data-act="tab" data-t="alumnos" aria-pressed="${S.tab==="alumnos"}">Lista</button><button type="button" class="seg-b" data-act="tab" data-t="recuperar" aria-pressed="${S.tab==="recuperar"}">Recuperar${(()=>{ const n=activos().reduce((t,a)=>t+recN(a),0); return n?` · ${n}`:""; })()}</button><button type="button" class="seg-b" data-act="libres">Lugares libres</button></div>`+html;
   const focused=document.activeElement&&document.activeElement.id==="q";
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
   if(focused&&S.tab==="alumnos"){ const tmp=document.createElement("div"); tmp.innerHTML=html; const nq=tmp.querySelector("#q"), lq=$("#q");
@@ -1146,6 +1174,7 @@ document.addEventListener("click",async e=>{
     case "dia": S.dia=Number(b.dataset.d); render(); break;
     case "fecha": { const st=document.getElementById("daysStrip"); const sl=st?st.scrollLeft:0; S.fecha=b.dataset.f; render(); const n=document.getElementById("daysStrip"); if(n) n.scrollLeft=sl; break; }
     case "fPago": S.fPago=b.dataset.v; render(); break;
+    case "verDeben": S.fPago="debe"; S.tab="alumnos"; render(); scrollTo(0,0); break;
     case "aumento": AUM.sel=null; openAumento(); break;
     case "aumM": AUM.monto=Number(b.dataset.v); openAumento(); break;
     case "aumQ": { const v=b.dataset.v; const al=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0);
@@ -1164,7 +1193,7 @@ document.addEventListener("click",async e=>{
     case "turnoCatOk": guardarTurnoCat(b); break;
     case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
     case "asCSV": exportAsist(); break;
-    case "irAsist": S.asFecha=b.dataset.f; S.tab="asist"; render(); scrollTo(0,0); break;
+    case "irAsist": S.asFecha=b.dataset.f; if(b.dataset.c) S.asClub=b.dataset.c; if(S.modo!=="profe") S.prevTab=S.tab; S.tab="asist"; render(); scrollTo(0,0); break;
     case "irHoras": S.horasFecha=b.dataset.f; S.tab="horas"; render(); setTimeout(()=>{ const el=document.querySelector('[data-act="hStep"]'); el&&el.scrollIntoView({block:"center"}); },50); break;
     case "telProfeSave": { const v=$("#telProfe").value.trim(); if(await safe(()=>S.db.doc("config/general").set({...S.cfg,telProfe:v}),"Teléfono guardado")){ S.cfg={...S.cfg,telProfe:v}; render(); } break; }
     case "verGastos": S.modo="profe"; S.tab="plata"; S.finMes=S.mes; S.asKey=null; render(); scrollTo(0,0); break;

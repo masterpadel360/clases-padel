@@ -588,3 +588,12 @@ html.v2 #staffApp .row.gc-row{display:grid;grid-template-columns:1fr auto;align-
 .lib-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.lib-h b{font-size:16px}
 .lib-ts{display:flex;flex-wrap:wrap;gap:6px}.lib-ts .tag{font-size:9.5px;padding:1px 6px}
 .lib-acc{display:flex;gap:8px;justify-content:flex-end}
+.pd-l{display:grid}
+.pd-i{display:grid;grid-template-columns:10px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.pd-i:last-child{border-bottom:0}
+.pd-i i{width:10px;height:10px;border-radius:50%}
+.pd-i span{font-size:14px;line-height:1.4}
+.pd-i .mini{white-space:nowrap;text-decoration:none}
+.pd-ok{padding:12px 14px;border-radius:16px;background:var(--k-ok-s);color:var(--k-ok);font-weight:700;font-size:14px}
+.al-sub{margin:4px 0 6px;grid-template-columns:1fr 1.25fr 1.35fr}
+.al-sub .seg-b{font-size:13px;padding-inline:6px;white-space:nowrap}
