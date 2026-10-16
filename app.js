@@ -274,54 +274,63 @@ const WI={
   bell:'<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
   ojo:'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+  mas:'<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>', cancha:'<rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M4 12h16M12 3v18"/>',
   in:'<path d="M12 5v14M6 13l6 6 6-6"/>', out:'<path d="M12 19V5M6 11l6-6 6 6"/>'};
 const wico=(k,cl="")=>`<svg class="${cl}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WI[k]}</svg>`;
 let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
 function vInicioG(){
   const m=mesKey(now); escucharAsMes(m); const P=plataMes(m); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const nom=((S.perfil&&S.perfil.nombre)||"Gabriel").split(" ")[0];
+  const nomC=(S.perfil&&S.perfil.nombre)||"Gabriel"; const nom=nomC.split(" ")[0]; const ini=nomC.split(" ").map(x=>x.charAt(0)).join("").slice(0,2).toUpperCase()||"G";
   const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
   const nRec=activos().reduce((t,a)=>t+recN(a),0); const nLib=libresPorCat("").reduce((t,g)=>t+g.n,0);
   const fl=faltantes().filter(x=>!x.esHoy&&(x.sinAsist.length||x.sinHoras)).length;
-  const mny=v=>OJO?(v<0?"− ":"")+money(Math.abs(v)):"$ •••••";
-  const acc=(k,lbl,act,badge)=>`<button class="w-acc" ${act}><span class="w-ic">${wico(k)}${badge?`<i class="w-badge">${badge}</i>`:""}</span><span>${lbl}</span></button>`;
+  const nP=(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0];
+  const neg=P.queda<0;
   const ts=turnos("").filter(t=>t.dia===now.getDay()).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
-  const hoyRows=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm; const st=e.lluvia?'<span class="w-st">Lluvia</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar asistencia</span>':`<span class="w-st">${e.vienen} vienen</span>`;
-    return `<button class="w-row" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-time num">${t.hora}</span><span class="w-mid"><b>${clubN(t.club)}${t.nivel?` · ${esc(t.nivel)}`:""}</b><small>${e.aus.length?`${e.aus.length} avisó que no · `:""}${e.recs.length?`${e.recs.length} recupera · `:""}${e.libres} libre${e.libres===1?"":"s"}</small></span>${st}</button>`; }).join("");
-  // actividad: pagos que entran y plata que sale
+  const hoyRows=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm; const st=e.lluvia?'<span class="w-st">Lluvia</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar</span>':`<span class="w-st">${e.vienen} vienen</span>`;
+    return `<button class="w-row" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-mv">${wico("clases")}</span><span class="w-mid"><b>${t.hora} · ${clubN(t.club)}${t.nivel?` · ${esc(t.nivel)}`:""}</b><small>${e.vienen} vienen${e.aus.length?` · ${e.aus.length} avisó que no`:""}${e.recs.length?` · ${e.recs.length} recupera`:""}</small></span>${st}</button>`; }).join("");
   const act=[];
-  Object.values(S.comps||{}).filter(c=>c.estado!=="rechazado"&&c.creado&&c.creado.seconds).forEach(c=>{ const a=S.alumnos.find(x=>x.id===c.alumnoId); if(a) act.push({t:c.creado.seconds*1000,in:true,tit:a.nombre,sub:`Pagó ${mesSolo(c.mes)}`,monto:c.monto||montoMes(a,c.mes),act:`data-act="verComp" data-id="${a.id}"`}); });
+  Object.values(S.comps||{}).filter(c=>c.estado!=="rechazado"&&c.creado&&c.creado.seconds).forEach(c=>{ const a=S.alumnos.find(x=>x.id===c.alumnoId); if(a) act.push({t:c.creado.seconds*1000,in:true,tit:"Pago recibido",sub:`${a.nombre} · ${mesSolo(c.mes)}`,monto:c.monto||montoMes(a,c.mes),act:`data-act="verComp" data-id="${a.id}"`}); });
   (S.gastosG||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:x.nota||"Gasto",sub:"Gasto",monto:x.monto}));
-  (S.hMovs||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:`Pago a ${(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0]}`,sub:x.nota||"Sueldo",monto:x.monto}));
-  CANCHAS.forEach(([c])=>{ const C=canchaDe(c); Object.entries(C.pagos).forEach(([mm,p])=>{ if(p&&p.pagado&&p.fecha) act.push({t:isoDate(p.fecha).getTime()+43200000,in:false,tit:`Cancha ${C.lugar}`,sub:`Pago de ${mesSolo(mm)}`,monto:p.monto||0}); }); });
+  (S.hMovs||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:`Pago a ${nP}`,sub:x.nota||"Horas de clase",monto:x.monto}));
+  CANCHAS.forEach(([c])=>{ const C=canchaDe(c); Object.entries(C.pagos).forEach(([mm,p])=>{ if(p&&p.pagado&&p.fecha) act.push({t:isoDate(p.fecha).getTime()+43200000,in:false,tit:`Cancha ${C.lugar}`,sub:`Horas de ${mesSolo(mm)}`,monto:p.monto||0}); }); });
   act.sort((a,b)=>b.t-a.t);
-  const cuando=t=>{ const d=new Date(t), f=toISO(d); return f===hoyISO?`Hoy`:fmtCorto(f); };
+  const cuando=t=>{ const d=new Date(t); return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${String(d.getFullYear()).slice(2)}`; };
+  const pct=P.cobran.length?Math.round(P.pag.length/P.cobran.length*100):0;
+  const tile=(k,lbl,act,tag)=>`<button class="w-tile" ${act}>${tag?`<i class="w-new">${tag}</i>`:""}<span class="w-ic">${wico(k)}</span><span>${lbl}</span></button>`;
+  const big=(k,lbl,act,fill,badge)=>`<button class="w-big ${fill?"fill":""}" ${act}><span class="w-bi">${wico(k)}${badge?`<i class="w-badge">${badge}</i>`:""}</span><span>${lbl}</span></button>`;
+  const card=(k,lbl,sub,act,alert)=>`<button class="w-hcard" ${act}><span class="w-hc-t"><b>${lbl}</b><small class="${alert?"no":""}">${sub}</small></span><span class="w-ic">${wico(k)}</span></button>`;
   return `
-  <header class="w-head"><span class="w-av">${esc(nom.charAt(0))}</span><span class="w-hola"><small>Hola,</small><b>${esc(nom)}</b></span>
-    <button class="w-hbtn" data-act="avisosVer" aria-label="Avisos de alumnos">${wico("bell")}${nAv?`<i class="w-badge">${nAv}</i>`:""}</button>
-    <button class="w-hbtn" data-act="cfgOpen" aria-label="Ajustes">${wico("gear")}</button></header>
+  <header class="w-head"><span class="w-av">${esc(ini)}</span><span class="w-hola"><b>¡Hola, ${esc(nom)}!</b><button data-act="cfgOpen">Ajustes</button></span>
+    <button class="w-bell" data-act="avisosVer" aria-label="Avisos de alumnos">${wico("bell")}${nAv?`<i class="w-dot"></i>`:""}</button></header>
+  <nav class="w-pills"><button class="on" data-act="tab" data-t="inicio">Inicio</button><button data-act="tab" data-t="hoy">Clases</button><button data-act="tab" data-t="admin">Mi negocio</button></nav>
   <section class="w-bal">
-    <div class="w-bal-k"><span>Te queda en ${mesSolo(m)}</span><button data-act="ojo" aria-label="${OJO?"Ocultar":"Mostrar"} montos">${wico("ojo")}</button></div>
-    <b class="w-bal-n num">${mny(P.queda)}</b>
-    <div class="w-bal-s"><span>Entró <b class="num">${mny(P.cob)}</b></span><span>Pagaste <b class="num">${mny(P.pagado)}</b></span></div>
-    <button class="w-bal-go" data-act="tab" data-t="dinero">Ver mi plata ›</button>
+    <div class="w-bal-k"><button data-act="ojo">${OJO?"Ocultar dinero":"Mostrar dinero"} ${wico("ojo")}</button><span class="w-chip">${P.pag.length}/${P.cobran.length} pagaron</span></div>
+    <button class="w-bal-m" data-act="tab" data-t="dinero"><span class="w-bal-l">Te queda en ${mesSolo(m)}</span><span class="w-bal-n num">${OJO?`${neg?"− ":""}${money(Math.abs(P.queda))}`:"$ •••••"}</span><svg class="w-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+    <div class="w-bigs">
+      ${big("asist","Asistencia",'data-act="tab" data-t="asist"',1)}
+      ${big("cobrar","Cobrar",'data-act="verDeben"',1,P.deben.length&&now.getDate()>=10?P.deben.length:"")}
+      ${big("alumnos","Alumnos",'data-act="tab" data-t="alumnos"')}
+      ${big("clases","Clases",'data-act="tab" data-t="hoy"')}
+    </div>
   </section>
-  <section class="w-grid">
-    ${acc("asist","Asistencia",'data-act="tab" data-t="asist"')}
-    ${acc("clases","Clases",'data-act="tab" data-t="hoy"')}
-    ${acc("alumnos","Alumnos",'data-act="tab" data-t="alumnos"')}
-    ${acc("cobrar","Cobrar",'data-act="verDeben"',P.deben.length&&now.getDate()>=10?P.deben.length:"")}
-    ${acc("rec","Recuperar",'data-act="tab" data-t="recuperar"',nRec||"")}
-    ${acc("libres","Lugares",'data-act="libres"',nLib||"")}
-    ${acc("lluvia","Lluvia",`data-act="lluvia" data-f="${hoyISO}"`)}
-    ${acc("admin","Admin",'data-act="tab" data-t="admin"',fl?"!":"")}
+  <section class="w-tiles">
+    ${tile("rec","Recuperar",'data-act="tab" data-t="recuperar"',nRec?`${nRec}`:"")}
+    ${tile("libres","Lugares libres",'data-act="libres"',nLib?`${nLib}`:"")}
+    ${tile("lluvia","Suspender por lluvia",`data-act="lluvia" data-f="${hoyISO}"`)}
+    ${tile("mas","Ver más acciones",'data-act="masAcc"')}
   </section>
+  <section class="w-hscroll">
+    ${card("admin",nP,fl?`${fl} día${fl===1?"":"s"} sin cargar`:"Horas y asistencia",'data-act="tab" data-t="admin"',fl)}
+    ${card("cancha","Canchas","Jump y Espacio",'data-act="tab" data-t="admin"')}
+    ${card("cobrar","Gastos","Anotá lo que pagás",'data-act="gastoNuevo"')}
+  </section>
+  <button class="w-banner" data-act="verDeben"><span class="w-bn-i num">${pct}%</span><span class="w-bn-t"><b>Cobros de ${mesSolo(m)}</b><span class="w-bn-bar"><i style="width:${pct}%"></i></span><small>${P.deben.length?`Faltan ${P.deben.length} · ${OJO?money(P.ing-P.cob):"$ •••"}`:"Todos pagaron 🎉"}</small></span><svg class="w-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
   ${pendDuenoHTML()}
   ${tarjetaNotif("dueño")}
-  <section class="w-card"><div class="w-card-h"><b>Hoy · ${DIAS_LARGO[now.getDay()]} ${now.getDate()}</b><button data-act="tab" data-t="hoy">Ver semana ›</button></div>
-    ${hoyRows||'<p class="w-empty">Hoy no hay clases.</p>'}</section>
-  <section class="w-card"><div class="w-card-h"><b>Actividad</b><button data-act="tab" data-t="dinero">Ver todo ›</button></div>
-    ${act.length?act.slice(0,6).map(x=>`<${x.act?`button ${x.act}`:"div"} class="w-row"><span class="w-mv ${x.in?"in":"out"}">${wico(x.in?"in":"out")}</span><span class="w-mid"><b>${esc(x.tit)}</b><small>${x.sub} · ${cuando(x.t)}</small></span><span class="w-amt num ${x.in?"in":""}">${OJO?`${x.in?"+ ":"− "}${money(x.monto)}`:"•••"}</span></${x.act?"button":"div"}>`).join(""):'<p class="w-empty">Acá vas a ver los pagos que entran y lo que pagás.</p>'}</section>`;
+  <section class="w-card"><div class="w-card-h"><b>Clases de hoy</b><button data-act="tab" data-t="hoy">Ver semana</button></div>${hoyRows||'<p class="w-empty">Hoy no hay clases.</p>'}</section>
+  <section class="w-card"><div class="w-card-h"><b>Última actividad</b><button data-act="tab" data-t="dinero">Ver todo</button></div>
+    ${act.length?act.slice(0,6).map(x=>`<${x.act?`button ${x.act}`:"div"} class="w-row"><span class="w-mv ${x.in?"in":""}">${wico(x.in?"in":"out")}</span><span class="w-mid"><b>${esc(x.tit)}</b><small>${esc(x.sub)}</small></span><span class="w-amt-c"><span class="w-amt num ${x.in?"in":""}">${OJO?`${x.in?"+":"-"}${money(x.monto).replace(" ","")}`:"•••"}</span><small>${cuando(x.t)}</small></span></${x.act?"button":"div"}>`).join(""):'<p class="w-empty">Acá vas a ver los pagos que entran y lo que pagás.</p>'}</section>`;
 }
 function vDinero(){
   const m=S.mes; escucharAsMes(m); const al=S.alumnos.filter(a=>a.activo!==false&&!(a.inicio&&a.inicio.slice(0,7)>m));
@@ -1257,7 +1266,7 @@ document.addEventListener("click",async e=>{
   const act=b.dataset.act,id=b.dataset.id;
   const A=id&&S.alumnos.find(x=>x.id===id), L=id&&S.leads.find(x=>x.id===id);
   switch(act){
-    case "tab": S.tab=b.dataset.t; if(S.tab==="hoy") S.fecha=hoyISO; render(); scrollTo(0,0); if(S.tab==="agenda"||S.tab==="hoy") centrarDia(); break;
+    case "tab": if(!$("#overlay").hidden) closeSheet(); S.tab=b.dataset.t; if(S.tab==="hoy") S.fecha=hoyISO; render(); scrollTo(0,0); if(S.tab==="agenda"||S.tab==="hoy") centrarDia(); break;
     case "gMes": { const [y,mm]=(S.gMes||mesKey(now)).split("-").map(Number); S.gMes=mesKey(new Date(y,mm-1+Number(b.dataset.d),1)); render(); break; }
     case "gcStep": { const club=b.dataset.club, f=b.dataset.f, k=b.dataset.k; const C=canchaDe(club); const u=usoDia(C,f); const nv={luz:u.luz,sin:u.sin}; nv[k]=Math.max(0,nv[k]+Number(b.dataset.d)); await guardarCancha(club,{ajustes:{[f]:nv}}); break; }
     case "gcAuto": await guardarCancha(b.dataset.club,{ajustes:{[b.dataset.f]:null}},"Volvió a automático"); break;
@@ -1273,6 +1282,7 @@ document.addEventListener("click",async e=>{
     case "gastoNuevo": openGasto(); break;
     case "ojo": OJO=!OJO; try{ localStorage.setItem("ojoPlata",OJO?"1":"0"); }catch(e){} render(); break;
     case "cfgOpen": openCfg(); break;
+    case "masAcc": openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Más acciones</h2></div><div class="w-sheet-grid">${[["admin","Esteban y canchas",'data-act="tab" data-t="admin"'],["cobrar","Mi plata",'data-act="tab" data-t="dinero"'],["alumnos","Mandar accesos",'data-act="accMasivo"'],["cobrar","Aumento de cuota",'data-act="aumento"'],["cobrar","Anotar gasto",'data-act="gastoNuevo"'],["gear","Ajustes y mensajes",'data-act="cfgOpen"']].map(([k,l,a])=>`<button class="w-tile" ${a}><span class="w-ic">${wico(k)}</span><span>${l}</span></button>`).join("")}</div><div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`); break;
     case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
     case "gastoOk": { const monto=Number($("#gMonto").value)||0; if(!monto){ toast("Poné el monto"); break; } const mv={id:Date.now().toString(36),monto,fecha:$("#gFecha").value||hoyISO,nota:($("#gNota").value||"").trim()}; closeSheet(); await guardarGastos([...(S.gastosG||[]),mv],"Gasto anotado"); break; }
     case "gastoDel": if(confirm("¿Borrar este gasto?")) await guardarGastos((S.gastosG||[]).filter(x=>x.id!==b.dataset.id),"Gasto borrado"); break;
