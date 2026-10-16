@@ -545,3 +545,7 @@ html.v2 #staffApp .as-b[aria-pressed="false"]{opacity:.9}
 .as-todos small{opacity:.85;font-weight:600}
 html.v2 #staffApp .row.as-l .name{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
 html.v2 #staffApp .row.as-l .name .tag{white-space:normal;max-width:100%;overflow:visible;text-overflow:clip;letter-spacing:.02em;text-transform:none;font-size:12px}
+.hs-dias{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.hs-dias span{display:grid;gap:2px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface,#fff);min-width:76px}
+.hs-dias small{font-size:11px;text-transform:capitalize;opacity:.7}
+.hs-dias b{font-size:17px}

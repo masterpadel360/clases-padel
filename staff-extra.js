@@ -137,7 +137,7 @@ window.accionExtra = async (act, b, A) => {
     case "avisoVisto": { const id = b.dataset.av; S.vistos[id] = true; render(); try { await fdb.doc("avisos/" + id).update({ visto: true }); } catch (e) {} break; }
     case "avisosTodos": { const ids = S.avisos.filter(v => !v.visto).map(v => v.id); ids.forEach(id => S.vistos[id] = true); render();
       try { const bt = fdb.batch(); ids.forEach(id => bt.update(fdb.doc("avisos/" + id), { visto: true })); await bt.commit(); } catch (e) {} break; }
-    case "asRecApp": if (A) { S.asMarcas[`${A.id}|${b.dataset.hora}`] = "recuperando"; render(); if (await guardarAsist()) toast(`${A.nombre} vino a recuperar`); } break;
+    case "asRecApp": if (A) { S.asMarcas[`${A.id}|${b.dataset.hora}`] = "recuperando"; render(); if (await guardarAsist()) { toast(`${A.nombre} vino a recuperar`); avisarDueno(`${nomProfe()}: ${A.nombre} vino a recuperar`, `${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub === "ESPACIO" ? "Espacio" : "Jump"}`); } } break;
     case "accesoCrear": if (A) openAcceso(A, "alumno"); break;
     case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
     case "profeCrear": openAcceso(null, "profe"); break;

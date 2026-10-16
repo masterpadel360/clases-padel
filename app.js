@@ -398,6 +398,8 @@ function panelEquipo(){
         <dt>Lo de ${esc(nombre)} sobre el total</dt><dd class="num">${fmtH(Math.round(pct*10)/10)}%</dd>
         <dt>Sobre lo que factura Jump (${money(totJ)})</dt><dd class="num">${fmtH(Math.round(pctJ*10)/10)}%</dd>
       </dl>
+      ${S.equipo[0]?(()=>{ const ds=Object.keys(S.equipo[0].dias||{}).filter(k=>S.equipo[0].dias[k]).sort().reverse().slice(0,7);
+        return ds.length?`<div><span class="flabel">Últimos días cargados</span><div class="hs-dias">${ds.map(k=>`<span><small>${diaTxt(k)}</small><b class="num">${fmtH(S.equipo[0].dias[k])} h</b></span>`).join("")}</div></div>`:""; })():""}
       ${S.equipo[0]?`${cuentaHTML(true)}<button class="linkish" data-act="modoProfe" style="justify-self:start">Ver y revisar las horas que cargó día por día</button>`:""}
       <div class="field"><label for="vHora">Le pagás por hora</label><div style="display:flex;gap:8px"><input id="vHora" type="number" inputmode="numeric" min="0" step="500" value="${vh||""}" placeholder="Ej: 12000"><button class="mini go" data-act="valorSave">Guardar</button></div>${S.cfg.ultimoAumento?`<span class="small muted">Último aumento: ${S.cfg.ultimoAumento.split("-").reverse().join("/")}</span>`:""}</div>
       ${vh?`<div class="msg" style="gap:8px"><div class="msg-k"><b>Calcular aumento</b></div>
@@ -420,7 +422,14 @@ function guardarHorasDoc(){ const id=targetId(); if(!id){ toast(S.esOwner?"Esteb
   const data={dias:{...S.horas},valores:{...S.hVal},movs:[...S.hMovs]}; hPend++;
   if(S.esOwner&&S.equipo[0]){ S.equipo[0].dias={...S.horas}; S.equipo[0].valores={...S.hVal}; S.equipo[0].movs=[...S.hMovs]; }
   const p=hQueue.then(()=>safe(()=>S.db.doc("horas/"+id).set(data))).finally(()=>{hPend--;}); hQueue=p.catch(()=>{}); return p; }
-function setHoras(f,n){ if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
+// Avisos para Gabriel de lo que hace Esteban (horas cargadas, faltas, recuperaciones). Llegan al instante.
+const nomProfe=()=>((S.perfil&&S.perfil.nombre)||"Esteban").split(" ")[0];
+const diaTxt=f=>{ const d=isoDate(f); return f===hoyISO?"hoy":`${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth()+1}`; };
+function avisarDueno(titulo,cuerpo){ if(S.esOwner||!S.db) return;
+  S.db.collection("staffAvisos").add({titulo,cuerpo,de:S.uid||"",notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})
+    .then(()=>{ try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){} }).catch(e=>console.error(e)); }
+const tHorasAviso={};
+function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Hoy → ${nomProfe()} y tu ganancia.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
 const valorDia = f => S.hVal[f] || S.cfg.valorHora || 0;
 function ganadoEn(pref){ return Object.keys(S.horas).filter(k=>k.startsWith(pref)).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); }
 function saldoProfe(){ const gan=ganadoEn(""); const pag=S.hMovs.reduce((t,x)=>t+(Number(x.monto)||0),0); return {gan,pag,saldo:gan-pag}; }
@@ -583,6 +592,7 @@ function guardarAsist(){ const yo=S.esOwner&&S.modo!=="profe"?"Gabriel":(S.esOwn
 async function marcar(a,hora,estado){
   S.asQuien=S.asQuien||{}; delete S.asQuien[`${a.id}|${hora}`];
   const k=`${a.id}|${hora}`; const prev=S.asMarcas[k]; const nuevo= prev===estado?null:estado;
+  if(nuevo==="falto") avisarDueno(`${nomProfe()}: ${a.nombre} faltó`,`${diaTxt(S.asFecha)} ${hora} · ${S.asClub==="ESPACIO"?"Espacio":"Jump"} · no avisó, pierde la clase`);
   const da=e=>e==="recupera"||e==="lluvia"?1:0; let delta=da(nuevo)-da(prev);
   const avA=avisoApp(a.id,S.asFecha,hora,"ausencia"); if(avA&&avA.conRecupero&&!vuelveApp(a.id,S.asFecha,hora)) delta=0;
   if(nuevo) S.asMarcas[k]=nuevo; else delete S.asMarcas[k];
@@ -1071,12 +1081,12 @@ document.addEventListener("click",async e=>{
       E.recs.forEach(a=>{ const k=`${a.id}|${h}`; if(!S.asMarcas[k]){ S.asMarcas[k]="recuperando"; n++; } });
       render(); if(n&&await guardarAsist()) toast(`${n} presente${n===1?"":"s"} a las ${h}. Si alguno faltó, tocá ✗.`); break; }
     case "asAbrir": { S.asAbrir=S.asAbrir||new Set(); S.asAbrir.add(`${b.dataset.id}|${b.dataset.hora}`); render(); break; }
-    case "asRecNo": if(A){ const k=`${A.id}|${b.dataset.hora}`; if(S.asMarcas[k]==="falto") delete S.asMarcas[k]; else S.asMarcas[k]="falto"; render(); if(await guardarAsist()&&S.asMarcas[k]) toast(`${A.nombre} no vino a recuperar: pierde esa clase`); } break;
+    case "asRecNo": if(A){ const k=`${A.id}|${b.dataset.hora}`; if(S.asMarcas[k]==="falto") delete S.asMarcas[k]; else S.asMarcas[k]="falto"; render(); if(await guardarAsist()&&S.asMarcas[k]){ toast(`${A.nombre} no vino a recuperar: pierde esa clase`); avisarDueno(`${nomProfe()}: ${A.nombre} no vino a recuperar`,`${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub==="ESPACIO"?"Espacio":"Jump"}`); } } break;
     case "asLluvia": await lluviaTurno(S.asClub,S.asFecha,b.dataset.hora); break;
     case "lluvia": await openLluvia(b.dataset.f||hoyISO); break;
     case "llClub": LL.club=b.dataset.v; { const ahora=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`; LL.sel=new Set(lluviaTurnos().filter(t=>!LL.ya.has(`${t.club}|${t.hora}`)&&(LL.fecha>hoyISO||t.hora>ahora)).map(t=>`${t.club}|${t.hora}`)); } pintarLluvia(); break;
     case "llOk": await confirmarLluvia(b); break;
-    case "asRecSel": if(A){ S.asMarcas[`${A.id}|${b.dataset.hora}`]="recuperando"; closeSheet(); if(await guardarAsist()){ await setRec(A,-1); toast(`${A.nombre} recupera hoy`); } } break;
+    case "asRecSel": if(A){ S.asMarcas[`${A.id}|${b.dataset.hora}`]="recuperando"; closeSheet(); if(await guardarAsist()){ await setRec(A,-1); toast(`${A.nombre} recupera hoy`); avisarDueno(`${nomProfe()} sumó a ${A.nombre} a recuperar`,`${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub==="ESPACIO"?"Espacio":"Jump"} · se le descontó la clase`); } } break;
     case "asRecQuitar": if(A){ delete S.asMarcas[`${A.id}|${b.dataset.hora}`]; render(); if(await guardarAsist()&&!avisoApp(A.id,S.asFecha,b.dataset.hora,"recupera")) await setRec(A,1,S.asFecha); } break;
     case "recMenos": if(A){ const prev=recPrev(A); if(await setRec(A,-1)) toast(`${A.nombre}: recuperó una clase`,()=>recVolver(A,prev)); } break;
     case "recTurno": closeSheet(); await lluviaTurno(b.dataset.club,b.dataset.f||hoyISO,b.dataset.hora); break;

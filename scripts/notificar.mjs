@@ -53,6 +53,13 @@ async function enviar(uid, { title, body, tag }) {
   }
 }
 
+/* ---------- 0b) Lo que hace Esteban (respaldo del aviso al instante) ---------- */
+for (const d of (await db.collection("staffAvisos").where("notificado", "==", false).get()).docs) {
+  const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
+  if (!ok) continue; const v = d.data();
+  for (const [uid] of Object.entries(tokens).filter(([, t]) => t.rol === "dueño")) await enviar(uid, { title: v.titulo || "Aviso de Esteban", body: v.cuerpo || "", tag: "profe-" + d.id });
+}
+
 /* ---------- 1) Avisos para Gabriel ---------- */
 const staff = Object.entries(tokens).filter(([, t]) => t.rol === "dueño").map(([uid]) => uid);
 const profes = Object.entries(tokens).filter(([, t]) => t.rol === "profe").map(([uid]) => uid);
