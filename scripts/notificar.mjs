@@ -107,7 +107,7 @@ for (const d of (await db.collection("comprobantes").where("notificado", "==", f
   });
   if (!c) continue;
   const mes = MESES[Number(c.mes.slice(5, 7)) - 1] || c.mes;
-  for (const uid of staff) await enviar(uid, { title: `${primerNombre(c.nombre)} pagó ${mes} 💸`, body: `${plata(c.monto)} · subió el comprobante. Tocá 🧾 en su ficha para verlo.`, tag: "pago-" + c.alumnoId });
+  if (!c.avisado) for (const uid of staff) await enviar(uid, { title: `${primerNombre(c.nombre)} pagó ${mes} 💸`, body: `${plata(c.monto)} · subió el comprobante. Tocá 🧾 en su ficha para verlo.`, tag: "pago-" + c.alumnoId });
 }
 
 /* ---------- 2) Clases para recuperar: cada una con su vencimiento ---------- */

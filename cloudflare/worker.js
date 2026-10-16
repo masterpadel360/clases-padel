@@ -44,6 +44,7 @@ export default {
     }
     ctx.waitUntil(procesar(env).catch(e => console.log("Error:", e && e.stack || e)));
     ctx.waitUntil(lluvias(env).catch(e => console.log("Lluvias:", e && e.stack || e)));
+    ctx.waitUntil(pagos(env).catch(e => console.log("Pagos:", e && e.stack || e)));
     return new Response("ok", { headers: cors });
   },
 };
@@ -91,6 +92,24 @@ async function procesar(env) {
     }
     const quienes = lista.some(v => v.club === "JUMP") ? [...staff, ...profes] : staff;
     for (const s of quienes) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { ...msg, tag: "aviso-" + lista[0].alumnoId });
+  }
+}
+
+// Pagos: apenas un alumno sube el comprobante, le llega a Gabriel (el mes lo marca pagado el proceso de cada 10 min y la app).
+async function pagos(env) {
+  const sa = JSON.parse(env.FIREBASE_SA);
+  const token = await accessToken(sa);
+  const fs = firestore(sa.project_id, token);
+  const pend = (await fs.query("comprobantes", { fieldFilter: { field: { fieldPath: "notificado" }, op: "EQUAL", value: { booleanValue: false } } })).filter(d => !d.data.avisado && d.data.estado === "enviado");
+  if (!pend.length) return;
+  const staff = (await fs.list("tokens")).filter(t => t.data.rol === "dueño" && Array.isArray(t.data.tokens));
+  const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  for (const d of pend) {
+    if (!(await fs.marcar(d.name, d.updateTime, "avisado"))) continue;
+    const c = d.data; const n = String(c.nombre || "").trim().split(/\s+/)[0].replace(/^./, x => x.toUpperCase());
+    const mes = MESES[Number(String(c.mes).slice(5, 7)) - 1] || c.mes;
+    const plata = "$" + Math.round(Number(c.monto) || 0).toLocaleString("es-AR");
+    for (const s of staff) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { title: `${n} pagó ${mes} 💸`, body: `${plata} · subió el comprobante. Tocá 🧾 en su ficha para verlo.`, tag: "pago-" + c.alumnoId });
   }
 }
 
@@ -147,9 +166,9 @@ function firestore(pid, token) {
       const r = await fetch(`${base}/${path}?${qs}`, { method: "PATCH", headers: h, body: JSON.stringify({ fields }) });
       if (!r.ok) throw new Error("patch " + await r.text());
     },
-    async marcar(name, updateTime) {
-      const r = await fetch(`https://firestore.googleapis.com/v1/${name}?updateMask.fieldPaths=notificado&currentDocument.updateTime=${encodeURIComponent(updateTime)}`, {
-        method: "PATCH", headers: h, body: JSON.stringify({ fields: { notificado: { booleanValue: true } } }),
+    async marcar(name, updateTime, campo = "notificado") {
+      const r = await fetch(`https://firestore.googleapis.com/v1/${name}?updateMask.fieldPaths=${campo}&currentDocument.updateTime=${encodeURIComponent(updateTime)}`, {
+        method: "PATCH", headers: h, body: JSON.stringify({ fields: { [campo]: { booleanValue: true } } }),
       });
       return r.ok;
     },
