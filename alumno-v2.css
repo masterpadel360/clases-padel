@@ -626,3 +626,4 @@ html.v2 #staffApp .row.gc-row{display:grid;grid-template-columns:1fr auto;align-
 .pl-row{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:14px 16px;background:none;border:0;border-bottom:1px solid var(--line);font:inherit;color:inherit;text-align:left;cursor:pointer}
 .pl-row small{font-size:12.5px;margin-left:4px}
 html.v2 #staffApp .row.lib-card,.row.lib-card{border:1px solid var(--line);border-left-width:1px}
+.pl-row.add span{color:var(--k-ok);font-weight:700}
