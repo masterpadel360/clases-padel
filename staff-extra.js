@@ -89,7 +89,7 @@ document.addEventListener("submit", async e => {
       const nombre = ($("#accNom").value || "Profe").trim();
       await fdb.doc("usuarios/" + uid).set({ rol: "profe", usuario, nombre, alta: hoyISO });
       await migrarLegado(uid);
-      const txt = `Hola ${nombreCorto(nombre)}! La app de las clases cambió de lugar. Ahora entrás acá: ${LINK_APP}\nUsuario: ${usuario}\nContraseña: ${clave}\nTus horas y gastos ya están pasados.`;
+      const txt = `Hola ${nombreCorto(nombre)}! La app de las clases cambió de lugar. Ahora entrás acá: ${LINK_APP}\nUsuario: ${usuario}\nContraseña: ${clave}\nTus horas y gastos ya están pasados.\n\n1) Agregala a la pantalla de inicio del celu (en iPhone: Compartir → Agregar a inicio) y abrila desde ese ícono.\n2) Tocá la campanita y activá las notificaciones: te van a llegar los avisos cuando un alumno de Jump no viene o reserva para recuperar.\n3) Todos los días: cargá tus horas y tomá asistencia (con "Vinieron todos" es un toque).`;
       const url = S.cfg.telProfe ? waURL(S.cfg.telProfe, txt) : "";
       openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Acceso creado</span><h2 class="disp">${esc(nombre)}</h2></div>
         <div class="msg"><div class="bubble">${esc(txt)}</div><div class="msg-actions">${url ? `<a class="cta wa" href="${url}" target="_blank" rel="noopener">Mandar por WhatsApp <i>→</i></a>` : ""}<button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button></div></div>
