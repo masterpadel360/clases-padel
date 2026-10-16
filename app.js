@@ -227,8 +227,8 @@ function estHoy(t){ const f=hoyISO, h=t.hora; const al=t.al.filter(a=>!a.inicio|
   const vienen=al.length-aus.length+recs.length; return {al,aus,recs,vienen,libres:Math.max(0,CUPO-vienen),tomada:marcas.length>0,lluvia}; }
 function vHoy(){
   const owner=S.esOwner&&S.modo!=="profe"; if(owner) escucharAsMes(mesKey(now));
-  const p=owner&&S.fecha===hoyISO?pendDuenoHTML():"";
-  return `${p}${owner?tarjetaNotif("dueño"):""}<div id="secAvisos">${avisosHoyHTML()}</div>${vAgenda()}${owner?libresHoyHTML():""}${S.alumnos.length?"":emptyAlumnos()}`;
+  const p="";
+  return `${p}<div id="secAvisos">${avisosHoyHTML()}</div>${vAgenda()}${owner?libresHoyHTML():""}${S.alumnos.length?"":emptyAlumnos()}`;
 }
 /* ---------- Pendientes de Gabriel (arriba de Hoy): lo que hay que hacer, y se va solo cuando está hecho ---------- */
 function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAct); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -250,9 +250,79 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
   if(d<=15){ const mA=mesAnt(mAct); CANCHAS.forEach(([c])=>{ const C=canchaDe(c); const pg=C.pagos[mA]; const tot=canchaTotal(c,mA); if(tot>0&&!(pg&&pg.pagado)) item("var(--k-amb)",`<b>Pagar cancha ${esc(C.lugar)}</b> de ${mesSolo(mA)} · ${money(tot)}`,`<button class="mini" data-act="tab" data-t="admin">Ver</button>`); });
     if(S.equipo[0]){ const {saldo}=saldoProfe(); if(saldo>0) item("var(--k-amb)",`<b>Pagarle a ${esc(nP)}</b> · le debés ${money(saldo)}`,`<button class="mini" data-act="tab" data-t="admin">Ver</button>`); } }
   if(!it.length) return "";
-  return `<section class="sec pd"><div class="sec-head"><h3>Para resolver</h3><span class="small muted num">${it.length}</span></div><div class="list pd-l">${it.join("")}</div></section>`; }
+  return `<section class="w-card w-pend"><div class="w-card-h"><b>Para resolver</b><span>${it.length}</span></div>${it.join("")}</section>`; }
 
 /* ---------- Plata: lo que te queda, cómo vienen los cobros (los pagos entran solos por la app) y lo que pagás ---------- */
+function plataMes(m){ const al=S.alumnos.filter(a=>a.activo!==false&&!(a.inicio&&a.inicio.slice(0,7)>m));
+  const cobran=al.filter(a=>montoMes(a,m)>0); const pag=cobran.filter(a=>pago(a)); const deben=cobran.filter(a=>!pago(a));
+  const ing=cobran.reduce((t,a)=>t+montoMes(a,m),0), cob=pag.reduce((t,a)=>t+cobradoDe(a,m),0);
+  const eq=S.equipo[0]; const gE=eq?ganadoEn(m):0; const pagE=eq?S.hMovs.filter(x=>(x.fecha||"").startsWith(m)).reduce((t,x)=>t+(Number(x.monto)||0),0):0;
+  const cs=CANCHAS.map(([c])=>{ const C=canchaDe(c); const pg=C.pagos[m]; return {c,tot:canchaTotal(c,m),pg:!!(pg&&pg.pagado)}; });
+  const tOtros=(S.gastosG||[]).filter(x=>(x.fecha||"").startsWith(m)).reduce((t,x)=>t+(Number(x.monto)||0),0);
+  const gastos=gE+cs.reduce((t,x)=>t+x.tot,0)+tOtros, pagado=pagE+cs.filter(x=>x.pg).reduce((t,x)=>t+x.tot,0)+tOtros;
+  return {cobran,pag,deben,ing,cob,gastos,pagado,queda:cob-pagado,quedaFin:ing-gastos}; }
+/* ---------- INICIO estilo billetera: saldo, accesos rápidos, hoy y actividad ---------- */
+const WI={
+  asist:'<path d="M9 4h6v3H9z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="m9 13 2 2 4-4"/>',
+  clases:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  alumnos:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14c2.4 0 4 1.5 4.5 4"/>',
+  cobrar:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',
+  rec:'<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/>',
+  libres:'<circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/>',
+  lluvia:'<path d="M7 15a4 4 0 1 1 .9-7.9A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/>',
+  admin:'<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/>',
+  bell:'<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
+  ojo:'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+  in:'<path d="M12 5v14M6 13l6 6 6-6"/>', out:'<path d="M12 19V5M6 11l6-6 6 6"/>'};
+const wico=(k,cl="")=>`<svg class="${cl}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WI[k]}</svg>`;
+let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
+function vInicioG(){
+  const m=mesKey(now); escucharAsMes(m); const P=plataMes(m); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const nom=((S.perfil&&S.perfil.nombre)||"Gabriel").split(" ")[0];
+  const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
+  const nRec=activos().reduce((t,a)=>t+recN(a),0); const nLib=libresPorCat("").reduce((t,g)=>t+g.n,0);
+  const fl=faltantes().filter(x=>!x.esHoy&&(x.sinAsist.length||x.sinHoras)).length;
+  const mny=v=>OJO?(v<0?"− ":"")+money(Math.abs(v)):"$ •••••";
+  const acc=(k,lbl,act,badge)=>`<button class="w-acc" ${act}><span class="w-ic">${wico(k)}${badge?`<i class="w-badge">${badge}</i>`:""}</span><span>${lbl}</span></button>`;
+  const ts=turnos("").filter(t=>t.dia===now.getDay()).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
+  const hoyRows=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm; const st=e.lluvia?'<span class="w-st">Lluvia</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar asistencia</span>':`<span class="w-st">${e.vienen} vienen</span>`;
+    return `<button class="w-row" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-time num">${t.hora}</span><span class="w-mid"><b>${clubN(t.club)}${t.nivel?` · ${esc(t.nivel)}`:""}</b><small>${e.aus.length?`${e.aus.length} avisó que no · `:""}${e.recs.length?`${e.recs.length} recupera · `:""}${e.libres} libre${e.libres===1?"":"s"}</small></span>${st}</button>`; }).join("");
+  // actividad: pagos que entran y plata que sale
+  const act=[];
+  Object.values(S.comps||{}).filter(c=>c.estado!=="rechazado"&&c.creado&&c.creado.seconds).forEach(c=>{ const a=S.alumnos.find(x=>x.id===c.alumnoId); if(a) act.push({t:c.creado.seconds*1000,in:true,tit:a.nombre,sub:`Pagó ${mesSolo(c.mes)}`,monto:c.monto||montoMes(a,c.mes),act:`data-act="verComp" data-id="${a.id}"`}); });
+  (S.gastosG||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:x.nota||"Gasto",sub:"Gasto",monto:x.monto}));
+  (S.hMovs||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:`Pago a ${(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0]}`,sub:x.nota||"Sueldo",monto:x.monto}));
+  CANCHAS.forEach(([c])=>{ const C=canchaDe(c); Object.entries(C.pagos).forEach(([mm,p])=>{ if(p&&p.pagado&&p.fecha) act.push({t:isoDate(p.fecha).getTime()+43200000,in:false,tit:`Cancha ${C.lugar}`,sub:`Pago de ${mesSolo(mm)}`,monto:p.monto||0}); }); });
+  act.sort((a,b)=>b.t-a.t);
+  const cuando=t=>{ const d=new Date(t), f=toISO(d); return f===hoyISO?`Hoy`:fmtCorto(f); };
+  return `
+  <header class="w-head"><span class="w-av">${esc(nom.charAt(0))}</span><span class="w-hola"><small>Hola,</small><b>${esc(nom)}</b></span>
+    <button class="w-hbtn" data-act="avisosVer" aria-label="Avisos de alumnos">${wico("bell")}${nAv?`<i class="w-badge">${nAv}</i>`:""}</button>
+    <button class="w-hbtn" data-act="cfgOpen" aria-label="Ajustes">${wico("gear")}</button></header>
+  <section class="w-bal">
+    <div class="w-bal-k"><span>Te queda en ${mesSolo(m)}</span><button data-act="ojo" aria-label="${OJO?"Ocultar":"Mostrar"} montos">${wico("ojo")}</button></div>
+    <b class="w-bal-n num">${mny(P.queda)}</b>
+    <div class="w-bal-s"><span>Entró <b class="num">${mny(P.cob)}</b></span><span>Pagaste <b class="num">${mny(P.pagado)}</b></span></div>
+    <button class="w-bal-go" data-act="tab" data-t="dinero">Ver mi plata ›</button>
+  </section>
+  <section class="w-grid">
+    ${acc("asist","Asistencia",'data-act="tab" data-t="asist"')}
+    ${acc("clases","Clases",'data-act="tab" data-t="hoy"')}
+    ${acc("alumnos","Alumnos",'data-act="tab" data-t="alumnos"')}
+    ${acc("cobrar","Cobrar",'data-act="verDeben"',P.deben.length&&now.getDate()>=10?P.deben.length:"")}
+    ${acc("rec","Recuperar",'data-act="tab" data-t="recuperar"',nRec||"")}
+    ${acc("libres","Lugares",'data-act="libres"',nLib||"")}
+    ${acc("lluvia","Lluvia",`data-act="lluvia" data-f="${hoyISO}"`)}
+    ${acc("admin","Admin",'data-act="tab" data-t="admin"',fl?"!":"")}
+  </section>
+  ${pendDuenoHTML()}
+  ${tarjetaNotif("dueño")}
+  <section class="w-card"><div class="w-card-h"><b>Hoy · ${DIAS_LARGO[now.getDay()]} ${now.getDate()}</b><button data-act="tab" data-t="hoy">Ver semana ›</button></div>
+    ${hoyRows||'<p class="w-empty">Hoy no hay clases.</p>'}</section>
+  <section class="w-card"><div class="w-card-h"><b>Actividad</b><button data-act="tab" data-t="dinero">Ver todo ›</button></div>
+    ${act.length?act.slice(0,6).map(x=>`<${x.act?`button ${x.act}`:"div"} class="w-row"><span class="w-mv ${x.in?"in":"out"}">${wico(x.in?"in":"out")}</span><span class="w-mid"><b>${esc(x.tit)}</b><small>${x.sub} · ${cuando(x.t)}</small></span><span class="w-amt num ${x.in?"in":""}">${OJO?`${x.in?"+ ":"− "}${money(x.monto)}`:"•••"}</span></${x.act?"button":"div"}>`).join(""):'<p class="w-empty">Acá vas a ver los pagos que entran y lo que pagás.</p>'}</section>`;
+}
 function vDinero(){
   const m=S.mes; escucharAsMes(m); const al=S.alumnos.filter(a=>a.activo!==false&&!(a.inicio&&a.inicio.slice(0,7)>m));
   const cobran=al.filter(a=>montoMes(a,m)>0); const pag=cobran.filter(a=>pago(a)); const deben=cobran.filter(a=>!pago(a));
@@ -878,16 +948,17 @@ const TAB_ICON={
   horas:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>'};
 TAB_ICON.plata='<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>';
 TAB_ICON.gestion='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 15v-3M12 15V9M16 15v-5"/></svg>';
-TAB_ICON.dinero=TAB_ICON.plata; TAB_ICON.admin=TAB_ICON.gestion; TAB_ICON.equipo='<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><path d="M15 6h6M15 10h6M17 14h4"/></svg>';
+TAB_ICON.inicio='<svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>'; TAB_ICON.dinero=TAB_ICON.plata; TAB_ICON.admin=TAB_ICON.gestion; TAB_ICON.equipo='<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><path d="M15 6h6M15 10h6M17 14h4"/></svg>';
 TAB_ICON.esteban='<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/><path d="M17 3.5l2 2"/></svg>';
-const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",dinero:"Plata",equipo:"Equipo",admin:"Admin",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
-const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","asist","dinero","alumnos","admin"];
+const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",dinero:"Plata",equipo:"Equipo",admin:"Admin",inicio:"Inicio",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
+const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["inicio","alumnos","asist","dinero","admin"];
 function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=`repeat(${t.length},1fr)`;
   const sel=k=>S.tab===k||(k==="alumnos"&&S.tab==="recuperar"&&S.modo!=="profe");
   nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${sel(k)}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
 function render(){
   if(S.modo!=="profe"){ if(S.tab==="gestion"||S.tab==="esteban"||S.tab==="equipo") S.tab="admin"; if(S.tab==="agenda") S.tab="hoy"; }
-  if(!tabsDe().includes(S.tab)&&!(S.modo!=="profe"&&(S.tab==="asist"||S.tab==="recuperar"))) S.tab=tabsDe()[0];
+  if(S.modo!=="profe"&&S.esOwner&&!render._ini){ render._ini=1; S.tab="inicio"; }
+  if(!tabsDe().includes(S.tab)&&!(S.modo!=="profe"&&["asist","recuperar","hoy"].includes(S.tab))) S.tab=tabsDe()[0];
 
   if(S.modo==="profe"){ S.club="JUMP"; S.asClub="JUMP"; }
   renderTabs(); $("#cfgBtn").hidden=!S.esOwner; objBar();
@@ -897,12 +968,14 @@ function render(){
   const subAl=S.modo!=="profe"&&(S.tab==="alumnos"||S.tab==="recuperar");
   { const fa=$("#fabAs"); if(fa) fa.hidden=true; }
   $("#clubs").hidden=S.modo==="profe"||!["alumnos","agenda","recuperar","hoy"].includes(S.tab);
+  { const w=S.esOwner&&S.modo!=="profe"; $("#staffApp").classList.toggle("w",w); $("#staffApp").classList.toggle("w-home",w&&S.tab==="inicio");
+    const wm=document.querySelector("#staffApp .wm"); if(wm) wm.textContent=w?({inicio:"Inicio",hoy:"Clases",asist:"Asistencia",alumnos:"Alumnos",recuperar:"Recuperar",dinero:"Mi plata",admin:"Administración"})[S.tab]||"Clases de Pádel":"Clases de Pádel"; }
   let html="";
   if(S.dbState==="sin-db") html+=`<div class="notice">No se pudo conectar con la base de datos. Revisá tu conexión y volvé a abrir la app.</div>`;
   else if(S.dbState==="cargando") html+=`<p class="small muted" style="margin:16px 0 0">Cargando tus alumnos…</p>`;
   if(S.tab==="asist"||(S.modo==="profe"&&S.asFecha===hoyISO)) subAsist();
   if(S.modo==="profe") html+=`<div class="notice" style="background:var(--surface-2);color:var(--muted);margin:0 0 12px">${S.esOwner?'Estás viendo los datos reales de Esteban. Lo que cambies acá se guarda en su cuenta. <button class="linkish" data-act="modoOwner">Volver a la tuya</button>':"Jump · vista de profe · <button class=\"linkish\" data-act=\"salir\">Cerrar sesión</button>"}</div>`;
-  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion,dinero:vDinero,admin:vAdmin})[S.tab]();
+  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion,dinero:vDinero,admin:vAdmin,inicio:vInicioG})[S.tab]();
   if(subAl) html=`<div class="seg al-sub" role="group" aria-label="Sección"><button type="button" class="seg-b" data-act="tab" data-t="alumnos" aria-pressed="${S.tab==="alumnos"}">Lista</button><button type="button" class="seg-b" data-act="tab" data-t="recuperar" aria-pressed="${S.tab==="recuperar"}">Recuperar${(()=>{ const n=activos().reduce((t,a)=>t+recN(a),0); return n?` · ${n}`:""; })()}</button><button type="button" class="seg-b" data-act="libres">Lugares libres</button></div>`+html;
   const focused=document.activeElement&&document.activeElement.id==="q";
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
@@ -1198,6 +1271,9 @@ document.addEventListener("click",async e=>{
     case "verPagaron": S.fPago="pago"; S.tab="alumnos"; render(); scrollTo(0,0); break;
     case "verCancha": openCancha(b.dataset.club); break;
     case "gastoNuevo": openGasto(); break;
+    case "ojo": OJO=!OJO; try{ localStorage.setItem("ojoPlata",OJO?"1":"0"); }catch(e){} render(); break;
+    case "cfgOpen": openCfg(); break;
+    case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
     case "gastoOk": { const monto=Number($("#gMonto").value)||0; if(!monto){ toast("Poné el monto"); break; } const mv={id:Date.now().toString(36),monto,fecha:$("#gFecha").value||hoyISO,nota:($("#gNota").value||"").trim()}; closeSheet(); await guardarGastos([...(S.gastosG||[]),mv],"Gasto anotado"); break; }
     case "gastoDel": if(confirm("¿Borrar este gasto?")) await guardarGastos((S.gastosG||[]).filter(x=>x.id!==b.dataset.id),"Gasto borrado"); break;
     case "verDeben": S.fPago="debe"; S.tab="alumnos"; render(); scrollTo(0,0); break;
