@@ -60,6 +60,13 @@ for (const d of (await db.collection("staffAvisos").where("notificado", "==", fa
   for (const [uid] of Object.entries(tokens).filter(([, t]) => t.rol === "dueño")) await enviar(uid, { title: v.titulo || "Aviso de Esteban", body: v.cuerpo || "", tag: "profe-" + d.id });
 }
 
+/* ---------- 0c) Primer ingreso de alumnos (respaldo) ---------- */
+for (const d of (await db.collection("ingresos").where("notificado", "==", false).get()).docs) {
+  const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
+  if (!ok) continue; const v = d.data();
+  for (const [uid] of Object.entries(tokens).filter(([, t]) => t.rol === "dueño")) await enviar(uid, { title: `📱 ${v.nombre || "Un alumno"} entró a la app`, body: "Primera vez que inicia sesión. En Alumnos ves quiénes faltan.", tag: "ingreso-" + v.alumnoId });
+}
+
 /* ---------- 1) Avisos para Gabriel ---------- */
 const staff = Object.entries(tokens).filter(([, t]) => t.rol === "dueño").map(([uid]) => uid);
 const profes = Object.entries(tokens).filter(([, t]) => t.rol === "profe").map(([uid]) => uid);

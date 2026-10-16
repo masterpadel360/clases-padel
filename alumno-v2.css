@@ -549,3 +549,5 @@ html.v2 #staffApp .row.as-l .name .tag{white-space:normal;max-width:100%;overflo
 .hs-dias span{display:grid;gap:2px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface,#fff);min-width:76px}
 .hs-dias small{font-size:11px;text-transform:capitalize;opacity:.7}
 .hs-dias b{font-size:17px}
+.app-res{margin:0 0 10px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--k-card,#fff);font-size:14px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.app-res .linkish{font-size:14px;font-weight:700}

@@ -253,7 +253,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta">${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}</span>
+    <span class="meta">${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13))?"Vencido":"Debe"}</button>`}</div></div>`;
 }
@@ -266,6 +266,11 @@ function vAlumnos(){
   const cobra=a=>a.activo!==false&&montoMes(a)>0&&!(a.inicio&&a.inicio.slice(0,7)>S.mes);
   const deben=list.filter(a=>cobra(a)&&!pago(a)), pagaron=list.filter(a=>a.activo!==false&&pago(a));
   const fp=S.fPago||""; if(fp==="debe") list=deben; else if(fp==="pago") list=pagaron;
+  const ING=S.ingresos||{}, conUsr=new Set((S.usuarios||[]).filter(u=>u.rol==="alumno"&&u.alumnoId).map(u=>u.alumnoId));
+  const actv=list.filter(a=>a.activo!==false), sinEntrar=S.esOwner&&S.modo!=="profe"?S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&!ING[a.id]):[], sinNotif=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&ING[a.id]&&!ING[a.id].notif);
+  if(fp==="app") list=sinEntrar.filter(a=>!S.q||(a.nombre||"").toLowerCase().includes(S.q.toLowerCase())); else if(fp==="notif") list=sinNotif;
+  const nAlu=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)).length, nEnt=nAlu-sinEntrar.length;
+  const appRes=S.esOwner&&S.modo!=="profe"&&(conUsr.size||Object.keys(ING).length)?`<div class="app-res">📱 App: <b class="num">${nEnt}</b> de ${nAlu} entraron${sinEntrar.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="app"?"":"app"}">${fp==="app"?"Ver todos":`Ver quién falta (${sinEntrar.length})`}</button>`:" 🎉"}${sinNotif.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="notif"?"":"notif"}">${fp==="notif"?"Ver todos":`${sinNotif.length} sin notificaciones`}</button>`:""}</div>`:"";
   const venc=S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13));
   const resumen=fp==="debe"?(deben.length?`<div class="fp-res debe"><b>${deben.length}</b> ${deben.length===1?"alumno debe":"alumnos deben"} · faltan cobrar <b class="num">${money(deben.reduce((t,a)=>t+montoMes(a),0))}</b>${venc?" · <b>vencido</b>":""}<span class="small">Tocá el ícono de WhatsApp de cada uno para mandarle el recordatorio.</span></div>`:`<div class="fp-res ok">🎉 Todos pagaron ${mesSolo(S.mes)}.</div>`)
     :fp==="pago"?`<div class="fp-res ok"><b>${pagaron.length}</b> ${pagaron.length===1?"pagó":"pagaron"} · cobrado <b class="num">${money(pagaron.reduce((t,a)=>t+cobradoDe(a),0))}</b></div>`:"";
@@ -275,6 +280,8 @@ function vAlumnos(){
     <div class="sec-head"><h3>${act} activos${list.length>act?` · ${list.length-act} pausados`:""}</h3>
       <span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(S.mes)}</span><button class="linkish" data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
     <div class="seg fp" role="group" aria-label="Filtrar por pago"><button type="button" class="seg-b" data-act="fPago" data-v="" aria-pressed="${!fp}">Todos</button><button type="button" class="seg-b fp-debe" data-act="fPago" data-v="debe" aria-pressed="${fp==="debe"}">No pagaron · ${deben.length}</button><button type="button" class="seg-b fp-pago" data-act="fPago" data-v="pago" aria-pressed="${fp==="pago"}">Pagaron · ${pagaron.length}</button></div>
+    ${appRes}
+    ${fp==="app"?`<div class="fp-res debe">Estos alumnos todavía no entraron a la app. Mandales el link y su usuario desde el botón de WhatsApp.${sinEntrar.some(a=>!conUsr.has(a.id))?" Los que dicen <b>Sin usuario</b> todavía no tienen acceso: crealo desde su ficha.":""}</div>`:fp==="notif"?`<div class="fp-res debe">Entraron a la app pero no activaron las notificaciones: no les van a llegar los recordatorios. Pediles que toquen la campanita en la app.</div>`:""}
     ${resumen}
     ${S.esOwner&&S.modo!=="profe"&&!fp?`<button type="button" class="mini aum-btn" data-act="aumento">📈 Cargar aumento de cuota</button>`:""}
     ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:fp?"":(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}

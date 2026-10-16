@@ -46,6 +46,7 @@ export default {
     ctx.waitUntil(lluvias(env).catch(e => console.log("Lluvias:", e && e.stack || e)));
     ctx.waitUntil(pagos(env).catch(e => console.log("Pagos:", e && e.stack || e)));
     ctx.waitUntil(deProfes(env).catch(e => console.log("Profes:", e && e.stack || e)));
+    ctx.waitUntil(ingresos(env).catch(e => console.log("Ingresos:", e && e.stack || e)));
     return new Response("ok", { headers: cors });
   },
 };
@@ -93,6 +94,21 @@ async function procesar(env) {
     }
     const quienes = lista.some(v => v.club === "JUMP") ? [...staff, ...profes] : staff;
     for (const s of quienes) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { ...msg, tag: "aviso-" + lista[0].alumnoId });
+  }
+}
+
+// Primer ingreso de un alumno a la app: le avisa a Gabriel.
+async function ingresos(env) {
+  const sa = JSON.parse(env.FIREBASE_SA);
+  const token = await accessToken(sa);
+  const fs = firestore(sa.project_id, token);
+  const pend = await fs.query("ingresos", { fieldFilter: { field: { fieldPath: "notificado" }, op: "EQUAL", value: { booleanValue: false } } });
+  if (!pend.length) return;
+  const staff = (await fs.list("tokens")).filter(t => t.data.rol === "dueño" && Array.isArray(t.data.tokens));
+  for (const d of pend) {
+    if (!(await fs.marcar(d.name, d.updateTime))) continue;
+    const n = String(d.data.nombre || "Un alumno").trim();
+    for (const s of staff) for (const t of s.data.tokens) await enviar(sa.project_id, token, t, { title: `📱 ${n} entró a la app`, body: "Primera vez que inicia sesión. En Alumnos ves quiénes faltan.", tag: "ingreso-" + d.data.alumnoId });
   }
 }
 

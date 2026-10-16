@@ -42,6 +42,7 @@ function iniciarPortal(perfil, u) {
   setTimeout(() => { if (!P.cargado) { const v = $("#pView"); if (v) v.innerHTML = `<div class="notice" style="display:grid;gap:10px">Está tardando en cargar. Revisá la conexión.<button class="btn pri" onclick="location.reload()" style="justify-self:start">Reintentar</button></div>`; } }, 8000);
   fdb.doc("alumnos/" + id).onSnapshot(d => { if (!d.exists && d.metadata && d.metadata.fromCache && !P.a) return; P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
   refrescarNotif({ rol: "alumno", alumnoId: id });
+  setTimeout(() => registrarIngreso(), 2500);
   setTimeout(pedirNotifAlEntrar, 700);
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
@@ -51,6 +52,19 @@ function iniciarPortal(perfil, u) {
   fdb.collection("avisos").where("alumnoId", "==", id).onSnapshot(s => { P.avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
   { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
+}
+
+// Le avisa a Gabriel la primera vez que el alumno entra, y guarda si tiene las notificaciones activas.
+let ingresoHecho = false;
+async function registrarIngreso(forzar) {
+  if ((ingresoHecho && !forzar) || !P.uid || !P.perfil || !P.perfil.alumnoId) return; ingresoHecho = true;
+  const ref = fdb.doc("ingresos/" + P.uid); const notif = (() => { try { return estadoNotif() === "activas"; } catch (e) { return false; } })();
+  const nombre = (P.a && P.a.nombre) || P.perfil.nombre || "";
+  try {
+    const d = await ref.get();
+    if (!d.exists) { await ref.set({ alumnoId: P.perfil.alumnoId, nombre, primera: firebase.firestore.FieldValue.serverTimestamp(), ultimo: firebase.firestore.FieldValue.serverTimestamp(), notif, notificado: false }); avisarAlInstante(); }
+    else { const v = d.data(); const viejo = !v.ultimo || !v.ultimo.toDate || Date.now() - v.ultimo.toDate().getTime() > 6 * 3600e3; if (forzar || viejo || v.notif !== notif) await ref.update({ ultimo: firebase.firestore.FieldValue.serverTimestamp(), notif, nombre }); }
+  } catch (e) { console.error(e); }
 }
 
 /* ---- Cálculos ---- */
@@ -413,7 +427,7 @@ document.addEventListener("click", async e => {
   if (pa === "viaje") { abrirViaje(); return; }
   if (pa === "vjModo") { const d = ($("#vjD") || {}).value; abrirViaje(b.dataset.m); if (d) { $("#vjD").value = d; viajePrev(); } return; }
   if (pa === "viajeOk") { const sel = clasesViaje().map(c => ({ f: c.fecha, h: c.hora })); if (!sel.length) return; await avisarLista(b, sel); return; }
-  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.perfil.alumnoId }); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
+  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.perfil.alumnoId }); registrarIngreso(true); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {

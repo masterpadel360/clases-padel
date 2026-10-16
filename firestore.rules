@@ -143,6 +143,15 @@ service cloud.firestore {
       allow write: if esStaff();
     }
     // Pruebas e invitados que Gabriel suma a un turno (ocupan lugar).
+    // Primer ingreso de cada alumno a la app (y si activó las notificaciones).
+    match /ingresos/{uid} {
+      allow read: if esStaff();
+      allow create: if esAlumno() && request.auth.uid == uid && request.resource.data.alumnoId == miAlumno()
+        && request.resource.data.notificado == false
+        && request.resource.data.keys().hasOnly(['alumnoId', 'nombre', 'primera', 'ultimo', 'notif', 'notificado']);
+      allow update: if esAlumno() && request.auth.uid == uid && request.resource.data.alumnoId == miAlumno()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimo', 'notif', 'nombre']);
+    }
     match /staffAvisos/{id} {
       allow create: if esStaff();
       allow read, update, delete: if esDueno();
