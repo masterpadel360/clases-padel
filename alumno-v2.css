@@ -551,3 +551,10 @@ html.v2 #staffApp .row.as-l .name .tag{white-space:normal;max-width:100%;overflo
 .hs-dias b{font-size:17px}
 .app-res{margin:0 0 10px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--k-card,#fff);font-size:14px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .app-res .linkish{font-size:14px;font-weight:700}
+/* Botón flotante de asistencia y barra para volver */
+html.v2 #staffApp .fab-as{background:var(--k-ok,#2e7d32)!important}
+.as-top{position:sticky;top:calc(env(safe-area-inset-top,0px) + 6px);z-index:6;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 10px;padding:10px 12px;border-radius:14px;background:var(--k-ok,#2e7d32);color:#fff;box-shadow:0 10px 24px -14px rgba(0,0,0,.5)}
+.as-top .as-listo{background:#fff!important;color:var(--k-ok,#2e7d32)!important;min-height:40px;padding:0 16px;font-weight:800}
+html.v2 #staffApp #tabs .tab{font-size:9.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;padding-inline:2px}
+.es-h{font-size:18px;text-align:right;white-space:nowrap}
+html.v2 #staffApp .row.es-dia .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}

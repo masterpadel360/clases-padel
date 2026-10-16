@@ -241,7 +241,7 @@ function vHoy(){
 
 
   ${avisoOwner()}
-  ${panelEquipo()}
+
   <section class="sec">
     <div class="sec-head"><h3>Deben ${mesSolo(S.mes)}</h3><span class="small muted">${deben.length}</span></div>
     ${deben.length?`<div class="list">${deben.map(alRow).join("")}</div>`:al.length?`<div class="empty"><b>Todos al día.</b> Nadie debe este mes.</div>`:emptyAlumnos()}
@@ -384,6 +384,24 @@ function openAjuste(a){
   </form>`);
   ajPreview(); $("#ajMonto").addEventListener("input",ajPreview);
 }
+/* ---------- Pestaña Esteban: horas por día y si tomó asistencia ---------- */
+function vEsteban(){
+  const eq=S.equipo[0]; const nombre=eq&&S.nombres[eq.id]||"Esteban"; const corto=nombre.split(" ")[0];
+  const dias=(eq&&eq.dias)||{}; const filas=[]; const usr=(S.usuarios||[]).find(u=>u.rol==="profe"&&(!eq||u.id===eq.id)); const desde=(usr&&usr.alta)||"";
+  for(let i=0;i<21;i++){ const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i); const f=toISO(d); const dow=d.getDay(); if(desde&&f<desde&&!dias[f]) continue;
+    const ts=turnos("JUMP").filter(t=>t.dia===dow).map(t=>({...t,al:t.al.filter(a=>!a.inicio||a.inicio<=f)})).filter(t=>t.al.length);
+    const h=dias[f]||0; if(!ts.length&&!h) continue;
+    const mk=(S.asHist||{})[f]||{}; const esper=ts.reduce((s,t)=>s+t.al.length,0); const marc=ts.reduce((s,t)=>s+t.al.filter(a=>mk[`${a.id}|${t.hora}`]).length,0);
+    const enHist=i<=20; const asis=!ts.length?"":!enHist?"":marc>=esper?'<span class="tag" style="background:var(--k-ok-s);color:var(--k-ok)">✓ Asistencia</span>':marc?`<span class="tag rec">Asistencia ${marc}/${esper}</span>`:(f===hoyISO?'<span class="tag">Asistencia pendiente</span>':'<span class="tag no">✗ Sin asistencia</span>');
+    const hTxt=h?`<b class="num">${fmtH(h)} h</b>`:(ts.length&&f!==hoyISO?'<b class="due">Sin horas</b>':'<span class="muted">—</span>');
+    filas.push(`<div class="row es-dia ${ts.length&&f!==hoyISO&&(!h||marc<esper)?"is-debe":h?"is-ok":""}"><span class="main"><span class="name" style="text-transform:capitalize">${diaTxt(f)}</span><span class="meta">${ts.length?`${ts.length} turno${ts.length===1?"":"s"} en Jump`:"Sin turnos fijos"}${asis}</span></span><span class="es-h">${hTxt}</span></div>`); }
+  const faltan=filas.filter(x=>x.includes("is-debe")).length;
+  return `<section class="sec" style="margin-top:4px"><div class="sec-head"><h3>${esc(corto)} · últimos días</h3>${faltan?`<span class="small due">${faltan} día${faltan===1?"":"s"} con algo pendiente</span>`:'<span class="small" style="color:var(--k-ok)">Todo al día ✓</span>'}</div>
+    ${eq?`<div class="list">${filas.join("")||'<div class="empty">Todavía no hay días con clases ni horas cargadas.</div>'}</div>`:`<div class="empty">Cuando ${esc(corto)} entre con su usuario y cargue horas, las vas a ver acá día por día. Creale el acceso en Ajustes → Profes.</div>`}
+    <p class="small muted" style="margin:8px 0 0">Rojo: un día con clases en Jump sin horas cargadas o sin asistencia completa.</p></section>
+  ${panelEquipo()}`;
+}
+
 /* ---------- Panel Esteban / ganancia ---------- */
 let aumPct=10;
 function panelEquipo(){
@@ -735,24 +753,28 @@ const TAB_ICON={
   asist:'<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM8.5 12.5l2 2 4-4"/></svg>',
   horas:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>'};
 TAB_ICON.plata='<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>';
-const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",asist:"Asistencia",horas:"Mis horas"};
-const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","recuperar","asist"];
-function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=`repeat(${t.length},1fr)`;
+TAB_ICON.esteban='<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/><path d="M17 3.5l2 2"/></svg>';
+const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperación",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
+const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","recuperar","esteban"];
+function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=t.map(k=>k==="recuperar"?"1.45fr":k==="alumnos"?"1.1fr":"1fr").join(" ");
   nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
 function render(){
-  if(!tabsDe().includes(S.tab)) S.tab=tabsDe()[0];
+  if(!tabsDe().includes(S.tab)&&!(S.tab==="asist"&&S.modo!=="profe")) S.tab=tabsDe()[0];
+  TAB_LBL.esteban=(S.equipo&&S.equipo[0]&&(S.nombres||{})[S.equipo[0].id]||"Esteban").split(" ")[0];
   if(S.modo==="profe"){ S.club="JUMP"; S.asClub="JUMP"; }
   renderTabs(); $("#cfgBtn").hidden=!S.esOwner; objBar();
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab));
   document.querySelectorAll("#clubs .chip").forEach(b=>b.setAttribute("aria-pressed",b.dataset.club===S.club));
-  $("#fab").hidden=S.modo==="profe"||(S.tab!=="alumnos"&&S.tab!=="hoy");
+  $("#fab").hidden=S.modo==="profe"||S.tab!=="alumnos";
+  { const fa=$("#fabAs"); if(fa) fa.hidden=S.modo==="profe"||S.tab==="asist"||S.tab==="alumnos"; }
   $("#clubs").hidden=S.tab==="asist"||S.modo==="profe";
   let html="";
   if(S.dbState==="sin-db") html+=`<div class="notice">No se pudo conectar con la base de datos. Revisá tu conexión y volvé a abrir la app.</div>`;
   else if(S.dbState==="cargando") html+=`<p class="small muted" style="margin:16px 0 0">Cargando tus alumnos…</p>`;
   if(S.tab==="asist"||(S.modo==="profe"&&S.asFecha===hoyISO)) subAsist();
   if(S.modo==="profe") html+=`<div class="notice" style="background:var(--surface-2);color:var(--muted);margin:0 0 12px">${S.esOwner?'Estás viendo los datos reales de Esteban. Lo que cambies acá se guarda en su cuenta. <button class="linkish" data-act="modoOwner">Volver a la tuya</button>':"Jump · vista de profe · <button class=\"linkish\" data-act=\"salir\">Cerrar sesión</button>"}</div>`;
-  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata})[S.tab]();
+  if(S.tab==="asist"&&S.modo!=="profe") html+=`<div class="as-top"><span><b>Asistencia</b> · tomala y volvé</span><button class="btn pri as-listo" data-act="asCerrar">✕ Listo</button></div>`;
+  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban})[S.tab]();
   const focused=document.activeElement&&document.activeElement.id==="q";
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
   if(focused&&S.tab==="alumnos"){ const tmp=document.createElement("div"); tmp.innerHTML=html; const nq=tmp.querySelector("#q"), lq=$("#q");
@@ -1021,15 +1043,17 @@ document.addEventListener("click",async e=>{
   if(!window.MODO_STAFF) return;
   const sentA=e.target.closest("a[data-sent]");
   if(sentA){ S.sent[sentA.dataset.sent]=true; setTimeout(()=>{ const m=sentA.closest(".msg,.row"); if(m&&!m.querySelector(".sent")){ const s=document.createElement("span"); s.className="sent"; s.textContent="Abierto ✓"; (m.querySelector(".msg-k")||m.querySelector(".meta")).appendChild(s);} },50); return; }
-  const b=e.target.closest("[data-act],.tab,#clubs .chip,#fab,#cfgBtn"); if(!b) return;
+  const b=e.target.closest("[data-act],.tab,#clubs .chip,#fab,#fabAs,#cfgBtn"); if(!b) return;
   if(b.classList.contains("tab")){ S.tab=b.dataset.tab; if(S.tab==="agenda") S.fecha=hoyISO; render(); scrollTo(0,0); if(S.tab==="agenda") centrarDia(); return; }
   if(b.matches("#clubs .chip")){ S.club=b.dataset.club; render(); return; }
   if(b.id==="fab"){ formAlumno(); return; }
+  if(b.id==="fabAs"){ S.prevTab=S.tab; S.asFecha=hoyISO; { const dw=now.getDay(); const hay=c=>turnos(c).some(t=>t.dia===dw); if(!hay(S.asClub)) S.asClub=hay("ESPACIO")?"ESPACIO":hay("JUMP")?"JUMP":S.asClub; } S.tab="asist"; render(); scrollTo(0,0); return; }
   if(b.id==="cfgBtn"){ openCfg(); return; }
   const act=b.dataset.act,id=b.dataset.id;
   const A=id&&S.alumnos.find(x=>x.id===id), L=id&&S.leads.find(x=>x.id===id);
   switch(act){
     case "tab": S.tab=b.dataset.t; render(); scrollTo(0,0); if(S.tab==="agenda") centrarDia(); break;
+    case "asCerrar": S.tab=S.prevTab&&S.prevTab!=="asist"?S.prevTab:"hoy"; render(); scrollTo(0,0); break;
     case "mes": { const [y,m]=S.mes.split("-").map(Number); S.mes=mesKey(new Date(y,m-1+Number(b.dataset.d),1)); render(); break; }
     case "dia": S.dia=Number(b.dataset.d); render(); break;
     case "fecha": { const st=document.getElementById("daysStrip"); const sl=st?st.scrollLeft:0; S.fecha=b.dataset.f; render(); const n=document.getElementById("daysStrip"); if(n) n.scrollLeft=sl; break; }

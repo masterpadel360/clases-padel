@@ -151,7 +151,7 @@ async function iniciarStaff(perfil, u) {
     db.doc("horas/" + S.uid).onSnapshot(d => { if (hPend > 0) return; S.horas = { ...((d.exists && d.data().dias) || {}) }; S.hVal = { ...((d.exists && d.data().valores) || {}) }; S.hMovs = [...((d.exists && d.data().movs) || [])]; vis(); }, () => {});
     db.doc("finanzas/" + S.uid).onSnapshot(d => { if (fPend > 0) return; S.fin = [...((d.exists && d.data().movs) || [])]; vis(); }, () => {});
   }
-  { const d = new Date(now); d.setDate(d.getDate() - 8);
+  { const d = new Date(now); d.setDate(d.getDate() - 21);
     db.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(snap => { S.asHist = {}; snap.docs.forEach(x => { const v = x.data(); if (v.club === "JUMP") S.asHist[v.fecha] = { ...(v.marcas || {}) }; }); vis(); }, () => {}); }
   { const d = new Date(now); d.setDate(d.getDate() - 45);
     db.collection("avisos").where("fecha", ">=", toISO(d)).onSnapshot(snap => { S.avisos = snap.docs.map(x => ({ id: x.id, ...x.data() })); vis(); }, () => {}); }
