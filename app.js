@@ -385,31 +385,48 @@ function openAjuste(a){
   ajPreview(); $("#ajMonto").addEventListener("input",ajPreview);
 }
 /* ---------- Gestión: cancha de Gonza + profe ---------- */
-function canchaDe(){ const c=S.cancha||{}; return {nombre:c.nombre||"Gonza",luz:Number(c.precioLuz)||0,sin:Number(c.precioSinLuz)||0,desde:c.luzDesde||"19:00",dias:c.dias||{},pagos:c.pagos||{}}; }
-function sugCancha(f,desde){ const dow=isoDate(f).getDay(); const ts=turnos("JUMP").filter(t=>t.dia===dow&&t.al.some(a=>!a.inicio||a.inicio<=f)); return {luz:ts.filter(t=>t.hora>=desde).length,sin:ts.filter(t=>t.hora<desde).length}; }
+// Cada cancha (Jump y Espacio) con sus precios. Las horas se cuentan solas: cada turno con asistencia tomada = 1 hora usada
+// (con luz si empieza desde "luzDesde"). Si se suspendió por lluvia no cuenta. Se puede corregir a mano un día.
+const gcAb=new Set(); document.addEventListener("toggle",e=>{ const k=e.target&&e.target.dataset&&e.target.dataset.open; if(k){ e.target.open?gcAb.add(k):gcAb.delete(k); } },true);
+const CANCHAS=[["JUMP","Jump","Gonza"],["ESPACIO","Espacio La 10",""]];
+function canchaDe(club){ const g=S.cancha||{}; const c=(g.clubes||{})[club]||(club==="JUMP"&&g.precioLuz!==undefined?{precioLuz:g.precioLuz,precioSinLuz:g.precioSinLuz,luzDesde:g.luzDesde,nombre:g.nombre,ajustes:g.dias,pagos:g.pagos}:{});
+  const def=CANCHAS.find(x=>x[0]===club); return {club,lugar:def[1],nombre:c.nombre!==undefined?c.nombre:def[2],luz:Number(c.precioLuz)||0,sin:Number(c.precioSinLuz)||0,desde:c.luzDesde||"18:30",aj:c.ajustes||{},pagos:c.pagos||{}}; }
+function usoAuto(club,f,desde){ const mk=((S.asMes||{})[`${club}|${f}`])||null; if(!mk) return {luz:0,sin:0,horas:[]};
+  const hs=new Set(); Object.keys(mk).forEach(k=>{ if(mk[k]&&mk[k]!=="lluvia") hs.add(k.split("|")[1]); });
+  const horas=[...hs].sort(); return {luz:horas.filter(h=>h>=desde).length,sin:horas.filter(h=>h<desde).length,horas}; }
+function usoDia(C,f){ const a=C.aj[f]; if(a) return {luz:Number(a.luz)||0,sin:Number(a.sin)||0,manual:true}; const u=usoAuto(C.club,f,C.desde); return {...u,manual:false}; }
+let asMesUnsub=null, asMesKey="";
+function escucharAsMes(m){ if(asMesKey===m||!S.db) return; asMesKey=m; if(asMesUnsub) asMesUnsub(); const [y,mm]=m.split("-").map(Number);
+  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${m}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if(S.tab==="gestion"&&$("#overlay").hidden) render(); },e=>console.error(e)); }
+function canchaHTML(club,m){ const C=canchaDe(club); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate(); let hl=0,hs=0; const filas=[];
+  for(let d=1;d<=ult;d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); const dow=isoDate(f).getDay(); const hayTurnos=turnos(club).some(t=>t.dia===dow);
+    if(!u.manual&&!u.luz&&!u.sin&&!hayTurnos) continue; hl+=u.luz; hs+=u.sin;
+    const step=(k,v)=>`<span class="gc-st"><button type="button" data-act="gcStep" data-club="${club}" data-f="${f}" data-k="${k}" data-d="-1" aria-label="Restar">−</button><b class="num">${v}</b><button type="button" data-act="gcStep" data-club="${club}" data-f="${f}" data-k="${k}" data-d="1" aria-label="Sumar">+</button></span>`;
+    const nota=u.manual?`Corregido a mano · <button class="linkish" data-act="gcAuto" data-club="${club}" data-f="${f}">Volver a automático</button>`:(u.luz+u.sin?`Automático por asistencia (${u.horas.join(", ")})`:(f===hoyISO?"Se suma cuando tomen asistencia":(Object.values((S.asMes||{})[`${club}|${f}`]||{}).includes("lluvia")?"🌧 Suspendido por lluvia: no se contó":'<span class="due">Sin asistencia: no se contó</span>')));
+    filas.push(`<div class="row gc-row ${u.luz+u.sin?"is-ok":""}" data-k="gc-${club}-${f}"><span class="main"><span class="name" style="text-transform:capitalize">${diaTxt(f)}</span><span class="meta">${nota}</span></span><span class="gc-cols"><span class="gc-c"><small>💡 Luz</small>${step("luz",u.luz)}</span><span class="gc-c"><small>☀️ Sin</small>${step("sin",u.sin)}</span></span></div>`); }
+  const tot=hl*C.luz+hs*C.sin; const pg=C.pagos[m]; const quien=C.nombre?` a ${esc(C.nombre)}`:"";
+  return `<section class="sec gc-sec"><div class="gc-tot ${pg&&pg.pagado?"ok":""}"><div><small>Pago cancha ${esc(C.lugar)}${quien}</small><b class="num">${money(tot)}</b><span class="small">${fmtH(hl)} h con luz × ${money(C.luz)} · ${fmtH(hs)} h sin luz × ${money(C.sin)}</span></div>
+      ${pg&&pg.pagado?`<button class="btn sec2" data-act="gcPago" data-club="${club}">✓ Pagado ${pg.fecha?pg.fecha.split("-").reverse().slice(0,2).join("/"):""}</button>`:`<button class="btn pri" data-act="gcPago" data-club="${club}" ${tot?"":"disabled"}>Marcar pagado</button>`}</div>
+    ${C.luz||C.sin?"":`<div class="fp-res debe">Cargá cuánto cobra la hora con luz y sin luz en ${esc(C.lugar)} (abajo, en Precios).</div>`}
+    <details class="gc-dias" data-open="d-${club}" ${gcAb.has("d-"+club)?"open":""}><summary>Ver horas día por día (${filas.length})</summary><div class="list">${filas.join("")||'<div class="empty">Todavía no hay días con turnos este mes.</div>'}</div></details>
+    <details class="gc-cfg" data-open="c-${club}" ${gcAb.has("c-"+club)?"open":""}><summary>Precios y horario de luz · ${esc(C.lugar)}</summary>
+      <div class="two"><div class="field"><label for="gcL-${club}">Hora con luz</label><input id="gcL-${club}" type="number" inputmode="numeric" min="0" step="500" value="${C.luz||""}" placeholder="Ej: 15000"></div><div class="field"><label for="gcS-${club}">Hora sin luz</label><input id="gcS-${club}" type="number" inputmode="numeric" min="0" step="500" value="${C.sin||""}" placeholder="Ej: 12000"></div></div>
+      <div class="two"><div class="field"><label for="gcD-${club}">Con luz desde</label><input id="gcD-${club}" type="time" value="${C.desde}" step="900"></div><div class="field"><label for="gcN-${club}">A quién le pagás</label><input id="gcN-${club}" value="${esc(C.nombre)}" placeholder="Nombre (opcional)"></div></div>
+      <button class="mini go" data-act="gcCfg" data-club="${club}">Guardar</button></details></section>`; }
 function vGestion(){
-  const C=canchaDe(); const m=S.gMes||(S.gMes=mesKey(now)); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate();
-  const filas=[]; let hl=0,hs=0;
-  for(let d=1;d<=ult;d++){ const f=`${m}-${pad(d)}`; const dd=C.dias[f]; const sg=sugCancha(f,C.desde); if(!dd&&!sg.luz&&!sg.sin) continue; if(f>hoyISO&&!dd) continue;
-    const l=dd?Number(dd.luz)||0:0, s=dd?Number(dd.sin)||0:0; hl+=l; hs+=s;
-    const step=(k,v)=>`<span class="gc-st"><button type="button" data-act="gcStep" data-f="${f}" data-k="${k}" data-d="-1" aria-label="Restar">−</button><b class="num">${v}</b><button type="button" data-act="gcStep" data-f="${f}" data-k="${k}" data-d="1" aria-label="Sumar">+</button></span>`;
-    filas.push(`<div class="row gc-row ${dd?"is-ok":""}" data-k="gc-${f}"><span class="main"><span class="name" style="text-transform:capitalize">${diaTxt(f)}</span><span class="meta">${dd?`${fmtH(l+s)} h · ${money(l*C.luz+s*C.sin)}`:`Sugerido: ${sg.luz} con luz · ${sg.sin} sin luz <button class="linkish" data-act="gcSug" data-f="${f}">Usar</button>`}</span></span>
-      <span class="gc-cols"><span class="gc-c"><small>💡 Luz</small>${step("luz",l)}</span><span class="gc-c"><small>☀️ Sin</small>${step("sin",s)}</span></span></div>`); }
-  const tot=hl*C.luz+hs*C.sin; const pg=C.pagos[m];
-  return `<section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Cancha de ${esc(C.nombre)}</h3><span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="gMes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(m)}</span><button class="linkish" data-act="gMes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
-    <div class="gc-tot ${pg&&pg.pagado?"ok":""}"><div><small>A pagarle a ${esc(C.nombre)}</small><b class="num">${money(tot)}</b><span class="small">${fmtH(hl)} h con luz × ${money(C.luz)} · ${fmtH(hs)} h sin luz × ${money(C.sin)}</span></div>
-      ${pg&&pg.pagado?`<button class="btn sec2" data-act="gcPago">✓ Pagado ${pg.fecha?pg.fecha.split("-").reverse().slice(0,2).join("/"):""}</button>`:`<button class="btn pri" data-act="gcPago" ${tot?"":"disabled"}>Marcar pagado</button>`}</div>
-    ${C.luz||C.sin?"":`<div class="fp-res debe">Cargá abajo cuánto cobra ${esc(C.nombre)} la hora con luz y sin luz.</div>`}
-    <div class="list">${filas.join("")||'<div class="empty">No hay días con turnos de Jump este mes.</div>'}</div>
-    <details class="gc-cfg"><summary>Precios y horario de luz</summary>
-      <div class="two"><div class="field"><label for="gcL">Hora con luz</label><input id="gcL" type="number" inputmode="numeric" min="0" step="500" value="${C.luz||""}" placeholder="Ej: 15000"></div><div class="field"><label for="gcS">Hora sin luz</label><input id="gcS" type="number" inputmode="numeric" min="0" step="500" value="${C.sin||""}" placeholder="Ej: 12000"></div></div>
-      <div class="two"><div class="field"><label for="gcD">La luz se prende desde</label><input id="gcD" type="time" value="${C.desde}" step="1800"></div><div class="field"><label for="gcN">Nombre</label><input id="gcN" value="${esc(C.nombre)}"></div></div>
-      <button class="mini go" data-act="gcCfg">Guardar</button></details>
-  </section>
+  const m=S.gMes||(S.gMes=mesKey(now)); escucharAsMes(m);
+  return `<section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Canchas</h3><span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="gMes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(m)}</span><button class="linkish" data-act="gMes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
+    <p class="small muted" style="margin:0 0 8px">Las horas se cargan solas: cada turno con asistencia tomada cuenta como una hora de cancha (si se suspendió por lluvia, no).</p></section>
+  ${CANCHAS.map(([c])=>canchaHTML(c,m)).join("")}
   ${vEsteban()}`;
 }
-async function guardarCancha(patch,msg){ S.cancha={...(S.cancha||{})}; if(patch.dias) S.cancha.dias={...(S.cancha.dias||{}),...patch.dias}; if(patch.pagos) S.cancha.pagos={...(S.cancha.pagos||{}),...patch.pagos}; Object.keys(patch).forEach(k=>{ if(k!=="dias"&&k!=="pagos") S.cancha[k]=patch[k]; }); render();
-  return safe(()=>S.db.doc("gestion/cancha").set(patch,{merge:true}),msg); }
+async function guardarCancha(club,patch,msg){ const g={...(S.cancha||{})}; const prev=canchaDe(club);
+  const cur={precioLuz:prev.luz,precioSinLuz:prev.sin,luzDesde:prev.desde,nombre:prev.nombre,ajustes:{...prev.aj},pagos:{...prev.pagos},...((g.clubes||{})[club]||{})};
+  if(patch.ajustes) cur.ajustes={...(cur.ajustes||{}),...patch.ajustes}; if(patch.pagos) cur.pagos={...(cur.pagos||{}),...patch.pagos};
+  Object.keys(patch).forEach(k=>{ if(k!=="ajustes"&&k!=="pagos") cur[k]=patch[k]; });
+  Object.keys(cur.ajustes||{}).forEach(k=>{ if(cur.ajustes[k]===null) delete cur.ajustes[k]; });
+  g.clubes={...(g.clubes||{}),[club]:cur}; S.cancha=g; render();
+  return safe(()=>S.db.doc("gestion/cancha").set(g),msg); }
 
 /* ---------- Pestaña Esteban: horas por día y si tomó asistencia ---------- */
 function vEsteban(){
@@ -782,9 +799,9 @@ const TAB_ICON={
 TAB_ICON.plata='<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>';
 TAB_ICON.gestion='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 15v-3M12 15V9M16 15v-5"/></svg>';
 TAB_ICON.esteban='<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/><path d="M17 3.5l2 2"/></svg>';
-const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperaciones",gestion:"Gestión",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
+const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
 const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","recuperar","gestion"];
-function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=t.map(k=>k==="recuperar"?"1.9fr":k==="alumnos"||k==="gestion"?"1.15fr":"1fr").join(" ");
+function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=`repeat(${t.length},1fr)`;
   nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
 function render(){
   if(!tabsDe().includes(S.tab)&&!(S.tab==="asist"&&S.modo!=="profe")) S.tab=tabsDe()[0];
@@ -1082,10 +1099,10 @@ document.addEventListener("click",async e=>{
   switch(act){
     case "tab": S.tab=b.dataset.t; render(); scrollTo(0,0); if(S.tab==="agenda") centrarDia(); break;
     case "gMes": { const [y,mm]=(S.gMes||mesKey(now)).split("-").map(Number); S.gMes=mesKey(new Date(y,mm-1+Number(b.dataset.d),1)); render(); break; }
-    case "gcStep": { const C=canchaDe(); const f=b.dataset.f, k=b.dataset.k; const cur=C.dias[f]||{luz:0,sin:0}; const nv={luz:Number(cur.luz)||0,sin:Number(cur.sin)||0}; nv[k]=Math.max(0,nv[k]+Number(b.dataset.d)); await guardarCancha({dias:{[f]:nv}}); break; }
-    case "gcSug": { const C=canchaDe(); await guardarCancha({dias:{[b.dataset.f]:sugCancha(b.dataset.f,C.desde)}}); break; }
-    case "gcPago": { const m=S.gMes||mesKey(now); const C=canchaDe(); const pg=C.pagos[m]; if(pg&&pg.pagado){ await guardarCancha({pagos:{[m]:{pagado:false}}},"Marcado como no pagado"); } else { let hl=0,hs=0; Object.keys(C.dias).filter(f=>f.startsWith(m)).forEach(f=>{ hl+=Number(C.dias[f].luz)||0; hs+=Number(C.dias[f].sin)||0; }); await guardarCancha({pagos:{[m]:{pagado:true,monto:hl*C.luz+hs*C.sin,fecha:hoyISO}}},`Pagado a ${C.nombre}`); } break; }
-    case "gcCfg": await guardarCancha({precioLuz:Number($("#gcL").value)||0,precioSinLuz:Number($("#gcS").value)||0,luzDesde:$("#gcD").value||"19:00",nombre:($("#gcN").value||"Gonza").trim()},"Guardado"); break;
+    case "gcStep": { const club=b.dataset.club, f=b.dataset.f, k=b.dataset.k; const C=canchaDe(club); const u=usoDia(C,f); const nv={luz:u.luz,sin:u.sin}; nv[k]=Math.max(0,nv[k]+Number(b.dataset.d)); await guardarCancha(club,{ajustes:{[f]:nv}}); break; }
+    case "gcAuto": await guardarCancha(b.dataset.club,{ajustes:{[b.dataset.f]:null}},"Volvió a automático"); break;
+    case "gcPago": { const club=b.dataset.club; const m=S.gMes||mesKey(now); const C=canchaDe(club); const pg=C.pagos[m]; if(pg&&pg.pagado){ await guardarCancha(club,{pagos:{[m]:{pagado:false}}},"Marcado como no pagado"); } else { const [y,mm]=m.split("-").map(Number); let hl=0,hs=0; for(let d=1;d<=new Date(y,mm,0).getDate();d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); hl+=u.luz; hs+=u.sin; } await guardarCancha(club,{pagos:{[m]:{pagado:true,monto:hl*C.luz+hs*C.sin,fecha:hoyISO}}},`Pago de cancha ${C.lugar} registrado`); } break; }
+    case "gcCfg": { const c=b.dataset.club; await guardarCancha(c,{precioLuz:Number($("#gcL-"+c).value)||0,precioSinLuz:Number($("#gcS-"+c).value)||0,luzDesde:$("#gcD-"+c).value||"18:30",nombre:($("#gcN-"+c).value||"").trim()},"Guardado"); break; }
     case "asCerrar": S.tab=S.prevTab&&S.prevTab!=="asist"?S.prevTab:"hoy"; render(); scrollTo(0,0); break;
     case "mes": { const [y,m]=S.mes.split("-").map(Number); S.mes=mesKey(new Date(y,m-1+Number(b.dataset.d),1)); render(); break; }
     case "dia": S.dia=Number(b.dataset.d); render(); break;

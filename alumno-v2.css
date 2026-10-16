@@ -576,3 +576,6 @@ html.v2 #staffApp .row.gc-row{display:grid;grid-template-columns:1fr auto;align-
 .gc-cfg{margin-top:10px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--k-card,#fff)}
 .gc-cfg summary{font-weight:700;cursor:pointer}
 .gc-cfg .two{margin-top:10px}
+.gc-sec{margin-top:10px}
+.gc-dias{margin-top:6px}
+.gc-dias summary{font-weight:700;cursor:pointer;padding:8px 2px}
