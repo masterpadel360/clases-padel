@@ -162,6 +162,10 @@ service cloud.firestore {
     match /extras/{id} {
       allow read, write: if esStaff();
     }
+    // Gestión de Gabriel (cancha de Gonza): solo él.
+    match /gestion/{id} {
+      allow read, write: if esDueno();
+    }
     match /config/{id} {
       allow read, write: if esStaff();
     }

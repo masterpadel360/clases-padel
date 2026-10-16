@@ -384,6 +384,33 @@ function openAjuste(a){
   </form>`);
   ajPreview(); $("#ajMonto").addEventListener("input",ajPreview);
 }
+/* ---------- Gestión: cancha de Gonza + profe ---------- */
+function canchaDe(){ const c=S.cancha||{}; return {nombre:c.nombre||"Gonza",luz:Number(c.precioLuz)||0,sin:Number(c.precioSinLuz)||0,desde:c.luzDesde||"19:00",dias:c.dias||{},pagos:c.pagos||{}}; }
+function sugCancha(f,desde){ const dow=isoDate(f).getDay(); const ts=turnos("JUMP").filter(t=>t.dia===dow&&t.al.some(a=>!a.inicio||a.inicio<=f)); return {luz:ts.filter(t=>t.hora>=desde).length,sin:ts.filter(t=>t.hora<desde).length}; }
+function vGestion(){
+  const C=canchaDe(); const m=S.gMes||(S.gMes=mesKey(now)); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate();
+  const filas=[]; let hl=0,hs=0;
+  for(let d=1;d<=ult;d++){ const f=`${m}-${pad(d)}`; const dd=C.dias[f]; const sg=sugCancha(f,C.desde); if(!dd&&!sg.luz&&!sg.sin) continue; if(f>hoyISO&&!dd) continue;
+    const l=dd?Number(dd.luz)||0:0, s=dd?Number(dd.sin)||0:0; hl+=l; hs+=s;
+    const step=(k,v)=>`<span class="gc-st"><button type="button" data-act="gcStep" data-f="${f}" data-k="${k}" data-d="-1" aria-label="Restar">−</button><b class="num">${v}</b><button type="button" data-act="gcStep" data-f="${f}" data-k="${k}" data-d="1" aria-label="Sumar">+</button></span>`;
+    filas.push(`<div class="row gc-row ${dd?"is-ok":""}" data-k="gc-${f}"><span class="main"><span class="name" style="text-transform:capitalize">${diaTxt(f)}</span><span class="meta">${dd?`${fmtH(l+s)} h · ${money(l*C.luz+s*C.sin)}`:`Sugerido: ${sg.luz} con luz · ${sg.sin} sin luz <button class="linkish" data-act="gcSug" data-f="${f}">Usar</button>`}</span></span>
+      <span class="gc-cols"><span class="gc-c"><small>💡 Luz</small>${step("luz",l)}</span><span class="gc-c"><small>☀️ Sin</small>${step("sin",s)}</span></span></div>`); }
+  const tot=hl*C.luz+hs*C.sin; const pg=C.pagos[m];
+  return `<section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Cancha de ${esc(C.nombre)}</h3><span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="gMes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(m)}</span><button class="linkish" data-act="gMes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
+    <div class="gc-tot ${pg&&pg.pagado?"ok":""}"><div><small>A pagarle a ${esc(C.nombre)}</small><b class="num">${money(tot)}</b><span class="small">${fmtH(hl)} h con luz × ${money(C.luz)} · ${fmtH(hs)} h sin luz × ${money(C.sin)}</span></div>
+      ${pg&&pg.pagado?`<button class="btn sec2" data-act="gcPago">✓ Pagado ${pg.fecha?pg.fecha.split("-").reverse().slice(0,2).join("/"):""}</button>`:`<button class="btn pri" data-act="gcPago" ${tot?"":"disabled"}>Marcar pagado</button>`}</div>
+    ${C.luz||C.sin?"":`<div class="fp-res debe">Cargá abajo cuánto cobra ${esc(C.nombre)} la hora con luz y sin luz.</div>`}
+    <div class="list">${filas.join("")||'<div class="empty">No hay días con turnos de Jump este mes.</div>'}</div>
+    <details class="gc-cfg"><summary>Precios y horario de luz</summary>
+      <div class="two"><div class="field"><label for="gcL">Hora con luz</label><input id="gcL" type="number" inputmode="numeric" min="0" step="500" value="${C.luz||""}" placeholder="Ej: 15000"></div><div class="field"><label for="gcS">Hora sin luz</label><input id="gcS" type="number" inputmode="numeric" min="0" step="500" value="${C.sin||""}" placeholder="Ej: 12000"></div></div>
+      <div class="two"><div class="field"><label for="gcD">La luz se prende desde</label><input id="gcD" type="time" value="${C.desde}" step="1800"></div><div class="field"><label for="gcN">Nombre</label><input id="gcN" value="${esc(C.nombre)}"></div></div>
+      <button class="mini go" data-act="gcCfg">Guardar</button></details>
+  </section>
+  ${vEsteban()}`;
+}
+async function guardarCancha(patch,msg){ S.cancha={...(S.cancha||{})}; if(patch.dias) S.cancha.dias={...(S.cancha.dias||{}),...patch.dias}; if(patch.pagos) S.cancha.pagos={...(S.cancha.pagos||{}),...patch.pagos}; Object.keys(patch).forEach(k=>{ if(k!=="dias"&&k!=="pagos") S.cancha[k]=patch[k]; }); render();
+  return safe(()=>S.db.doc("gestion/cancha").set(patch,{merge:true}),msg); }
+
 /* ---------- Pestaña Esteban: horas por día y si tomó asistencia ---------- */
 function vEsteban(){
   const eq=S.equipo[0]; const nombre=eq&&S.nombres[eq.id]||"Esteban"; const corto=nombre.split(" ")[0];
@@ -396,7 +423,7 @@ function vEsteban(){
     const hTxt=h?`<b class="num">${fmtH(h)} h</b>`:(ts.length&&f!==hoyISO?'<b class="due">Sin horas</b>':'<span class="muted">—</span>');
     filas.push(`<div class="row es-dia ${ts.length&&f!==hoyISO&&(!h||marc<esper)?"is-debe":h?"is-ok":""}"><span class="main"><span class="name" style="text-transform:capitalize">${diaTxt(f)}</span><span class="meta">${ts.length?`${ts.length} turno${ts.length===1?"":"s"} en Jump`:"Sin turnos fijos"}${asis}</span></span><span class="es-h">${hTxt}</span></div>`); }
   const faltan=filas.filter(x=>x.includes("is-debe")).length;
-  return `<section class="sec" style="margin-top:4px"><div class="sec-head"><h3>${esc(corto)} · últimos días</h3>${faltan?`<span class="small due">${faltan} día${faltan===1?"":"s"} con algo pendiente</span>`:'<span class="small" style="color:var(--k-ok)">Todo al día ✓</span>'}</div>
+  return `<section class="sec" style="margin-top:4px"><div class="sec-head"><h3>Profe · ${esc(corto)}</h3>${faltan?`<span class="small due">${faltan} día${faltan===1?"":"s"} con algo pendiente</span>`:'<span class="small" style="color:var(--k-ok)">Todo al día ✓</span>'}</div>
     ${eq?`<div class="list">${filas.join("")||'<div class="empty">Todavía no hay días con clases ni horas cargadas.</div>'}</div>`:`<div class="empty">Cuando ${esc(corto)} entre con su usuario y cargue horas, las vas a ver acá día por día. Creale el acceso en Ajustes → Profes.</div>`}
     <p class="small muted" style="margin:8px 0 0">Rojo: un día con clases en Jump sin horas cargadas o sin asistencia completa.</p></section>
   ${panelEquipo()}`;
@@ -753,14 +780,15 @@ const TAB_ICON={
   asist:'<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM8.5 12.5l2 2 4-4"/></svg>',
   horas:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>'};
 TAB_ICON.plata='<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>';
+TAB_ICON.gestion='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 15v-3M12 15V9M16 15v-5"/></svg>';
 TAB_ICON.esteban='<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/><path d="M17 3.5l2 2"/></svg>';
-const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperación",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
-const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","recuperar","esteban"];
-function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=t.map(k=>k==="recuperar"?"1.45fr":k==="alumnos"?"1.1fr":"1fr").join(" ");
+const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperaciones",gestion:"Gestión",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
+const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["hoy","alumnos","agenda","recuperar","gestion"];
+function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=t.map(k=>k==="recuperar"?"1.9fr":k==="alumnos"||k==="gestion"?"1.15fr":"1fr").join(" ");
   nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
 function render(){
   if(!tabsDe().includes(S.tab)&&!(S.tab==="asist"&&S.modo!=="profe")) S.tab=tabsDe()[0];
-  TAB_LBL.esteban=(S.equipo&&S.equipo[0]&&(S.nombres||{})[S.equipo[0].id]||"Esteban").split(" ")[0];
+
   if(S.modo==="profe"){ S.club="JUMP"; S.asClub="JUMP"; }
   renderTabs(); $("#cfgBtn").hidden=!S.esOwner; objBar();
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab));
@@ -774,7 +802,7 @@ function render(){
   if(S.tab==="asist"||(S.modo==="profe"&&S.asFecha===hoyISO)) subAsist();
   if(S.modo==="profe") html+=`<div class="notice" style="background:var(--surface-2);color:var(--muted);margin:0 0 12px">${S.esOwner?'Estás viendo los datos reales de Esteban. Lo que cambies acá se guarda en su cuenta. <button class="linkish" data-act="modoOwner">Volver a la tuya</button>':"Jump · vista de profe · <button class=\"linkish\" data-act=\"salir\">Cerrar sesión</button>"}</div>`;
   if(S.tab==="asist"&&S.modo!=="profe") html+=`<div class="as-top"><span><b>Asistencia</b> · tomala y volvé</span><button class="btn pri as-listo" data-act="asCerrar">✕ Listo</button></div>`;
-  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban})[S.tab]();
+  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion})[S.tab]();
   const focused=document.activeElement&&document.activeElement.id==="q";
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
   if(focused&&S.tab==="alumnos"){ const tmp=document.createElement("div"); tmp.innerHTML=html; const nq=tmp.querySelector("#q"), lq=$("#q");
@@ -1053,6 +1081,11 @@ document.addEventListener("click",async e=>{
   const A=id&&S.alumnos.find(x=>x.id===id), L=id&&S.leads.find(x=>x.id===id);
   switch(act){
     case "tab": S.tab=b.dataset.t; render(); scrollTo(0,0); if(S.tab==="agenda") centrarDia(); break;
+    case "gMes": { const [y,mm]=(S.gMes||mesKey(now)).split("-").map(Number); S.gMes=mesKey(new Date(y,mm-1+Number(b.dataset.d),1)); render(); break; }
+    case "gcStep": { const C=canchaDe(); const f=b.dataset.f, k=b.dataset.k; const cur=C.dias[f]||{luz:0,sin:0}; const nv={luz:Number(cur.luz)||0,sin:Number(cur.sin)||0}; nv[k]=Math.max(0,nv[k]+Number(b.dataset.d)); await guardarCancha({dias:{[f]:nv}}); break; }
+    case "gcSug": { const C=canchaDe(); await guardarCancha({dias:{[b.dataset.f]:sugCancha(b.dataset.f,C.desde)}}); break; }
+    case "gcPago": { const m=S.gMes||mesKey(now); const C=canchaDe(); const pg=C.pagos[m]; if(pg&&pg.pagado){ await guardarCancha({pagos:{[m]:{pagado:false}}},"Marcado como no pagado"); } else { let hl=0,hs=0; Object.keys(C.dias).filter(f=>f.startsWith(m)).forEach(f=>{ hl+=Number(C.dias[f].luz)||0; hs+=Number(C.dias[f].sin)||0; }); await guardarCancha({pagos:{[m]:{pagado:true,monto:hl*C.luz+hs*C.sin,fecha:hoyISO}}},`Pagado a ${C.nombre}`); } break; }
+    case "gcCfg": await guardarCancha({precioLuz:Number($("#gcL").value)||0,precioSinLuz:Number($("#gcS").value)||0,luzDesde:$("#gcD").value||"19:00",nombre:($("#gcN").value||"Gonza").trim()},"Guardado"); break;
     case "asCerrar": S.tab=S.prevTab&&S.prevTab!=="asist"?S.prevTab:"hoy"; render(); scrollTo(0,0); break;
     case "mes": { const [y,m]=S.mes.split("-").map(Number); S.mes=mesKey(new Date(y,m-1+Number(b.dataset.d),1)); render(); break; }
     case "dia": S.dia=Number(b.dataset.d); render(); break;
