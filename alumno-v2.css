@@ -775,3 +775,18 @@ html.v2.v2-staff:has(#staffApp.w-home) body{background:linear-gradient(180deg,#0
 .w-lib>b{font-size:15px}.w-lib>b span{background:#e3f3e9;color:#13834f;border-radius:99px;padding:1px 8px;font-size:12.5px;margin-left:4px}
 .w-lib>div{display:flex;flex-wrap:wrap;gap:5px}.w-lib>div span{background:#f2f4f1;border-radius:8px;padding:4px 9px;font-size:13px}.w-lib i{font-style:normal;font-weight:800;color:#13834f}
 .w-lib-n{background:#e3f3e9;color:#13834f;border-radius:99px;padding:1px 9px;font-size:13px;margin-left:4px;vertical-align:2px}
+/* agenda semanal */
+.sem-dias{padding:4px 0 6px!important}
+.sem-dias button{display:grid;justify-items:center;gap:1px;padding:8px 12px!important;border-radius:14px!important;min-width:58px}
+.sem-dias button b{font-size:15px}.sem-dias button small{font-size:11px;opacity:.75;font-weight:600}
+#staffApp.w .w-seg{padding-left:0;padding-right:0}
+.sem-res{margin:6px 2px 0;font-size:13.5px;color:var(--w-dim)}.sem-res b{color:#13834f}
+.sem-t{padding:12px 14px!important;display:grid;gap:10px}
+.sem-h{display:flex;align-items:center;gap:8px}.sem-h>b{font-size:20px;font-weight:800}
+.sem-cat{background:none;border:0;color:var(--w-dim);font:600 13.5px var(--s-body);cursor:pointer;padding:4px 0}
+.sem-cupo{margin-left:auto;font-weight:800;font-size:14px;color:#13834f;background:#e3f3e9;border-radius:99px;padding:3px 10px}.sem-cupo.full{color:var(--w-dim);background:#f0f2ee}
+.sem-al{display:flex;flex-wrap:wrap;gap:6px}
+.sem-al button{background:#f2f4f1;border:0;border-radius:10px;padding:7px 11px;font:600 14px var(--s-body);color:var(--w-ink);cursor:pointer}
+.sem-al small{color:#9a5b00;font-weight:700;font-size:11.5px}
+.sem-al .lib{background:#e3f3e9;color:#13834f;border-radius:10px;padding:7px 11px;font-weight:700;font-size:13.5px}
+.sem-al .full{color:var(--w-dim);font-size:13px;padding:7px 4px}

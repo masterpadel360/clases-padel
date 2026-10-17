@@ -278,6 +278,23 @@ const WI={
   in:'<path d="M12 5v14M6 13l6 6 6-6"/>', out:'<path d="M12 19V5M6 11l6-6 6 6"/>'};
 const wico=(k,cl="")=>`<svg class="${cl}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WI[k]}</svg>`;
 let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
+/* ---------- Agenda fija de la semana: quién va cada día y hora (para contestar a los que preguntan) ---------- */
+function vSemana(){
+  const cl=S.semClub||""; const todos=turnos("").filter(t=>!cl||t.club===cl);
+  const dias=[1,2,3,4,5,6,0].filter(d=>turnos("").some(t=>t.dia===d));
+  if(S.semDia===undefined||!dias.includes(S.semDia)) S.semDia=dias.includes(now.getDay())?now.getDay():(dias[0]??1);
+  const d=S.semDia; const ts=todos.filter(t=>t.dia===d).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
+  const n=x=>todos.filter(t=>t.dia===x).length;
+  const lib=ts.reduce((t,x)=>t+Math.max(0,CUPO-x.al.length),0), al=ts.reduce((t,x)=>t+x.al.length,0);
+  return `
+  <div class="w-seg sem-dias">${dias.map(x=>`<button data-act="semDia" data-d="${x}" aria-pressed="${x===d}"><b>${DIAS[x]}</b><small>${n(x)} turno${n(x)===1?"":"s"}</small></button>`).join("")}</div>
+  <div class="w-seg">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button data-act="semClub" data-v="${v}" aria-pressed="${cl===v}">${l}</button>`).join("")}</div>
+  <p class="sem-res">${/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"} · ${ts.length} turno${ts.length===1?"":"s"} · ${al} alumnos · <b>${lib} lugar${lib===1?"":"es"} libre${lib===1?"":"s"}</b></p>
+  ${ts.length?ts.map(t=>{ const lb=Math.max(0,CUPO-t.al.length);
+    return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span><button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(t.nivel):"+ Categoría"}</button><span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
+      <div class="sem-al">${t.al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>`<button data-act="editA" data-id="${a.id}">${esc(a.nombre)}${a.inicio&&a.inicio>hoyISO?` <small>empieza ${fechaDM(a.inicio)}</small>`:""}</button>`).join("")}${lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
+  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="tab" data-t="hoy">Ver por fecha (con avisos y lluvia) ›</button></section>`;
+}
 function vInicioG(){
   const m=mesKey(now); escucharAsMes(m); const P=plataMes(m), A=plataMes(mesAnt(m)); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const nomC=(S.perfil&&S.perfil.nombre)||"Gabriel"; const nom=nomC.split(" ")[0]; const ini=nomC.split(" ").map(x=>x.charAt(0)).join("").slice(0,2).toUpperCase()||"G";
@@ -305,7 +322,7 @@ function vInicioG(){
     <div class="w-bar"><i style="width:${pct}%"></i></div>
     <div class="w-res-ant"><span>${mesSolo(m).replace(/^./,c=>c.toUpperCase())}: <b>${pct}%</b> cobrado</span><span>${mesSolo(mesAnt(m)).replace(/^./,c=>c.toUpperCase())}: ${nAlA} alumnos · cobraste <b class="num">${money(A.cob)}</b></span></div>
   </section>
-  <section class="w-card"><div class="w-card-h"><b>Clases de hoy</b><button data-act="tab" data-t="hoy">Semana ›</button></div>
+  <section class="w-card"><div class="w-card-h"><b>Clases de hoy</b><button data-act="tab" data-t="semana">Agenda ›</button></div>
     <div class="w-seg">${[["","Todas",nT("")],["JUMP","Jump",nT("JUMP")],["ESPACIO","Espacio",nT("ESPACIO")]].map(([v,l,n])=>`<button data-act="hoyClub" data-v="${v}" aria-pressed="${hc===v}">${l}${n?` · ${n}`:""}</button>`).join("")}</div>
     ${filas||`<p class="w-empty">Hoy no hay clases${hc?` en ${clubN(hc)}`:""}.</p>`}
   </section>
@@ -940,17 +957,17 @@ const TAB_ICON={
   horas:'<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>'};
 TAB_ICON.plata='<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12.5h2M3 9.5h18"/></svg>';
 TAB_ICON.gestion='<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 15v-3M12 15V9M16 15v-5"/></svg>';
-TAB_ICON.inicio='<svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>'; TAB_ICON.dinero=TAB_ICON.plata; TAB_ICON.admin=TAB_ICON.gestion; TAB_ICON.equipo='<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><path d="M15 6h6M15 10h6M17 14h4"/></svg>';
+TAB_ICON.semana=TAB_ICON.agenda; TAB_ICON.inicio='<svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>'; TAB_ICON.dinero=TAB_ICON.plata; TAB_ICON.admin=TAB_ICON.gestion; TAB_ICON.equipo='<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><path d="M15 6h6M15 10h6M17 14h4"/></svg>';
 TAB_ICON.esteban='<svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c.8-4 3.6-6 7-6s6.2 2 7 6"/><path d="M17 3.5l2 2"/></svg>';
-const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",dinero:"Plata",equipo:"Equipo",admin:"Admin",inicio:"Inicio",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
-const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["inicio","alumnos","asist","dinero","admin"];
+const TAB_LBL={plata:"Mis gastos",hoy:"Hoy",alumnos:"Alumnos",agenda:"Agenda",recuperar:"Recuperar",gestion:"Gestión",dinero:"Plata",equipo:"Equipo",admin:"Admin",inicio:"Inicio",semana:"Agenda",asist:"Asistencia",horas:"Mis horas",esteban:"Esteban"};
+const tabsDe=()=> S.modo==="profe" ? ["horas","agenda","asist","recuperar","plata"] : ["inicio","alumnos","asist","semana","dinero"];
 function renderTabs(){ const t=tabsDe(); const nav=$("#tabs"); nav.style.gridTemplateColumns=`repeat(${t.length},1fr)`;
   const sel=k=>S.tab===k||(k==="alumnos"&&S.tab==="recuperar"&&S.modo!=="profe");
   nav.innerHTML=t.map(k=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${sel(k)}">${TAB_ICON[k]}${TAB_LBL[k]}</button>`).join(""); }
 function render(){
   if(S.modo!=="profe"){ if(S.tab==="gestion"||S.tab==="esteban"||S.tab==="equipo") S.tab="admin"; if(S.tab==="agenda") S.tab="hoy"; }
   if(S.modo!=="profe"&&S.esOwner&&!render._ini){ render._ini=1; S.tab="inicio"; }
-  if(!tabsDe().includes(S.tab)&&!(S.modo!=="profe"&&["asist","recuperar","hoy"].includes(S.tab))) S.tab=tabsDe()[0];
+  if(!tabsDe().includes(S.tab)&&!(S.modo!=="profe"&&["asist","recuperar","hoy","admin"].includes(S.tab))) S.tab=tabsDe()[0];
 
   if(S.modo==="profe"){ S.club="JUMP"; S.asClub="JUMP"; }
   renderTabs(); $("#cfgBtn").hidden=!S.esOwner; objBar();
@@ -961,13 +978,13 @@ function render(){
   { const fa=$("#fabAs"); if(fa) fa.hidden=true; }
   $("#clubs").hidden=S.modo==="profe"||!["alumnos","agenda","recuperar","hoy"].includes(S.tab);
   { const w=S.esOwner&&S.modo!=="profe"; $("#staffApp").classList.toggle("w",w); $("#staffApp").classList.toggle("w-home",w&&S.tab==="inicio");
-    const wm=document.querySelector("#staffApp .wm"); if(wm) wm.textContent=w?({inicio:"Inicio",hoy:"Clases",asist:"Asistencia",alumnos:"Alumnos",recuperar:"Recuperar",dinero:"Mi plata",admin:"Administración"})[S.tab]||"Clases de Pádel":"Clases de Pádel"; }
+    const wm=document.querySelector("#staffApp .wm"); if(wm) wm.textContent=w?({inicio:"Inicio",hoy:"Clases",asist:"Asistencia",alumnos:"Alumnos",recuperar:"Recuperar",dinero:"Mi plata",admin:"Administración",semana:"Agenda"})[S.tab]||"Clases de Pádel":"Clases de Pádel"; }
   let html="";
   if(S.dbState==="sin-db") html+=`<div class="notice">No se pudo conectar con la base de datos. Revisá tu conexión y volvé a abrir la app.</div>`;
   else if(S.dbState==="cargando") html+=`<p class="small muted" style="margin:16px 0 0">Cargando tus alumnos…</p>`;
   if(S.tab==="asist"||(S.modo==="profe"&&S.asFecha===hoyISO)) subAsist();
   if(S.modo==="profe") html+=`<div class="notice" style="background:var(--surface-2);color:var(--muted);margin:0 0 12px">${S.esOwner?'Estás viendo los datos reales de Esteban. Lo que cambies acá se guarda en su cuenta. <button class="linkish" data-act="modoOwner">Volver a la tuya</button>':"Jump · vista de profe · <button class=\"linkish\" data-act=\"salir\">Cerrar sesión</button>"}</div>`;
-  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion,dinero:vDinero,admin:vAdmin,inicio:vInicioG})[S.tab]();
+  html+=({hoy:vHoy,alumnos:vAlumnos,agenda:vAgenda,recuperar:vRecuperar,asist:vAsist,horas:vHoras,plata:vPlata,esteban:vEsteban,gestion:vGestion,dinero:vDinero,admin:vAdmin,inicio:vInicioG,semana:vSemana})[S.tab]();
   if(subAl) html=`<div class="seg al-sub" role="group" aria-label="Sección"><button type="button" class="seg-b" data-act="tab" data-t="alumnos" aria-pressed="${S.tab==="alumnos"}">Lista</button><button type="button" class="seg-b" data-act="tab" data-t="recuperar" aria-pressed="${S.tab==="recuperar"}">Recuperar${(()=>{ const n=activos().reduce((t,a)=>t+recN(a),0); return n?` · ${n}`:""; })()}</button><button type="button" class="seg-b" data-act="libres">Lugares libres</button></div>`+html;
   const focused=document.activeElement&&document.activeElement.id==="q";
   // Mientras escribís en el buscador, se actualiza solo la lista: el campo no se toca (en el celu redibujarlo traba el teclado).
@@ -1266,6 +1283,8 @@ document.addEventListener("click",async e=>{
     case "ojo": OJO=!OJO; try{ localStorage.setItem("ojoPlata",OJO?"1":"0"); }catch(e){} render(); break;
     case "cfgOpen": openCfg(); break;
     case "libresClub": LIB.club=b.dataset.c; openLibres(); break;
+    case "semDia": S.semDia=Number(b.dataset.d); render(); break;
+    case "semClub": S.semClub=b.dataset.v; render(); break;
     case "hoyClub": S.hoyClub=b.dataset.v; render(); break;
     case "masAcc": openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Más acciones</h2></div><div class="w-sheet-grid">${[["admin","Esteban y canchas",'data-act="tab" data-t="admin"'],["cobrar","Mi plata",'data-act="tab" data-t="dinero"'],["alumnos","Mandar accesos",'data-act="accMasivo"'],["cobrar","Aumento de cuota",'data-act="aumento"'],["cobrar","Anotar gasto",'data-act="gastoNuevo"'],["gear","Ajustes y mensajes",'data-act="cfgOpen"']].map(([k,l,a])=>`<button class="w-tile" ${a}><span class="w-ic">${wico(k)}</span><span>${l}</span></button>`).join("")}</div><div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`); break;
     case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
