@@ -1126,9 +1126,9 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
-    ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm) return "";
+    ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&pagoReal((a.pagos||{})[mesKey(now)])) return "";
       return `<div class="field promo"><span class="flabel">${a.id?"Fecha de arranque":"Primer mes"}</span>
-      <div class="two"><div class="field"><label for="aIni">Empieza el</label><input id="aIni" type="date" value="${pm?pm.ini:hoyISO}"></div>
+      <div class="two"><div class="field"><label for="aIni">Empieza el</label><input id="aIni" type="date" value="${pm?pm.ini:(a.id?(a.inicio||""):hoyISO)}" data-orig="${pm?pm.ini:(a.id?(a.inicio||""):hoyISO)}"></div>
       <div class="field"><label for="aPromo">Precio promo por clase (opcional)</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Sin promo" value="${pm&&pm.promo?pm.promo:""}"></div></div>
       <div class="field" id="aDurBox" hidden style="margin:0"><label>¿Cuántas cuotas dura la promo?</label><div class="seg" style="grid-template-columns:repeat(3,1fr);margin:0">${[1,2,3].map(n=>`<button type="button" class="seg-b" data-act="pmDur" data-n="${n}" aria-pressed="${n===((pm&&pm.dur)||1)}">${n===1?"1 mes":n+" meses"}</button>`).join("")}</div></div>
       <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="${!pm||pm.modo!=="sig"}">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="${!!pm&&pm.modo==="sig"}">Las suma al mes siguiente</button></div>
@@ -1374,6 +1374,10 @@ document.addEventListener("submit",async e=>{
       if(pm&&(ini!==pm.ini||pv!==pm.promo||modo!==pm.modo||(pv&&dur!==pm.dur)||data.precioClase!==prevA.precioClase||JSON.stringify(data.horarios)!==JSON.stringify(prevA.horarios))&&data.horarios.length&&(data.precioClase||pv)){
         const viejo=planPrimerMes(prevA,pm.ini,pm.promo,pm.modo,pm.dur).pagos, nuevo=planPrimerMes(data,ini,pv,modo,dur).pagos, pagos={...(prevA.pagos||{})};
         Object.keys(viejo).forEach(m=>{ if(!pagoReal(pagos[m])) delete pagos[m]; });
+        Object.keys(nuevo).forEach(m=>{ if(!pagoReal(pagos[m])) pagos[m]=nuevo[m]; });
+        data.pagos=pagos; data.inicio=ini; data.promo=pv?{precioClase:pv,meses:dur,modo,hasta:Object.keys(nuevo).sort().pop()}:{modo}; }
+      else if(!pm&&ini&&ini!==$("#aIni").dataset.orig&&data.horarios.length&&(data.precioClase||pv)){
+        const nuevo=planPrimerMes(data,ini,pv,modo,dur).pagos, pagos={...(prevA.pagos||{})};
         Object.keys(nuevo).forEach(m=>{ if(!pagoReal(pagos[m])) pagos[m]=nuevo[m]; });
         data.pagos=pagos; data.inicio=ini; data.promo=pv?{precioClase:pv,meses:dur,modo,hasta:Object.keys(nuevo).sort().pop()}:{modo}; } }
     if(id){ data.activo=$("#aAct").checked; if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(id),data); pendA.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); },"Guardado")) closeSheet(); }
