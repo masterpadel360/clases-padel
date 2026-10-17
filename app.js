@@ -54,7 +54,11 @@ function planPrimerMes(a,ini,promo,modo,dur=1){ const m=ini.slice(0,7), sig=mesS
     lin.push(`${mesSolo(k)}: ${i===0&&modo==="sig"?`${quedan} + ${clasesMes(a,k)} clases`:cl(c)} x ${money(p)} = ${money(tot)}${promo?" (promo)":""}`); }
   if(a.precioClase) lin.push(`Desde ${mesSolo(k)}: ${money(a.precioClase)} por clase${promo?" (precio normal)":""}`);
   return {m,sig,quedan,p,pagos,txt:lin.join(" · ")}; }
-function clasesMes(a,m=S.mes){ return diasDe(a).reduce((s,d)=>s+ocurrencias(d,m),0); }
+// Cada horario puede tener "desde" (un día que se sumó después): ese día cuenta solo desde esa fecha.
+function clasesMes(a,m=S.mes){ const v={}; (a.horarios||[]).forEach(h=>{ const ds=h.desde||""; if(!(h.dia in v)||ds<v[h.dia]) v[h.dia]=ds; });
+  return Object.entries(v).reduce((s,[dia,ds])=>{ dia=Number(dia); if(!ds||ds.slice(0,7)<m) return s+ocurrencias(dia,m); if(ds.slice(0,7)>m) return s; const d0=isoDate(ds); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); let n=0; for(let d=d0.getDate();d<=last;d++) if(new Date(d0.getFullYear(),d0.getMonth(),d).getDay()===dia) n++; return s+n; },0); }
+// ¿Este alumno va a este turno en esta fecha? (ya arrancó y, si el día lo sumó después, ya empezó ese día)
+function vaEn(a,t,f){ if(a.inicio&&a.inicio>f) return false; const h=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); return !(h&&h.desde&&h.desde>f); }
 // Aumentos: cada alumno guarda [{desde:"YYYY-MM", precio, antes, monto, aplicado}]. Los futuros quedan programados y se aplican solos al llegar el mes.
 function aumentosDe(a){ return (a.aumentos||[]).filter(x=>x&&x.desde).slice().sort((x,y)=>x.desde.localeCompare(y.desde)); }
 // Datos del primer mes que se cargaron al darlo de alta (para poder cambiar la fecha de arranque después).
@@ -220,7 +224,7 @@ const COURT_SVG = `<span class="hero-glow" aria-hidden="true"></span>`;
 /* ---------- Hoy: la clase de ahora, el resto del día y lo que hay que resolver ---------- */
 const sumMin=(h,m)=>{ const [a,b]=h.split(":").map(Number); const x=a*60+b+m; return `${pad(Math.floor(x/60))}:${pad(x%60)}`; };
 const clubN=c=>c==="ESPACIO"?"Espacio":"Jump";
-function estHoy(t){ const f=hoyISO, h=t.hora; const al=t.al.filter(a=>!a.inicio||a.inicio<=f);
+function estHoy(t){ const f=hoyISO, h=t.hora; const al=t.al.filter(a=>vaEn(a,t,f));
   const aus=al.filter(a=>avisoApp(a.id,f,h,"ausencia")&&!vuelveApp(a.id,f,h));
   const recs=S.avisos.filter(v=>v.tipo==="recupera"&&v.club===t.club&&v.fecha===f&&v.hora===h&&!vuelveApp(v.alumnoId,f,h)).map(v=>S.alumnos.find(x=>x.id===v.alumnoId)).filter(Boolean);
   const mk=(S.asMes||{})[`${t.club}|${f}`]||{}; const marcas=Object.keys(mk).filter(k=>k.endsWith("|"+h)); const lluvia=marcas.length&&marcas.every(k=>mk[k]==="lluvia");
@@ -234,6 +238,9 @@ function vHoy(){
 function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAct); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const item=(color,txt,btn)=>it.push(`<div class="pd-i"><i style="background:${color}"></i><span>${txt}</span>${btn||""}</div>`);
   const clubN=c=>c==="ESPACIO"?"Espacio":"Jump";
+  // 0) Pedidos para sumar un día
+  (S.solic||[]).filter(x=>x.estado==="pendiente").forEach(x=>{ const a=S.alumnos.find(y=>y.id===x.alumnoId); if(!a) return;
+    item("#13834f",`<b>${esc(nombreCorto(a.nombre))}</b> quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> · ${clubN(x.club)}`,`<button class="mini go" data-act="solVer" data-id="${x.id}">Ver</button>`); });
   // 2) Avisos de alumnos sin ver
   const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
   if(nAv) item("var(--k-amb)",`<b>${nAv} aviso${nAv===1?"":"s"}</b> de alumnos sin ver`,`<a class="mini" href="#secAvisos">Ver</a>`);
@@ -292,9 +299,25 @@ function vSemana(){
   <p class="sem-res">${/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"} · ${ts.length} turno${ts.length===1?"":"s"} · ${al} alumnos · <b>${lib} lugar${lib===1?"":"es"} libre${lib===1?"":"s"}</b></p>
   ${ts.length?ts.map(t=>{ const lb=Math.max(0,CUPO-t.al.length);
     return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span><button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(t.nivel):"+ Categoría"}</button><span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
-      <div class="sem-al">${t.al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>`<button data-act="editA" data-id="${a.id}">${esc(a.nombre)}${a.inicio&&a.inicio>hoyISO?` <small>empieza ${fechaDM(a.inicio)}</small>`:""}</button>`).join("")}${lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
+      <div class="sem-al">${t.al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>`<button data-act="editA" data-id="${a.id}">${esc(a.nombre)}${(()=>{ const hh=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); const ds=[a.inicio,hh&&hh.desde].filter(Boolean).sort().pop(); return ds&&ds>hoyISO?` <small>empieza ${fechaDM(ds)}</small>`:""; })()}</button>`).join("")}${lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
   <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="tab" data-t="hoy">Ver por fecha (con avisos y lluvia) ›</button></section>`;
 }
+/* ---------- Pedido de un alumno para sumar un día: Gabriel lo aprueba y elige desde cuándo ---------- */
+document.addEventListener("change",e=>{ if(e.target&&e.target.id==="solDesde"&&S.solId){ S.solDesde=e.target.value; openSolicitud(S.solId); } });
+function proxFecha(dia){ const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1); while(d.getDay()!==dia) d.setDate(d.getDate()+1); return toISO(d); }
+function openSolicitud(id){ const x=(S.solic||[]).find(y=>y.id===id); if(!x) return; const a=S.alumnos.find(y=>y.id===x.alumnoId); if(!a) return;
+  const t=turnos(x.club).find(y=>y.dia===x.dia&&y.hora===x.hora); const ocup=t?t.al.length:0; const desde=S.solDesde||proxFecha(x.dia);
+  const pc=precioEn(a,mesKey(now))||a.precioClase||0; const m=mesKey(now); const n=desde.slice(0,7)===m?(()=>{ const d0=isoDate(desde); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); let k=0; for(let d=d0.getDate();d<=last;d++) if(new Date(d0.getFullYear(),d0.getMonth(),d).getDay()===x.dia) k++; return k; })():0;
+  const pagoMes=pago(a,m);
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Pedido de un alumno</span><h2 class="disp">${esc(a.nombre)}</h2></div>
+    <div class="msg" style="gap:6px"><span>Quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> en ${clubN(x.club)}${x.nivel?` (${esc(x.nivel)})`:""}.</span><span class="small muted">Hoy va: ${esc(horarioTxt(a))} · Ese turno tiene ${ocup}/${CUPO}.</span></div>
+    <div class="field"><label for="solDesde">Empieza el</label><input id="solDesde" type="date" value="${desde}"></div>
+    <p class="small" style="margin:0">${n?`En ${mesSolo(m)} suma <b>${n} clase${n===1?"":"s"}</b> (${money(n*pc)}).${pagoMes?" Ya pagó este mes: esas clases cobralas aparte.":" Se suma solo a la cuota del mes."} `:""}Desde ${mesSolo(n?mesSig(m):desde.slice(0,7))} paga ${clasesMes({...a,horarios:[...(a.horarios||[]),{dia:x.dia,hora:x.hora,club:x.club}]},mesSig(m))} clases por mes.</p>
+    <div class="btns"><button class="btn sec2" data-act="solNo" data-id="${id}">No puedo</button><span style="display:flex;gap:8px"><button class="btn sec2" data-act="close">Después</button><button class="btn pri" data-act="solOk" data-id="${id}">Aprobar</button></span></div>`); }
+async function aprobarSolicitud(id){ const x=(S.solic||[]).find(y=>y.id===id); if(!x) return; const a=S.alumnos.find(y=>y.id===x.alumnoId); if(!a) return;
+  const desde=($("#solDesde")||{}).value||proxFecha(x.dia); const h={dia:x.dia,hora:x.hora,club:x.club,desde}; if(x.nivel) h.nivel=x.nivel;
+  const horarios=[...(a.horarios||[]),h]; closeSheet();
+  if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(a.id),{horarios}); bt.update(S.db.doc("solicitudes/"+id),{estado:"aprobado",desde,avisadoAl:false}); await bt.commit(); },`${nombreCorto(a.nombre)} suma los ${DIAS_LARGO[x.dia].toLowerCase()} desde el ${fechaDM(desde)}`)){ a.horarios=horarios; S.solDesde=null; render(); } }
 function vInicioG(){
   const m=mesKey(now); escucharAsMes(m); const P=plataMes(m), A=plataMes(mesAnt(m)); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const nomC=(S.perfil&&S.perfil.nombre)||"Gabriel"; const nom=nomC.split(" ")[0]; const ini=nomC.split(" ").map(x=>x.charAt(0)).join("").slice(0,2).toUpperCase()||"G";
@@ -580,7 +603,7 @@ function vEsteban(){
   const eq=S.equipo[0]; const nombre=eq&&S.nombres[eq.id]||"Esteban"; const corto=nombre.split(" ")[0];
   const dias=(eq&&eq.dias)||{}; const filas=[]; const usr=(S.usuarios||[]).find(u=>u.rol==="profe"&&(!eq||u.id===eq.id)); const desde=(usr&&usr.alta)||"";
   for(let i=0;i<21;i++){ const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i); const f=toISO(d); const dow=d.getDay(); if(desde&&f<desde&&!dias[f]) continue;
-    const ts=turnos("JUMP").filter(t=>t.dia===dow).map(t=>({...t,al:t.al.filter(a=>!a.inicio||a.inicio<=f)})).filter(t=>t.al.length);
+    const ts=turnos("JUMP").filter(t=>t.dia===dow).map(t=>({...t,al:t.al.filter(a=>vaEn(a,t,f))})).filter(t=>t.al.length);
     const h=dias[f]||0; if(!ts.length&&!h) continue;
     const mk=(S.asHist||{})[f]||{}; const esper=ts.reduce((s,t)=>s+t.al.length,0); const marc=ts.reduce((s,t)=>s+t.al.filter(a=>mk[`${a.id}|${t.hora}`]).length,0);
     const enHist=i<=20; const asis=!ts.length?"":!enHist?"":marc>=esper?'<span class="tag" style="background:var(--k-ok-s);color:var(--k-ok)">✓ Asistencia</span>':marc?`<span class="tag rec">Asistencia ${marc}/${esper}</span>`:(f===hoyISO?'<span class="tag">Asistencia pendiente</span>':'<span class="tag no">✗ Sin asistencia</span>');
@@ -849,7 +872,7 @@ function vAsist(){
   <p class="small muted" style="margin:18px 0 0"><b style="color:var(--ink)">✓ Vinieron todos</b> marca presentes a los que faltan marcar; después tocá <b style="color:var(--ink)">✗</b> al que no vino. <b style="color:var(--ink)">Faltó</b> sin avisar: pierde la clase (si querés dársela igual, sumásela desde su ficha). Los que avisaron por la app aparecen abajo y no hace falta marcarlos.</p>`;
 }
 // Un turno en Asistencia: primero los que hay que marcar, después los que vienen a recuperar, los de prueba y al final los que avisaron que no vienen.
-function asistEstado(t){ const f=S.asFecha, h=t.hora; t={...t,al:t.al.filter(a=>!a.inicio||a.inicio<=f)};
+function asistEstado(t){ const f=S.asFecha, h=t.hora; t={...t,al:t.al.filter(a=>vaEn(a,t,f))};
   const avisaron=t.al.filter(a=>avisoApp(a.id,f,h,"ausencia")&&!vuelveApp(a.id,f,h));
   const marcar=t.al.filter(a=>!avisaron.includes(a));
   const recs=S.avisos.filter(v=>v.tipo==="recupera"&&v.club===t.club&&v.fecha===f&&v.hora===h&&!vuelveApp(v.alumnoId,f,h)).map(v=>S.alumnos.find(x=>x.id===v.alumnoId)).filter(Boolean);
@@ -862,7 +885,7 @@ function asistPendHTML(slots){ if(S.asFecha>hoyISO) return `<div class="as-pend 
   const ya=slots.filter(t=>S.asFecha<hoyISO||t.hora<=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`);
   const n=ya.reduce((s,t)=>s+asistEstado(t).pend,0);
   return n?`<div class="as-pend">Te falta${n===1?"":"n"} marcar <b>${n}</b> ${n===1?"alumno":"alumnos"}</div>`:(ya.length?`<div class="as-pend ok">✓ Asistencia al día</div>`:""); }
-function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t); t={...t,al:t.al.filter(a=>!a.inicio||a.inicio<=f)}; const mk=a=>S.asMarcas[`${a.id}|${h}`];
+function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t); t={...t,al:t.al.filter(a=>vaEn(a,t,f))}; const mk=a=>S.asMarcas[`${a.id}|${h}`];
   const dos=(a,eOk,eNo,actOk,actNo)=>{ const e=mk(a); return `<span class="as-bt"><button class="as-b ok" data-act="${actOk}" data-id="${a.id}" data-hora="${h}" data-e="vino" aria-pressed="${e===eOk}" aria-label="Vino">✓<small>Vino</small></button><button class="as-b no" data-act="${actNo}" data-id="${a.id}" data-hora="${h}" data-e="falto" aria-pressed="${e===eNo}" aria-label="Faltó">✗<small>Faltó</small></button></span>`; };
   const filaFija=a=>{ const e=mk(a); return `<div class="row as-row as-l ${e==="vino"?"is-ok":e==="falto"?"is-debe":""}" data-k="${a.id}"><span class="name">${esc(a.nombre)}${e==="lluvia"?' <span class="tag lluvia">🌧 Lluvia</span>':""}${e==="recupera"?' <span class="tag rec">Recupera</span>':""}${tagAviso(a.id,f,h)}</span>${e==="lluvia"?"":dos(a,"vino","falto","marca","marca")}</div>`; };
   const filaRec=(a,app)=>{ const e=mk(a); const rp=(S.reemp||{})[`${a.id}|${f}|${h}`];
@@ -883,7 +906,7 @@ async function openLluvia(fecha){ LL.fecha=fecha||hoyISO; LL.club=S.modo==="prof
   for(const c of ["JUMP","ESPACIO"]){ try{ const d=await S.db.collection("asistencia").doc(`${LL.fecha}_${c}`).get(); const mk=(d.exists&&d.data().marcas)||{}; Object.keys(mk).forEach(k=>{ if(mk[k]==="lluvia") LL.ya.add(`${c}|${k.split("|")[1]}`); }); }catch(e){} }
   const ahora=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`;
   LL.sel=new Set(lluviaTurnos().filter(t=>!LL.ya.has(`${t.club}|${t.hora}`)&&(LL.fecha>hoyISO||t.hora>ahora)).map(t=>`${t.club}|${t.hora}`)); pintarLluvia(); }
-function lluviaTurnos(){ const dow=isoDate(LL.fecha).getDay(); return turnos(LL.club).filter(t=>t.dia===dow).map(t=>({...t,al:t.al.filter(a=>!a.inicio||a.inicio<=LL.fecha)})).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
+function lluviaTurnos(){ const dow=isoDate(LL.fecha).getDay(); return turnos(LL.club).filter(t=>t.dia===dow).map(t=>({...t,al:t.al.filter(a=>vaEn(a,t,LL.fecha))})).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
 function pintarLluvia(){ const ts=lluviaTurnos(); const d=isoDate(LL.fecha); const n=ts.filter(t=>LL.sel.has(`${t.club}|${t.hora}`)).reduce((s,t)=>s+t.al.length,0); const nt=ts.filter(t=>LL.sel.has(`${t.club}|${t.hora}`)).length;
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">🌧 Lluvia</span><h2 class="disp">Suspender clases</h2></div>
     <div class="two"><div class="field"><label for="llF">Día</label><input id="llF" type="date" value="${LL.fecha}" min="${hoyISO}"></div>
@@ -906,7 +929,7 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
 
 // Suspender un turno por lluvia (o deshacerlo): queda marcado en la asistencia y cada alumno suma (o resta) una clase para recuperar.
 async function lluviaTurno(club,fecha,hora,auto=false){
-  let t=turnos(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return; t={...t,al:t.al.filter(a=>!a.inicio||a.inicio<=fecha)};
+  let t=turnos(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return; t={...t,al:t.al.filter(a=>vaEn(a,t,fecha))};
   const ref=S.db.collection("asistencia").doc(`${fecha}_${club}`); let mk={};
   if(S.asKey===`${fecha}_${club}`) mk={...S.asMarcas}; else { try{ const d=await ref.get(); mk={...((d.exists&&d.data().marcas)||{})}; }catch(e){} }
   const quitar=!auto&&t.al.length&&t.al.every(a=>mk[`${a.id}|${hora}`]==="lluvia");
@@ -1285,6 +1308,9 @@ document.addEventListener("click",async e=>{
     case "libresClub": LIB.club=b.dataset.c; openLibres(); break;
     case "semDia": S.semDia=Number(b.dataset.d); render(); break;
     case "semClub": S.semClub=b.dataset.v; render(); break;
+    case "solVer": S.solDesde=null; S.solId=b.dataset.id; openSolicitud(b.dataset.id); break;
+    case "solOk": await aprobarSolicitud(b.dataset.id); break;
+    case "solNo": { const m=prompt("¿Querés dejarle un mensaje? (opcional)","Ese horario no lo puedo sumar ahora, escribime y vemos otro."); if(m===null) break; closeSheet(); await safe(()=>S.db.doc("solicitudes/"+b.dataset.id).update({estado:"rechazado",motivo:m||"",avisadoAl:false}),"Le avisamos"); break; }
     case "hoyClub": S.hoyClub=b.dataset.v; render(); break;
     case "masAcc": openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Más acciones</h2></div><div class="w-sheet-grid">${[["admin","Esteban y canchas",'data-act="tab" data-t="admin"'],["cobrar","Mi plata",'data-act="tab" data-t="dinero"'],["alumnos","Mandar accesos",'data-act="accMasivo"'],["cobrar","Aumento de cuota",'data-act="aumento"'],["cobrar","Anotar gasto",'data-act="gastoNuevo"'],["gear","Ajustes y mensajes",'data-act="cfgOpen"']].map(([k,l,a])=>`<button class="w-tile" ${a}><span class="w-ic">${wico(k)}</span><span>${l}</span></button>`).join("")}</div><div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`); break;
     case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
@@ -1383,7 +1409,7 @@ document.addEventListener("submit",async e=>{
   if(!window.MODO_STAFF) return;
   e.preventDefault(); const f=e.target;
   if(f.id==="fA"){
-    const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; return h;}).filter(h=>h.hora);
+    const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; { const pa=S.alumnos.find(x=>x.id===f.dataset.id); const ph=pa&&(pa.horarios||[]).find(x=>x.dia===h.dia&&x.hora===h.hora&&clubH(pa,x)===h.club); if(ph&&ph.desde&&ph.desde>hoyISO.slice(0,8)+"01") h.desde=ph.desde; } return h;}).filter(h=>h.hora);
     const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim()};
     const prevA=S.alumnos.find(x=>x.id===f.dataset.id)||{}; const pendA=prevA.id?recPendAvisos(prevA):[];
     { const nuevoRec=Number($("#aRec").textContent)||0; Object.assign(data,recCambio(prevA,nuevoRec-recN(prevA))); }

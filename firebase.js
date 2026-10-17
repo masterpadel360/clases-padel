@@ -157,6 +157,7 @@ async function iniciarStaff(perfil, u) {
     db.collection("avisos").where("fecha", ">=", toISO(d)).onSnapshot(snap => { S.avisos = snap.docs.map(x => ({ id: x.id, ...x.data() })); vis(); }, () => {}); }
   if (S.esOwner) {
     db.doc("gestion/cancha").onSnapshot(d => { S.cancha = d.exists ? d.data() : {}; vis(); }, () => {});
+    db.collection("solicitudes").onSnapshot(sn => { S.solic = sn.docs.map(d => ({ id: d.id, ...d.data() })); vis(); }, () => {});
     db.doc("gestion/gastos").onSnapshot(d => { S.gastosG = (d.exists && d.data().movs) || []; vis(); }, () => {});
     db.collection("ingresos").onSnapshot(snap => { S.ingresos = {}; snap.docs.forEach(x => { const v = x.data(); if (v.alumnoId) S.ingresos[v.alumnoId] = v; }); vis(); }, () => {});
     db.collection("usuarios").onSnapshot(snap => { S.usuarios = snap.docs.map(x => ({ id: x.id, ...x.data() })); nombresEquipo(); vis(); }, () => {});

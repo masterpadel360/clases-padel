@@ -61,6 +61,15 @@ service cloud.firestore {
         && getAfter(doc('cupos', d.club + '_' + d.fecha + '_' + d.hhmm)).data.ultimo == id
         && (d.tipo == 'ausencia' || lugaresOk(d));
     }
+    // ---------- Pedidos de alumnos para sumar un día ----------
+    match /solicitudes/{id} {
+      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow create: if esAlumno() && request.resource.data.alumnoId == miAlumno()
+        && request.resource.data.estado == 'pendiente' && request.resource.data.notificado == false
+        && request.resource.data.keys().hasOnly(['alumnoId','nombre','club','dia','hora','nivel','estado','notificado','creado']);
+      allow update: if esStaff();
+      allow delete: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+    }
     match /avisos/{id} {
       allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
       allow create: if esStaff() || (esAlumno() && avisoValido(id));

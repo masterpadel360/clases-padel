@@ -67,6 +67,25 @@ for (const d of (await db.collection("ingresos").where("notificado", "==", false
   for (const [uid] of Object.entries(tokens).filter(([, t]) => t.rol === "dueño")) await enviar(uid, { title: `📱 ${v.nombre || "Un alumno"} entró a la app`, body: "Primera vez que inicia sesión. En Alumnos ves quiénes faltan.", tag: "ingreso-" + v.alumnoId });
 }
 
+/* ---------- 0d) Pedidos para sumar un día: a Gabriel cuando llegan, al alumno cuando se responden ---------- */
+{
+  const DL = ["Domingos", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábados"];
+  for (const d of (await db.collection("solicitudes").where("notificado", "==", false).get()).docs) {
+    const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
+    if (!ok) continue; const v = d.data();
+    for (const [uid] of Object.entries(tokens).filter(([, t]) => t.rol === "dueño")) await enviar(uid, { title: `🎾 ${primerNombre(v.nombre) || "Un alumno"} quiere sumar un día`, body: `${DL[v.dia]} ${v.hora} · ${CLUB[v.club] || v.club}. Aprobalo desde la app.`, tag: "sumar-" + d.id });
+  }
+  const porAl = {}; Object.entries(tokens).forEach(([uid, t]) => { if (t.rol === "alumno" && t.alumnoId) (porAl[t.alumnoId] = porAl[t.alumnoId] || []).push(uid); });
+  for (const d of (await db.collection("solicitudes").where("avisadoAl", "==", false).get()).docs) {
+    const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().avisadoAl !== false) return false; tx.update(d.ref, { avisadoAl: true }); return true; });
+    if (!ok) continue; const v = d.data(); const dd = v.desde ? new Date(`${v.desde}T12:00:00-03:00`) : null;
+    const msg = v.estado === "aprobado"
+      ? { title: "¡Listo! Sumaste un día 🎾", body: `${DL[v.dia]} ${v.hora} en ${CLUB[v.club] || v.club}${dd ? `, desde el ${dd.getUTCDate()}/${dd.getUTCMonth() + 1}` : ""}.` }
+      : { title: "Sobre tu pedido para sumar un día", body: v.motivo || "Gabriel no pudo sumarte ese horario. Escribile y vemos otro." };
+    for (const uid of porAl[v.alumnoId] || []) await enviar(uid, { ...msg, tag: "sumar-res-" + d.id });
+  }
+}
+
 /* ---------- 1) Avisos para Gabriel ---------- */
 const staff = Object.entries(tokens).filter(([, t]) => t.rol === "dueño").map(([uid]) => uid);
 const profes = Object.entries(tokens).filter(([, t]) => t.rol === "profe").map(([uid]) => uid);

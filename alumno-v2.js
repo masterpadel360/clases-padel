@@ -135,6 +135,7 @@
     return `<div class="v2">${cabecera(a, estMes)}
       ${avisosArriba(a, "inicio")}
       ${hero(prox)}
+      ${sumarDia()}
       ${tarjetaNotif("alumno")}
       ${tusClases(a, cl, marcas, proxKey)}
       ${cuota(a)}
@@ -142,6 +143,17 @@
       <div class="v2-extra"><button class="v2-mini" data-pa="ptab" data-t="ausencias">Programar una ausencia</button><button class="v2-mini" data-pa="calendario">Recordatorios en mi calendario</button>${wa ? `<a class="v2-mini wa" href="${wa}" target="_blank" rel="noopener">Escribirle a Gabriel</a>` : ""}</div>
     </div>`;
   };
+  // Tarjeta grande para pedir sumar un día más (y el estado del pedido).
+  function sumarDia() {
+    const sol = (P.solic || []).slice().sort((x, y) => ((y.creado && y.creado.seconds) || 0) - ((x.creado && x.creado.seconds) || 0));
+    const pen = sol.filter(s => s.estado === "pendiente"); const res = sol.filter(s => s.estado !== "pendiente");
+    const dTxt = s => `${DIAS_LARGO[s.dia].toLowerCase()} ${s.hora} · ${s.club === "ESPACIO" ? "Espacio" : "Jump"}`;
+    const avisos = res.map(s => s.estado === "aprobado"
+      ? `<div class="v2-sumar-res ok"><b>¡Listo! Sumaste los ${dTxt(s)}</b><span>${s.desde ? `Arrancás el ${fechaDM(s.desde)}.` : ""} Ya está en tus clases.</span><button data-pa="sumarVisto" data-id="${s.id}">Entendido</button></div>`
+      : `<div class="v2-sumar-res"><b>Gabriel no pudo sumarte los ${dTxt(s)}</b><span>${s.motivo ? esc(s.motivo) : "Escribile y vemos otro horario."}</span><button data-pa="sumarVisto" data-id="${s.id}">Entendido</button></div>`).join("");
+    return `${avisos}<section class="v2-sumar"><button class="v2-sumar-b" data-pa="sumar"><span class="v2-sumar-i">+1</span><span class="v2-sumar-t"><b>Sumá un día más</b><small>Entrená más veces por semana. Elegí el horario y Gabriel te lo confirma.</small></span><span class="v2-sumar-go">›</span></button>
+      ${pen.map(s => `<div class="v2-sumar-pen"><span>⏳ Pediste sumar los <b>${dTxt(s)}</b>. Esperando a Gabriel.</span><button data-pa="sumarCancelar" data-id="${s.id}">Cancelar</button></div>`).join("")}</section>`;
+  }
   // Avisos importantes arriba de todo, en todas las pantallas.
   function avisosArriba(a, tab) {
     const out = [];

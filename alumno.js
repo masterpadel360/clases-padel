@@ -50,6 +50,7 @@ function iniciarPortal(perfil, u) {
   fdb.collection("reemplazos").where("alumnoId", "==", id).onSnapshot(s => { P.reemp = {}; s.docs.forEach(d => { const r = d.data(); P.reemp[`${r.fecha}|${r.hora}`] = r; }); pr(); }, () => {});
   fdb.collection("comprobantes").where("alumnoId", "==", id).onSnapshot(s => { P.comps = {}; s.docs.forEach(d => { const c = d.data(); P.comps[c.mes] = c; }); pr(); }, () => {});
   fdb.collection("avisos").where("alumnoId", "==", id).onSnapshot(s => { P.avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
+  fdb.collection("solicitudes").where("alumnoId", "==", id).onSnapshot(s => { P.solic = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
   { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
 }
@@ -80,7 +81,7 @@ function misClases(dias = 14, rango = null) {
   const n = rango ? Math.round((rango.hasta - rango.desde) / DIA_MS) + 1 : dias;
   for (let i = 0; i < n; i++) {
     const d = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + i); const f = toISO(d);
-    (a.horarios || []).filter(h => h.dia === d.getDay()).forEach(h => out.push({ fecha: f, hora: h.hora, club: clubH(a, h), nivel: h.nivel || a.categoria || "", tipo: "fija" }));
+    (a.horarios || []).filter(h => h.dia === d.getDay() && !(h.desde && h.desde > f)).forEach(h => out.push({ fecha: f, hora: h.hora, club: clubH(a, h), nivel: h.nivel || a.categoria || "", tipo: "fija" }));
   }
   P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= toISO(ini) && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
   return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte && (!a.inicio || c.fecha >= a.inicio))
@@ -337,6 +338,30 @@ async function guardarReemplazo(b) {
 }
 
 /* ---- Acciones ---- */
+/* ---------- Sumar un día más: el alumno elige un horario con lugar y le llega a Gabriel para aprobar ---------- */
+function opcionesSumar() {
+  const a = P.a; if (!a) return [];
+  const mios = new Set((a.horarios || []).map(h => `${clubH(a, h)}|${h.dia}|${h.hora}`)); const misDias = new Set((a.horarios || []).map(h => h.dia));
+  const cats = catsDe(a); const cl = clubsDe(a); const out = [];
+  Object.entries(P.turnos || {}).forEach(([k, t]) => { const [club, dia, hora] = k.split("|"); const d = Number(dia);
+    if (!cl.has(club) || mios.has(k) || misDias.has(d)) return;
+    if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
+    const lib = CUPO - (t.n || 0); if (lib > 0) out.push({ club, dia: d, hora, nivel: t.nivel || "", lib }); });
+  return out.sort((x, y) => ((x.dia || 7) - (y.dia || 7)) || x.hora.localeCompare(y.hora));
+}
+function abrirSumar() {
+  const ops = opcionesSumar(); const a = P.a; const pc = precioEn ? precioEn(a, mesKey(now)) : a.precioClase;
+  openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">Sumá un día más</h2><p class="small" style="margin:0">Elegí el horario que te gustaría sumar. A Gabriel le llega tu pedido y, cuando lo confirma, arrancás ese día todas las semanas.${pc ? ` Cada clase más suma <b>${money(pc)}</b> a tu cuota.` : ""}</p></div>
+    ${ops.length ? `<div class="list">${ops.map(o => `<button class="row" style="width:100%;background:none;border:0;text-align:left" data-pa="sumarElegir" data-c="${o.club}" data-d="${o.dia}" data-h="${o.hora}" data-n="${esc(o.nivel)}"><span class="main"><span class="name">${DIAS_LARGO[o.dia]} ${o.hora}</span><span class="meta"><span class="tag ${o.club}">${o.club === "ESPACIO" ? "Espacio" : "Jump"}</span>${o.nivel ? `<span>${esc(o.nivel)}</span>` : ""}<span style="color:var(--ok)">${o.lib} lugar${o.lib === 1 ? "" : "es"}</span></span></span><span class="small" style="font-weight:700">Elegir ›</span></button>`).join("")}</div>`
+      : `<div class="empty">Ahora no hay lugares libres de tu nivel en otros días. Escribile a Gabriel y te avisa cuando se libere uno.</div>`}
+    <div class="btns"><span></span><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
+}
+async function pedirSumar(b) {
+  const a = P.a; const { c, d, h, n } = b.dataset; const dia = Number(d);
+  confirmar(`¿Sumás los ${DIAS_LARGO[dia].toLowerCase()} ${h}?`, `En ${c === "ESPACIO" ? "Espacio La 10" : "Jump"}${n ? ` · ${esc(n)}` : ""}. Le mandamos el pedido a Gabriel y te avisamos cuando lo confirme.`, "Pedir este día", async () => {
+    await fdb.doc(`solicitudes/${a.id}_${c}_${dia}_${hhmmDe(h)}`).set({ alumnoId: a.id, nombre: a.nombre || "", club: c, dia, hora: h, nivel: n || "", estado: "pendiente", notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() });
+    return { titulo: "¡Pedido enviado!" }; });
+}
 function confirmar(titulo, texto, boton, accion) {
   openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">${titulo}</h2><p class="small" style="margin:0">${texto}</p></div>
     <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
@@ -388,6 +413,10 @@ document.addEventListener("click", async e => {
   if (pa === "reempNo") { const { f, h } = b.dataset; confirmar("¿Cancelás el reemplazo?", "Tu lugar vuelve a ser tuyo para esa clase.", "Sí, cancelar", async () => {
       await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).delete(); return { titulo: "Listo", texto: "Cancelaste el reemplazo." }; }); return; }
   if (pa === "pagar") { abrirPagar(b.dataset.m); return; }
+  if (pa === "sumar") { abrirSumar(); return; }
+  if (pa === "sumarElegir") { pedirSumar(b); return; }
+  if (pa === "sumarCancelar") { const id = b.dataset.id; confirmar("¿Cancelás el pedido?", "Gabriel ya no lo va a ver.", "Sí, cancelar", async () => { await fdb.doc("solicitudes/" + id).delete(); return { titulo: "Pedido cancelado" }; }); return; }
+  if (pa === "sumarVisto") { try { await fdb.doc("solicitudes/" + b.dataset.id).delete(); } catch (x) {} return; }
   if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
   if (pa === "novoy") {

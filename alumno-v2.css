@@ -790,3 +790,14 @@ html.v2.v2-staff:has(#staffApp.w-home) body{background:linear-gradient(180deg,#0
 .sem-al small{color:#9a5b00;font-weight:700;font-size:11.5px}
 .sem-al .lib{background:#e3f3e9;color:#13834f;border-radius:10px;padding:7px 11px;font-weight:700;font-size:13.5px}
 .sem-al .full{color:var(--w-dim);font-size:13px;padding:7px 4px}
+/* alumno: sumar un día más */
+.v2-sumar{display:grid;gap:8px}
+.v2-sumar-b{display:flex;align-items:center;gap:14px;width:100%;padding:20px 18px;border:0;border-radius:22px;background:linear-gradient(135deg,#cfe04a,#a9bb2a);color:#1c2619;text-align:left;cursor:pointer;box-shadow:0 14px 28px -16px rgba(80,100,10,.7);font-family:var(--s-body)}
+.v2-sumar-i{width:56px;height:56px;border-radius:50%;background:#1c2619;color:#cfe04a;display:grid;place-items:center;font:800 22px var(--s-sport);flex:none}
+.v2-sumar-t{display:grid;gap:4px;flex:1}.v2-sumar-t b{font-family:var(--s-sport);font-stretch:118%;text-transform:uppercase;font-size:20px;letter-spacing:.02em}.v2-sumar-t small{font-size:14px;line-height:1.35}
+.v2-sumar-go{font-size:30px;font-weight:300}
+.v2-sumar-pen{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--s-card);border-radius:14px;padding:12px 14px;font-size:14px}
+.v2-sumar-pen button,.v2-sumar-res button{background:none;border:0;font:700 13.5px var(--s-body);text-decoration:underline;color:inherit;cursor:pointer;white-space:nowrap}
+.v2-sumar-res{display:grid;gap:4px;border-radius:16px;padding:14px 16px;background:#fbe4e1;color:#7b2620;font-size:14px}
+.v2-sumar-res.ok{background:#e3f1df;color:#1f5e28}
+.v2-sumar-res button{justify-self:start;padding:4px 0}
