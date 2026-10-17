@@ -774,3 +774,4 @@ html.v2.v2-staff:has(#staffApp.w-home) body{background:linear-gradient(180deg,#0
 .w-lib{padding:10px 16px;border-top:1px solid #edf0eb;display:grid;gap:7px}
 .w-lib>b{font-size:15px}.w-lib>b span{background:#e3f3e9;color:#13834f;border-radius:99px;padding:1px 8px;font-size:12.5px;margin-left:4px}
 .w-lib>div{display:flex;flex-wrap:wrap;gap:5px}.w-lib>div span{background:#f2f4f1;border-radius:8px;padding:4px 9px;font-size:13px}.w-lib i{font-style:normal;font-weight:800;color:#13834f}
+.w-lib-n{background:#e3f3e9;color:#13834f;border-radius:99px;padding:1px 9px;font-size:13px;margin-left:4px;vertical-align:2px}

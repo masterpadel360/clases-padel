@@ -292,7 +292,6 @@ function vInicioG(){
     const nombres=[...e.al.map(a=>({a,aus:e.aus.includes(a)})),...e.recs.map(a=>({a,rec:1}))];
     return `<button class="w-cl" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-cl-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.nivel?`<span class="w-cl-n">${esc(t.nivel)}</span>`:""}${st}</span>
       <span class="w-cl-al">${nombres.map(x=>`<span class="${x.aus?"aus":x.rec?"rec":""}">${esc(nombreCorto(x.a.nombre))}${x.aus?" · no viene":x.rec?" · recupera":""}</span>`).join("")}${e.libres?`<span class="lib">${e.libres} libre${e.libres===1?"":"s"}</span>`:""}</span></button>`; }).join("");
-  const gs=libresPorCat("");
   return `
   <header class="w-head"><span class="w-av">${esc(ini)}</span><span class="w-hola"><b>¡Hola, ${esc(nom)}!</b><small>${DIAS_LARGO[now.getDay()]} ${now.getDate()} de ${mesSolo(m).toLowerCase()}</small></span>
     <button class="w-bell" data-act="avisosVer" aria-label="Avisos de alumnos">${wico("bell")}${nAv?`<i class="w-dot"></i>`:""}</button>
@@ -310,9 +309,9 @@ function vInicioG(){
     <div class="w-seg">${[["","Todas",nT("")],["JUMP","Jump",nT("JUMP")],["ESPACIO","Espacio",nT("ESPACIO")]].map(([v,l,n])=>`<button data-act="hoyClub" data-v="${v}" aria-pressed="${hc===v}">${l}${n?` · ${n}`:""}</button>`).join("")}</div>
     ${filas||`<p class="w-empty">Hoy no hay clases${hc?` en ${clubN(hc)}`:""}.</p>`}
   </section>
-  <section class="w-card"><div class="w-card-h"><b>Lugares libres</b><button data-act="libres">Mandar ›</button></div>
-    ${gs.length?gs.map(g=>`<div class="w-lib"><b>${esc(capCat(g.nombre))} <span>${g.n}</span></b><div>${g.ts.map(t=>`<span>${DIAS[t.dia]} ${t.hora} · ${clubN(t.club)} · <i>${CUPO-t.al.length}</i></span>`).join("")}</div></div>`).join(""):'<p class="w-empty">Todos los turnos están completos.</p>'}
-  </section>
+  ${[["JUMP","Jump"],["ESPACIO","Espacio La 10"]].map(([c,l])=>{ const g2=libresPorCat(c); const n=g2.reduce((t,g)=>t+g.n,0);
+    return `<section class="w-card"><div class="w-card-h"><b>Lugares libres · ${l}${n?` <span class="w-lib-n">${n}</span>`:""}</b>${n?`<button data-act="libresClub" data-c="${c}">Mandar ›</button>`:""}</div>
+    ${g2.length?g2.map(g=>`<div class="w-lib"><b>${esc(capCat(g.nombre))}</b><div>${g.ts.map(t=>`<span>${DIAS[t.dia]} ${t.hora} · <i>${CUPO-t.al.length} lugar${CUPO-t.al.length===1?"":"es"}</i></span>`).join("")}</div></div>`).join(""):`<p class="w-empty">${l}: todos los turnos completos.</p>`}</section>`; }).join("")}
   ${pendDuenoHTML()}
   ${tarjetaNotif("dueño")}`;
 }
@@ -1266,6 +1265,7 @@ document.addEventListener("click",async e=>{
     case "gastoNuevo": openGasto(); break;
     case "ojo": OJO=!OJO; try{ localStorage.setItem("ojoPlata",OJO?"1":"0"); }catch(e){} render(); break;
     case "cfgOpen": openCfg(); break;
+    case "libresClub": LIB.club=b.dataset.c; openLibres(); break;
     case "hoyClub": S.hoyClub=b.dataset.v; render(); break;
     case "masAcc": openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Más acciones</h2></div><div class="w-sheet-grid">${[["admin","Esteban y canchas",'data-act="tab" data-t="admin"'],["cobrar","Mi plata",'data-act="tab" data-t="dinero"'],["alumnos","Mandar accesos",'data-act="accMasivo"'],["cobrar","Aumento de cuota",'data-act="aumento"'],["cobrar","Anotar gasto",'data-act="gastoNuevo"'],["gear","Ajustes y mensajes",'data-act="cfgOpen"']].map(([k,l,a])=>`<button class="w-tile" ${a}><span class="w-ic">${wico(k)}</span><span>${l}</span></button>`).join("")}</div><div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`); break;
     case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
