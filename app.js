@@ -254,7 +254,7 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
 
 /* ---------- Plata: lo que te queda, cómo vienen los cobros (los pagos entran solos por la app) y lo que pagás ---------- */
 function plataMes(m){ const al=S.alumnos.filter(a=>a.activo!==false&&!(a.inicio&&a.inicio.slice(0,7)>m));
-  const cobran=al.filter(a=>montoMes(a,m)>0); const pag=cobran.filter(a=>pago(a)); const deben=cobran.filter(a=>!pago(a));
+  const cobran=al.filter(a=>montoMes(a,m)>0); const pag=cobran.filter(a=>pago(a,m)); const deben=cobran.filter(a=>!pago(a,m));
   const ing=cobran.reduce((t,a)=>t+montoMes(a,m),0), cob=pag.reduce((t,a)=>t+cobradoDe(a,m),0);
   const eq=S.equipo[0]; const gE=eq?ganadoEn(m):0; const pagE=eq?S.hMovs.filter(x=>(x.fecha||"").startsWith(m)).reduce((t,x)=>t+(Number(x.monto)||0),0):0;
   const cs=CANCHAS.map(([c])=>{ const C=canchaDe(c); const pg=C.pagos[m]; return {c,tot:canchaTotal(c,m),pg:!!(pg&&pg.pagado)}; });
@@ -279,58 +279,42 @@ const WI={
 const wico=(k,cl="")=>`<svg class="${cl}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WI[k]}</svg>`;
 let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
 function vInicioG(){
-  const m=mesKey(now); escucharAsMes(m); const P=plataMes(m); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const m=mesKey(now); escucharAsMes(m); const P=plataMes(m), A=plataMes(mesAnt(m)); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const nomC=(S.perfil&&S.perfil.nombre)||"Gabriel"; const nom=nomC.split(" ")[0]; const ini=nomC.split(" ").map(x=>x.charAt(0)).join("").slice(0,2).toUpperCase()||"G";
   const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
-  const nRec=activos().reduce((t,a)=>t+recN(a),0); const nLib=libresPorCat("").reduce((t,g)=>t+g.n,0);
-  const fl=faltantes().filter(x=>!x.esHoy&&(x.sinAsist.length||x.sinHoras)).length;
-  const nP=(S.equipo[0]&&S.nombres[S.equipo[0].id]||"Esteban").split(" ")[0];
-  const neg=P.queda<0;
-  const ts=turnos("").filter(t=>t.dia===now.getDay()).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
-  const hoyRows=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm; const st=e.lluvia?'<span class="w-st">Lluvia</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar</span>':`<span class="w-st">${e.vienen} vienen</span>`;
-    return `<button class="w-row" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-mv">${wico("clases")}</span><span class="w-mid"><b>${t.hora} · ${clubN(t.club)}${t.nivel?` · ${esc(t.nivel)}`:""}</b><small>${e.vienen} vienen${e.aus.length?` · ${e.aus.length} avisó que no`:""}${e.recs.length?` · ${e.recs.length} recupera`:""}</small></span>${st}</button>`; }).join("");
-  const act=[];
-  Object.values(S.comps||{}).filter(c=>c.estado!=="rechazado"&&c.creado&&c.creado.seconds).forEach(c=>{ const a=S.alumnos.find(x=>x.id===c.alumnoId); if(a) act.push({t:c.creado.seconds*1000,in:true,tit:"Pago recibido",sub:`${a.nombre} · ${mesSolo(c.mes)}`,monto:c.monto||montoMes(a,c.mes),act:`data-act="verComp" data-id="${a.id}"`}); });
-  (S.gastosG||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:x.nota||"Gasto",sub:"Gasto",monto:x.monto}));
-  (S.hMovs||[]).forEach(x=>act.push({t:isoDate(x.fecha).getTime()+43200000,in:false,tit:`Pago a ${nP}`,sub:x.nota||"Horas de clase",monto:x.monto}));
-  CANCHAS.forEach(([c])=>{ const C=canchaDe(c); Object.entries(C.pagos).forEach(([mm,p])=>{ if(p&&p.pagado&&p.fecha) act.push({t:isoDate(p.fecha).getTime()+43200000,in:false,tit:`Cancha ${C.lugar}`,sub:`Horas de ${mesSolo(mm)}`,monto:p.monto||0}); }); });
-  act.sort((a,b)=>b.t-a.t);
-  const cuando=t=>{ const d=new Date(t); return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${String(d.getFullYear()).slice(2)}`; };
+  const nAl=activos().length, nAlA=A.cobran.length; const dif=nAl-nAlA;
   const pct=P.cobran.length?Math.round(P.pag.length/P.cobran.length*100):0;
-  const tile=(k,lbl,act,tag)=>`<button class="w-tile" ${act}>${tag?`<i class="w-new">${tag}</i>`:""}<span class="w-ic">${wico(k)}</span><span>${lbl}</span></button>`;
-  const big=(k,lbl,act,fill,badge)=>`<button class="w-big ${fill?"fill":""}" ${act}><span class="w-bi">${wico(k)}${badge?`<i class="w-badge">${badge}</i>`:""}</span><span>${lbl}</span></button>`;
-  const card=(k,lbl,sub,act,alert)=>`<button class="w-hcard" ${act}><span class="w-hc-t"><b>${lbl}</b><small class="${alert?"no":""}">${sub}</small></span><span class="w-ic">${wico(k)}</span></button>`;
+  const hc=S.hoyClub||"";
+  const ts=turnos("").filter(t=>t.dia===now.getDay()&&(!hc||t.club===hc)).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
+  const nT=c=>turnos(c).filter(t=>t.dia===now.getDay()).length;
+  const filas=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm;
+    const st=e.lluvia?'<span class="w-st">🌧 Lluvia</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar asistencia</span>':`<span class="w-st">${e.vienen} vienen</span>`;
+    const nombres=[...e.al.map(a=>({a,aus:e.aus.includes(a)})),...e.recs.map(a=>({a,rec:1}))];
+    return `<button class="w-cl" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-cl-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.nivel?`<span class="w-cl-n">${esc(t.nivel)}</span>`:""}${st}</span>
+      <span class="w-cl-al">${nombres.map(x=>`<span class="${x.aus?"aus":x.rec?"rec":""}">${esc(nombreCorto(x.a.nombre))}${x.aus?" · no viene":x.rec?" · recupera":""}</span>`).join("")}${e.libres?`<span class="lib">${e.libres} libre${e.libres===1?"":"s"}</span>`:""}</span></button>`; }).join("");
+  const gs=libresPorCat("");
   return `
-  <header class="w-head"><span class="w-av">${esc(ini)}</span><span class="w-hola"><b>¡Hola, ${esc(nom)}!</b><button data-act="cfgOpen">Ajustes</button></span>
-    <button class="w-bell" data-act="avisosVer" aria-label="Avisos de alumnos">${wico("bell")}${nAv?`<i class="w-dot"></i>`:""}</button></header>
-  <nav class="w-pills"><button class="on" data-act="tab" data-t="inicio">Inicio</button><button data-act="tab" data-t="hoy">Clases</button><button data-act="tab" data-t="admin">Mi negocio</button></nav>
-  <section class="w-bal">
-    <div class="w-bal-k"><button data-act="ojo">${OJO?"Ocultar dinero":"Mostrar dinero"} ${wico("ojo")}</button><span class="w-chip">${P.pag.length}/${P.cobran.length} pagaron</span></div>
-    <button class="w-bal-m" data-act="tab" data-t="dinero"><span class="w-bal-l">Te queda en ${mesSolo(m)}</span><span class="w-bal-n num">${OJO?`${neg?"− ":""}${money(Math.abs(P.queda))}`:"$ •••••"}</span><svg class="w-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
-    <div class="w-bigs">
-      ${big("asist","Asistencia",'data-act="tab" data-t="asist"',1)}
-      ${big("cobrar","Cobrar",'data-act="verDeben"',1,P.deben.length&&now.getDate()>=10?P.deben.length:"")}
-      ${big("alumnos","Alumnos",'data-act="tab" data-t="alumnos"')}
-      ${big("clases","Clases",'data-act="tab" data-t="hoy"')}
+  <header class="w-head"><span class="w-av">${esc(ini)}</span><span class="w-hola"><b>¡Hola, ${esc(nom)}!</b><small>${DIAS_LARGO[now.getDay()]} ${now.getDate()} de ${mesSolo(m).toLowerCase()}</small></span>
+    <button class="w-bell" data-act="avisosVer" aria-label="Avisos de alumnos">${wico("bell")}${nAv?`<i class="w-dot"></i>`:""}</button>
+    <button class="w-bell" data-act="masAcc" aria-label="Más opciones">${wico("gear")}</button></header>
+  <section class="w-res">
+    <div class="w-res-top">
+      <button class="w-k" data-act="verPagaron"><small>Cobré</small><b class="num">${P.pag.length}<span>/${P.cobran.length}</span></b><em class="num">${money(P.cob)}</em></button>
+      <button class="w-k no" data-act="verDeben"><small>Falta cobrar</small><b class="num">${P.deben.length}</b><em class="num">${money(P.ing-P.cob)}</em></button>
+      <button class="w-k" data-act="tab" data-t="alumnos"><small>Alumnos</small><b class="num">${nAl}</b><em class="${dif>0?"up":dif<0?"down":""}">${dif>0?`▲ ${dif} vs ${mesSolo(mesAnt(m)).slice(0,3)}`:dif<0?`▼ ${-dif} vs ${mesSolo(mesAnt(m)).slice(0,3)}`:`igual que ${mesSolo(mesAnt(m)).slice(0,3)}`}</em></button>
     </div>
+    <div class="w-bar"><i style="width:${pct}%"></i></div>
+    <div class="w-res-ant"><span>${mesSolo(m).replace(/^./,c=>c.toUpperCase())}: <b>${pct}%</b> cobrado</span><span>${mesSolo(mesAnt(m)).replace(/^./,c=>c.toUpperCase())}: ${nAlA} alumnos · cobraste <b class="num">${money(A.cob)}</b></span></div>
   </section>
-  <section class="w-tiles">
-    ${tile("rec","Recuperar",'data-act="tab" data-t="recuperar"',nRec?`${nRec}`:"")}
-    ${tile("libres","Lugares libres",'data-act="libres"',nLib?`${nLib}`:"")}
-    ${tile("lluvia","Suspender por lluvia",`data-act="lluvia" data-f="${hoyISO}"`)}
-    ${tile("mas","Ver más acciones",'data-act="masAcc"')}
+  <section class="w-card"><div class="w-card-h"><b>Clases de hoy</b><button data-act="tab" data-t="hoy">Semana ›</button></div>
+    <div class="w-seg">${[["","Todas",nT("")],["JUMP","Jump",nT("JUMP")],["ESPACIO","Espacio",nT("ESPACIO")]].map(([v,l,n])=>`<button data-act="hoyClub" data-v="${v}" aria-pressed="${hc===v}">${l}${n?` · ${n}`:""}</button>`).join("")}</div>
+    ${filas||`<p class="w-empty">Hoy no hay clases${hc?` en ${clubN(hc)}`:""}.</p>`}
   </section>
-  <section class="w-hscroll">
-    ${card("admin",nP,fl?`${fl} día${fl===1?"":"s"} sin cargar`:"Horas y asistencia",'data-act="tab" data-t="admin"',fl)}
-    ${card("cancha","Canchas","Jump y Espacio",'data-act="tab" data-t="admin"')}
-    ${card("cobrar","Gastos","Anotá lo que pagás",'data-act="gastoNuevo"')}
+  <section class="w-card"><div class="w-card-h"><b>Lugares libres</b><button data-act="libres">Mandar ›</button></div>
+    ${gs.length?gs.map(g=>`<div class="w-lib"><b>${esc(capCat(g.nombre))} <span>${g.n}</span></b><div>${g.ts.map(t=>`<span>${DIAS[t.dia]} ${t.hora} · ${clubN(t.club)} · <i>${CUPO-t.al.length}</i></span>`).join("")}</div></div>`).join(""):'<p class="w-empty">Todos los turnos están completos.</p>'}
   </section>
-  <button class="w-banner" data-act="verDeben"><span class="w-bn-i num">${pct}%</span><span class="w-bn-t"><b>Cobros de ${mesSolo(m)}</b><span class="w-bn-bar"><i style="width:${pct}%"></i></span><small>${P.deben.length?`Faltan ${P.deben.length} · ${OJO?money(P.ing-P.cob):"$ •••"}`:"Todos pagaron 🎉"}</small></span><svg class="w-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
   ${pendDuenoHTML()}
-  ${tarjetaNotif("dueño")}
-  <section class="w-card"><div class="w-card-h"><b>Clases de hoy</b><button data-act="tab" data-t="hoy">Ver semana</button></div>${hoyRows||'<p class="w-empty">Hoy no hay clases.</p>'}</section>
-  <section class="w-card"><div class="w-card-h"><b>Última actividad</b><button data-act="tab" data-t="dinero">Ver todo</button></div>
-    ${act.length?act.slice(0,6).map(x=>`<${x.act?`button ${x.act}`:"div"} class="w-row"><span class="w-mv ${x.in?"in":""}">${wico(x.in?"in":"out")}</span><span class="w-mid"><b>${esc(x.tit)}</b><small>${esc(x.sub)}</small></span><span class="w-amt-c"><span class="w-amt num ${x.in?"in":""}">${OJO?`${x.in?"+":"-"}${money(x.monto).replace(" ","")}`:"•••"}</span><small>${cuando(x.t)}</small></span></${x.act?"button":"div"}>`).join(""):'<p class="w-empty">Acá vas a ver los pagos que entran y lo que pagás.</p>'}</section>`;
+  ${tarjetaNotif("dueño")}`;
 }
 function vDinero(){
   const m=S.mes; escucharAsMes(m); const al=S.alumnos.filter(a=>a.activo!==false&&!(a.inicio&&a.inicio.slice(0,7)>m));
@@ -1282,6 +1266,7 @@ document.addEventListener("click",async e=>{
     case "gastoNuevo": openGasto(); break;
     case "ojo": OJO=!OJO; try{ localStorage.setItem("ojoPlata",OJO?"1":"0"); }catch(e){} render(); break;
     case "cfgOpen": openCfg(); break;
+    case "hoyClub": S.hoyClub=b.dataset.v; render(); break;
     case "masAcc": openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Más acciones</h2></div><div class="w-sheet-grid">${[["admin","Esteban y canchas",'data-act="tab" data-t="admin"'],["cobrar","Mi plata",'data-act="tab" data-t="dinero"'],["alumnos","Mandar accesos",'data-act="accMasivo"'],["cobrar","Aumento de cuota",'data-act="aumento"'],["cobrar","Anotar gasto",'data-act="gastoNuevo"'],["gear","Ajustes y mensajes",'data-act="cfgOpen"']].map(([k,l,a])=>`<button class="w-tile" ${a}><span class="w-ic">${wico(k)}</span><span>${l}</span></button>`).join("")}</div><div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`); break;
     case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
     case "gastoOk": { const monto=Number($("#gMonto").value)||0; if(!monto){ toast("Poné el monto"); break; } const mv={id:Date.now().toString(36),monto,fecha:$("#gFecha").value||hoyISO,nota:($("#gNota").value||"").trim()}; closeSheet(); await guardarGastos([...(S.gastosG||[]),mv],"Gasto anotado"); break; }
