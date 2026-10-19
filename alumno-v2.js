@@ -341,7 +341,7 @@
           const puede = v.conRecupero && a24 && lugar && tiene;
           const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona" : !tiene ? "Ya usaste esa clase para recuperar" : "";
           return `<div class="v2-ficha off"><div class="v2-fecha"><span>${DC[d.getDay()]}</span><b>${d.getDate()}</b></div>
-            <div class="v2-ficha-tx"><b>${v.hora}</b>${v.conRecupero ? '<span class="st aviso">Te queda para recuperar</span>' : '<span class="st falta">Avisaste tarde: no se recupera</span>'}${nota ? `<span>${nota}</span>` : ""}</div>
+            <div class="v2-ficha-tx"><b>${v.hora}</b>${v.conRecupero ? '<span class="st aviso">Te queda para recuperar</span>' : (recCancelada(v) ? '<span class="st falta">Cancelaste la recuperación</span>' : '<span class="st falta">Avisaste tarde: no se recupera</span>')}${nota ? `<span>${nota}</span>` : ""}</div>
             <div class="v2-ficha-acc">${puede ? `<button class="v2-mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div></div>`; }).join("")}</div>
         <p class="v2-sub">Podés volver atrás <b>una sola vez</b>, hasta 24 h antes y si tu lugar sigue libre.${wa ? ` ¿Otro caso? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
       </section>` : ""}

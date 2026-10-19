@@ -302,8 +302,18 @@ async function mandarComprobante(m, b) {
     const bt = fdb.batch();
     bt.set(fdb.doc("fotosPago/" + id), { alumnoId: a.id, mes: m, foto: P.compFoto });
     bt.set(fdb.doc("comprobantes/" + id), { alumnoId: a.id, uid: P.uid, nombre: a.nombre, mes: m, monto: montoMes(a, m), estado: "enviado", aplicado: false, notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() });
-    await bt.commit();
-    P.compFoto = null; avisarAlInstante();
+    // Con mala señal la foto queda guardada en el celu y se manda sola cuando vuelve la conexión.
+    const envio = bt.commit();
+    const r = await Promise.race([envio.then(() => "ok"), new Promise(ok => setTimeout(() => ok("lento"), 15000))]);
+    P.compFoto = null;
+    if (r === "lento") {
+      envio.then(() => { avisarAlInstante(); toast("Comprobante enviado ✓"); }).catch(x => { console.error(x); toast("No se pudo enviar el comprobante. Volvé a intentarlo desde Pagos."); });
+      openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">📶</div><h2 class="disp" style="margin:0">Se está enviando</h2>
+        <p class="small" style="margin:0">La señal está lenta. Tu comprobante de <b>${mesSolo(m)}</b> quedó guardado y se manda solo apenas tengas conexión. <b>No hace falta que lo vuelvas a subir.</b></p>
+        <button class="btn pri" data-pa="cerrar" style="width:100%">Entendido</button></div>`);
+      return;
+    }
+    avisarAlInstante();
     openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">✅</div><h2 class="disp" style="margin:0">¡Pagado!</h2>
       <p class="small" style="margin:0">Le llegó tu comprobante de <b>${mesSolo(m)}</b> a Gabriel. Ya figura como <b style="color:var(--ok)">pagado</b>.</p>
       <button class="btn pri" data-pa="cerrar" style="width:100%">Listo</button></div>`);
@@ -368,28 +378,50 @@ function confirmar(titulo, texto, boton, accion) {
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="ok">${boton}</button></span></div>`);
   P.accion = accion;
 }
+// Guarda con un tope de espera. Si la señal se corta o el alumno minimiza la app en el medio,
+// no sabemos si llegó: lo confirmamos con el servidor antes de decirle que falló.
+const ESPERA_TX = 20000;
+const ERR_LOGICOS = ["ya", "lleno", "sin-clases", "ocupado"];
+async function guardarSeguro(vRef, tipo, hacer) {
+  let err;
+  try { return { r: await Promise.race([hacer(), new Promise((_, mal) => setTimeout(() => mal({ code: "lento" }), ESPERA_TX))]) }; }
+  catch (x) { err = x; }
+  if (err && ERR_LOGICOS.includes(err.code)) throw err;
+  for (let i = 0; i < 3; i++) {
+    try { const s = await vRef.get({ source: "server" }); if (s.exists && s.data().tipo === tipo) return { r: s.data(), verificado: true }; break; }
+    catch (e) { if (e && e.code === "permission-denied") break; await new Promise(ok => setTimeout(ok, 1500)); } // sin permiso = no existe
+  }
+  throw err;
+}
+// Margen de 2 minutos para que el servidor (que exige 24 h) no lo rechace por segundos.
+const conRecuperoSi = (fecha, hora, tipo) => tipo !== "recupera" && inicioDe(fecha, hora).getTime() - Date.now() >= DIA_MS + 120000;
 async function avisarNoVoy(fecha, hora, tipo) {
-  const a = P.a; const ini = inicioDe(fecha, hora); const con = ini.getTime() - Date.now() >= DIA_MS + 120000;
+  // Una clase de recuperación que se cancela se pierde (así se le avisa al alumno antes de confirmar).
+  const a = P.a; const ini = inicioDe(fecha, hora); const con = conRecuperoSi(fecha, hora, tipo);
   const d = isoDate(fecha); const hFija = (a.horarios || []).find(x => x.dia === d.getDay() && x.hora === hora);
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
   const cid = cupoId(club, fecha, hora);
-  await fdb.runTransaction(async tx => {
-    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId);
-    if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+  if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+  const vRef = fdb.doc("avisos/" + avId);
+  const res = await guardarSeguro(vRef, "ausencia", () => fdb.runTransaction(async tx => {
+    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid);
+    // (El aviso no se lee acá: si no existe, las reglas no dejan leerlo. Si ya existía, el servidor rechaza crearlo de nuevo y lo confirmamos abajo.)
     const [aS, cS] = [await tx.get(aRef), await tx.get(cRef)];
     const c = cS.exists ? cS.data() : {};
     tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: con, inicio: firebase.firestore.Timestamp.fromDate(ini), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: avId });
     if (con) tx.update(aRef, { recuperar: ((aS.data() || {}).recuperar || 0) + 1, ultimoAviso: avId });
-  });
-  return con;
+    return con;
+  }));
+  return res.verificado ? !!res.r.conRecupero : res.r;
 }
 async function reservarRec(fecha, hora, clubElegido) {
   const a = P.a; const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(club, fecha, hora); const cupo = P.info.cupo || CUPO;
-  await fdb.runTransaction(async tx => {
-    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), vRef = fdb.doc("avisos/" + avId), tRef = fdb.doc("publico/turnos");
-    if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+  if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+  const vRef = fdb.doc("avisos/" + avId);
+  await guardarSeguro(vRef, "recupera", () => fdb.runTransaction(async tx => {
+    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), tRef = fdb.doc("publico/turnos");
     const [aS, cS, tS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(tRef)];
     const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
     const base = ((tS.data() || {}).t || {})[`${club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
@@ -397,9 +429,9 @@ async function reservarRec(fecha, hora, clubElegido) {
     tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId });
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
-  });
+  }));
 }
-const ERR_AL = { ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo." };
+const ERR_AL = { ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
 document.addEventListener("click", async e => {
   if (window.MODO_STAFF) return;
   const b = e.target.closest("[data-pa]"); if (!b) return;
@@ -420,7 +452,7 @@ document.addEventListener("click", async e => {
   if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
   if (pa === "novoy") {
-    const { f, h, t } = b.dataset; const horas = (inicioDe(f, h).getTime() - Date.now()) / 3600000; const con = t === "fija" && horas >= 24;
+    const { f, h, t } = b.dataset; const con = conRecuperoSi(f, h, t);
     const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     confirmar(`¿No venís ${cuando}?`,
       t === "recupera" ? '<b style="color:var(--warn)">Es una clase de recuperación: si no venís, la perdés.</b>'
@@ -476,13 +508,18 @@ document.addEventListener("click", async e => {
         <a class="cta wa" href="${url}" target="_blank" rel="noopener" data-pa="cerrar" style="justify-self:start">Mandar por WhatsApp <i>→</i></a></div>
         <div class="btns"><span></span><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
       else { closeSheet(); if (r) toast(r.titulo); } }
-    catch (x) { console.error(x); const el = $("#pErr"); if (el) el.textContent = (ERR_AL[x && x.code] || "No se pudo. Probá de nuevo.") + (x && x.code ? ` (${x.code})` : ""); b.disabled = false; b.textContent = "Reintentar"; }
+    catch (x) { console.error(x);
+      // Ya estaba guardado (doble toque, o se guardó justo antes de que se corte la señal): para el alumno está listo.
+      if (x && x.code === "ya") { closeSheet(); toast("Listo, ya estaba registrado ✓"); return; }
+      const el = $("#pErr"); if (el) el.textContent = (ERR_AL[x && x.code] || "No se pudo. Probá de nuevo.") + (x && x.code ? ` (${x.code})` : ""); b.disabled = false; b.textContent = "Reintentar"; }
     finally { P.ocupado = false; renderPortal(); }
   }
 });
 new MutationObserver(() => { if (!window.MODO_STAFF && P.perfil && $("#overlay").hidden) renderPortal(); }).observe($("#overlay"), { attributes: true, attributeFilter: ["hidden"] });
 
 /* ---- Clases avisadas y ausencias programadas ---- */
+// Una ausencia sobre una clase de recuperación = el alumno canceló esa recuperación.
+const recCancelada = v => P.avisos.some(x => x.tipo === "recupera" && x.fecha === v.fecha && x.hora === v.hora) && !esVuelta(v.fecha, v.hora);
 function avisadasHTML(wa) {
   const av = P.avisos.filter(v => v.tipo === "ausencia" && v.fecha >= hoyISO && !esVuelta(v.fecha, v.hora) && inicioDe(v.fecha, v.hora).getTime() > Date.now()).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
   if (!av.length) return "";
@@ -491,7 +528,7 @@ function avisadasHTML(wa) {
       const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (P.a.recuperar || 0) >= 1;
       const puede = v.conRecupero && a24 && lugar && tiene;
       const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona: hablá con Gabriel" : !tiene ? "Ya usaste esa clase para recuperar" : "";
-      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : '<span class="due">Avisaste tarde: no se recupera</span>'}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
+      return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : (recCancelada(v) ? '<span class="due">Cancelaste la recuperación</span>' : '<span class="due">Avisaste tarde: no se recupera</span>')}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
     <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Podés volver atrás <b>una sola vez</b>, hasta 24 horas antes y si tu lugar sigue libre. Después ya no se puede cambiar. ¿Otro caso? ${wa ? `<a class="wa-link" style="color:#8EE6A8" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${P.a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a> y lo corrige.` : "Avisale a Gabriel y lo corrige."}</p>
   </section>`;
 }
@@ -513,7 +550,7 @@ async function confirmarVarias(b) {
 async function avisarLista(b, sel) {
   if (P.ocupado) return; P.ocupado = true; b.disabled = true; b.textContent = "Avisando…";
   const ok = []; let rec = 0, fallo = 0;
-  for (const c of sel) { try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); fallo++; } }
+  for (const c of sel) { try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); if (x && x.code === "ya") ok.push(c); else fallo++; } }
   P.ocupado = false; if (ok.length) avisarAlInstante();
   const lista = ok.map(c => `${fechaLarga(c.f).toLowerCase()} a las ${c.h}`).join(", ");
   const msg = `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Te aviso que no voy a poder ir: ${lista}. Lo cargué en la app.`;

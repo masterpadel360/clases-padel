@@ -111,11 +111,34 @@ async function salir() { try { Object.keys(localStorage).filter(k => k.startsWit
       leer().then(async v => { if (v === null || (v && (v.rol !== "alumno" || v.alumnoId !== guardado.alumnoId))) { try { localStorage.removeItem(PK); } catch (e) {} location.reload(); } });
       return iniciarPortal(guardado, u);
     }
-    let p = await leer(); if (p === undefined) p = null;
+    let p = await leer();
+    // Sin señal no podemos saber si tiene acceso: no lo echamos, le ofrecemos reintentar.
+    if (p === undefined) { pantalla(`<div class="login-card" style="text-align:center;display:grid;gap:12px"><span class="small">No se pudo conectar. Revisá la señal.</span><button class="btn pri" onclick="location.reload()">Reintentar</button></div>`); return; }
     if (!p || !["profe", "alumno"].includes(p.rol)) { msgLogin = "Este usuario no tiene acceso. Pedile a Gabriel que te lo active."; await fauth.signOut(); return; }
     if (p.rol === "profe") return iniciarStaff(p, u);
     return iniciarPortal(p, u);
   });
+})();
+
+/* ---------- Volver a la app después de minimizarla ----------
+   En iPhone, si la app queda minimizada un rato, la conexión con la base a veces queda colgada
+   y deja de actualizarse. Al volver: la reconectamos, y si estuvo afuera más de 10 minutos
+   recargamos la app del alumno (abre al instante con lo guardado en el celu). */
+(function () {
+  let oculta = 0;
+  const ocupada = () => { const ov = document.getElementById("overlay"); return (ov && !ov.hidden) || (typeof P !== "undefined" && (P.ocupado || P.enviando)); };
+  const recargar = () => { try { const t = Number(sessionStorage.getItem("recargaVuelta") || 0); if (Date.now() - t < 60000) return; sessionStorage.setItem("recargaVuelta", String(Date.now())); } catch (e) {} location.reload(); };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") { oculta = Date.now(); return; }
+    const t = oculta; oculta = 0; if (!fdb) return;
+    const portal = document.getElementById("portal");
+    if (t && Date.now() - t > 10 * 60 * 1000 && portal && !portal.hidden && !ocupada()) { recargar(); return; }
+    fdb.enableNetwork().catch(() => {});
+  });
+  // Si el celu cortó la base guardada (pasa en iPhone), recargar lo arregla.
+  const caida = m => /Indexed ?Database server lost|IndexedDB.*(closed|lost)|Connection to Indexed/i.test(String(m || ""));
+  window.addEventListener("unhandledrejection", e => { if (caida(e.reason && (e.reason.message || e.reason)) && !ocupada()) recargar(); });
+  window.addEventListener("error", e => { if (caida(e.message) && !ocupada()) recargar(); });
 })();
 
 /* ---------- Gabriel y profes ---------- */
