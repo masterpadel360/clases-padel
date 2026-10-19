@@ -338,10 +338,10 @@
       ${av.length ? `<section class="v2-sec"><div class="v2-head"><h2>Avisaste</h2><span class="k">${av.length} ${av.length === 1 ? "clase" : "clases"}</span></div>
         <div class="v2-fichas">${av.map(v => { const d = isoDate(v.fecha);
           const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (a.recuperar || 0) >= 1;
-          const puede = v.conRecupero && a24 && lugar && tiene;
-          const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona" : !tiene ? "Ya usaste esa clase para recuperar" : "";
+          const puede = v.conRecupero && a24 && lugar && tiene && !recCancelada(v);
+          const nota = !v.conRecupero || recCancelada(v) ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona" : !tiene ? "Ya usaste esa clase para recuperar" : "";
           return `<div class="v2-ficha off"><div class="v2-fecha"><span>${DC[d.getDay()]}</span><b>${d.getDate()}</b></div>
-            <div class="v2-ficha-tx"><b>${v.hora}</b>${v.conRecupero ? '<span class="st aviso">Te queda para recuperar</span>' : (recCancelada(v) ? '<span class="st falta">Cancelaste la recuperación</span>' : '<span class="st falta">Avisaste tarde: no se recupera</span>')}${nota ? `<span>${nota}</span>` : ""}</div>
+            <div class="v2-ficha-tx"><b>${v.hora}</b>${v.conRecupero ? (recCancelada(v) ? '<span class="st aviso">Cancelaste la recuperación · te queda para otro horario</span>' : '<span class="st aviso">Te queda para recuperar</span>') : (recCancelada(v) ? '<span class="st falta">Cancelaste la recuperación</span>' : '<span class="st falta">Avisaste tarde: no se recupera</span>')}${nota ? `<span>${nota}</span>` : ""}</div>
             <div class="v2-ficha-acc">${puede ? `<button class="v2-mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div></div>`; }).join("")}</div>
         <p class="v2-sub">Podés volver atrás <b>una sola vez</b>, hasta 24 h antes y si tu lugar sigue libre.${wa ? ` ¿Otro caso? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
       </section>` : ""}

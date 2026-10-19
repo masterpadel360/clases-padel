@@ -22,13 +22,16 @@ export function venceDe(f) { if (f < REC_INI.corte) return REC_INI.vence; return
 export function normalizar(a, hoy, pend = []) {
   const tot = Math.max(0, Number(a.recuperar) || 0); const m = {};
   Object.entries(a.recVence || {}).forEach(([k, n]) => { n = Number(n) || 0; if (n > 0) { k = recIni(habil(k)); m[k] = (m[k] || 0) + n; } });
-  pend.forEach(f => { const k = venceDe(f); m[k] = (m[k] || 0) + 1; });
+  // pend: fechas de faltas (vencen a las 2 semanas) o {vence} de recuperaciones canceladas a tiempo (conservan su vencimiento).
+  pend.forEach(f => { const k = typeof f === "string" ? venceDe(f) : f.vence; m[k] = (m[k] || 0) + 1; });
   const sum = Object.values(m).reduce((s, n) => s + n, 0);
   if (tot > sum) { const k = venceDe(hoy); m[k] = (m[k] || 0) + tot - sum; }
   else if (tot < sum) { let r = sum - tot; for (const k of Object.keys(m).sort()) { const q = Math.min(r, m[k]); m[k] -= q; r -= q; if (!m[k]) delete m[k]; if (!r) break; } }
   const out = {}; Object.keys(m).filter(k => k >= hoy).sort().forEach(k => { out[k] = m[k]; });
   return { recVence: out, recuperar: Object.values(out).reduce((s, n) => s + n, 0) };
 }
+// ¿Es un horario fijo del alumno? (si avisó y reservó ahí, "volvió"; si no, canceló una recuperación)
+export const esFijo = (a, club, f, hora) => (a.horarios || []).some(h => Number(h.dia) === diaSemana(f) && h.hora === hora && clubH(a, h) === club);
 export const igualRec = (a, b) => (Number(a.recuperar) || 0) === b.recuperar && JSON.stringify(Object.fromEntries(Object.entries(a.recVence || {}).filter(([, n]) => n > 0).sort())) === JSON.stringify(b.recVence);
 
 export const catNorm = c => String(c || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/^iniciales$/, "inicial");

@@ -26,6 +26,11 @@ function reservasAsistHTML(club, fecha, hora) {
 const fechaCorta = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth() + 1}`; };
 function textoAviso(v) {
   const n = v.nombre || (S.alumnos.find(a => a.id === v.alumnoId) || {}).nombre || "Un alumno";
+  // Avisó que no va a una recuperación que había reservado (no es su horario fijo).
+  const al = S.alumnos.find(x => x.id === v.alumnoId);
+  const recCanc = al && vuelveApp(v.alumnoId, v.fecha, v.hora) && !esFijoDe(al, v.club, v.fecha, v.hora);
+  if (recCanc && v.tipo === "ausencia") return `<b>${esc(n)}</b> canceló la recuperación del <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> · ${v.conRecupero ? '<span style="color:var(--sun)">avisó con 24 h, le vuelve la clase</span>' : '<span class="due">avisó con menos de 24 h, la pierde</span>'}`;
+  if (recCanc) return `<b>${esc(n)}</b> había reservado recuperar el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> (después la canceló)`;
   if (v.tipo === "ausencia") return `<b>${esc(n)}</b> no va el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> · ${v.conRecupero ? '<span style="color:var(--sun)">queda para recuperar</span>' : '<span class="due">avisó con menos de 24 h, no recupera</span>'}`;
   if (vuelveApp(v.alumnoId, v.fecha, v.hora)) return `<b>${esc(n)}</b> <span style="color:var(--ok)">al final sí va</span> el <b>${fechaCorta(v.fecha)} a las ${v.hora}</b> (había avisado que no)`;
   const rp = (S.reemp || {})[`${v.alumnoId}|${v.fecha}|${v.hora}`];

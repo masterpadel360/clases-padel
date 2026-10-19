@@ -6,7 +6,7 @@
 //    y del pago del mes (se paga del 1 al 13: avisos el 1, el 10, el 13 y el 14 si quedó vencido).
 // 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
 import admin from "firebase-admin";
-import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm, clubH } from "./logica.mjs";
+import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm, clubH, esFijo } from "./logica.mjs";
 
 if (!process.env.FIREBASE_SA) { console.log("Falta el secreto FIREBASE_SA: no se envía nada."); process.exit(0); }
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SA)) });
@@ -157,7 +157,10 @@ const diaDM = f => `${DIAS[diaSemana(f)]} ${fechaDM(f)}`;
         const pend = [], marcar = [];
         for (const d of docs) { const s = await tx.get(d.ref); if (!s.exists || s.data().contado !== false) continue; marcar.push(d.ref);
           const v = s.data(); if (v.tipo !== "ausencia" || !v.conRecupero) continue;
-          const vuelta = await tx.get(db.doc(`avisos/${aid}_${v.fecha}_${v.hhmm}_recupera`)); if (!vuelta.exists) pend.push(v.fecha); }
+          const vuelta = await tx.get(db.doc(`avisos/${aid}_${v.fecha}_${v.hhmm}_recupera`));
+          if (!vuelta.exists) pend.push(v.fecha);
+          // Canceló una recuperación con 24 h: la clase le vuelve con el mismo vencimiento que tenía.
+          else if (!esFijo(aS.data(), v.club, v.fecha, v.hora)) pend.push({ vence: vuelta.data().vence || venceDe(hoy) }); }
         const n = normalizar(aS.data(), hoy, pend);
         if (!igualRec(aS.data(), n)) tx.update(aRef, n);
         marcar.forEach(r => tx.update(r, { contado: true }));

@@ -394,9 +394,11 @@ async function guardarSeguro(vRef, tipo, hacer) {
   throw err;
 }
 // Margen de 2 minutos para que el servidor (que exige 24 h) no lo rechace por segundos.
-const conRecuperoSi = (fecha, hora, tipo) => tipo !== "recupera" && inicioDe(fecha, hora).getTime() - Date.now() >= DIA_MS + 120000;
+// Vale igual para clases fijas y para recuperaciones reservadas: con 24 h de aviso, la clase te queda para recuperar en otro horario.
+const conRecuperoSi = (fecha, hora) => inicioDe(fecha, hora).getTime() - Date.now() >= DIA_MS + 120000;
+// Hasta cuándo vale la clase que le vuelve: una recuperación cancelada conserva su vencimiento original.
+const venceSiCancela = (fecha, hora, tipo) => tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).vence || venceDe(hoyISO)) : venceDe(fecha);
 async function avisarNoVoy(fecha, hora, tipo) {
-  // Una clase de recuperación que se cancela se pierde (así se le avisa al alumno antes de confirmar).
   const a = P.a; const ini = inicioDe(fecha, hora); const con = conRecuperoSi(fecha, hora, tipo);
   const d = isoDate(fecha); const hFija = (a.horarios || []).find(x => x.dia === d.getDay() && x.hora === hora);
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
@@ -426,8 +428,9 @@ async function reservarRec(fecha, hora, clubElegido) {
     const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
     const base = ((tS.data() || {}).t || {})[`${club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
     if (!base || cupo - base.n + (c.aus || 0) - (c.rec || 0) < 1) throw { code: "lleno" };
-    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: (recAl()[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId });
+    // Guardamos hasta cuándo valía la clase que usa: si después cancela con 24 h, le vuelve con esa misma fecha.
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   }));
 }
@@ -455,12 +458,13 @@ document.addEventListener("click", async e => {
     const { f, h, t } = b.dataset; const con = conRecuperoSi(f, h, t);
     const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     confirmar(`¿No venís ${cuando}?`,
-      t === "recupera" ? '<b style="color:var(--warn)">Es una clase de recuperación: si no venís, la perdés.</b>'
+      t === "recupera" ? (con ? `Como avisás con más de 24 horas, <b>la clase te vuelve</b> y la podés recuperar en otro horario hasta el <b>${fechaDM(venceSiCancela(f, h, t))}</b>.`
+          : '<b style="color:var(--warn)">Faltan menos de 24 horas: si no venís, esta recuperación se pierde.</b> Podés avisar igual.')
         : con ? "Como avisás con más de 24 horas, <b>te queda una clase para recuperar</b>."
         : '<b style="color:var(--warn)">Faltan menos de 24 horas: si no venís, esta clase se pierde y no se recupera.</b> Podés avisar igual.',
       con ? "Avisar que no voy" : "Avisar igual", async () => {
         const r = await avisarNoVoy(f, h, t);
-        return { titulo: "Listo, avisado", texto: r ? `Te quedó una clase para recuperar <b>hasta el ${fechaDM(venceDe(f))}</b>. Reservala en <b>Inicio</b>, donde dice <b>Recuperar</b>.` : "Quedó registrado que no venís.",
+        return { titulo: "Listo, avisado", texto: r ? `Te quedó una clase para recuperar <b>hasta el ${fechaDM(venceSiCancela(f, h, t))}</b>. Reservala en <b>Inicio</b>, donde dice <b>Recuperar</b>.` : "Quedó registrado que no venís.",
           msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. No voy a ir ${cuando}${r ? ". Avisé por la app, me queda para recuperar." : ". Avisé por la app."}` };
       });
     return;
@@ -526,8 +530,8 @@ function avisadasHTML(wa) {
   return `<section class="sec"><div class="sec-head"><h3>Avisaste que no venís</h3><span class="small muted">${av.length}</span></div>
     <div class="list">${av.map(v => { const d = isoDate(v.fecha);
       const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (P.a.recuperar || 0) >= 1;
-      const puede = v.conRecupero && a24 && lugar && tiene;
-      const nota = !v.conRecupero ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona: hablá con Gabriel" : !tiene ? "Ya usaste esa clase para recuperar" : "";
+      const puede = v.conRecupero && a24 && lugar && tiene && !recCancelada(v);
+      const nota = !v.conRecupero || recCancelada(v) ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona: hablá con Gabriel" : !tiene ? "Ya usaste esa clase para recuperar" : "";
       return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : (recCancelada(v) ? '<span class="due">Cancelaste la recuperación</span>' : '<span class="due">Avisaste tarde: no se recupera</span>')}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
     <p class="small" style="margin:0;color:rgba(247,242,237,.85)">Podés volver atrás <b>una sola vez</b>, hasta 24 horas antes y si tu lugar sigue libre. Después ya no se puede cambiar. ¿Otro caso? ${wa ? `<a class="wa-link" style="color:#8EE6A8" href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${P.a.nombre}. Avisé que no iba pero al final sí puedo ir. ¿Me lo corregís en la app?`)}" target="_blank" rel="noopener">Escribile a Gabriel</a> y lo corrige.` : "Avisale a Gabriel y lo corrige."}</p>
   </section>`;

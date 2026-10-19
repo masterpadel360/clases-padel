@@ -101,13 +101,19 @@ const recIni=k=>(k>=REC_INI.desde&&k<REC_INI.hasta)?REC_INI.vence:k;
 function venceDe(f){ if(f<REC_INI.corte) return REC_INI.vence; const d=isoDate(f); d.setDate(d.getDate()-((d.getDay()+6)%7)+18); return toISO(d); }
 const fechaDM = f => { const d=isoDate(f); return `${d.getDate()}/${d.getMonth()+1}`; };
 // Faltas avisadas por la app que todavía no se ubicaron en su mes (las ubica el proceso automático o la próxima edición).
-function recPendAvisos(a){ const L=(!window.MODO_STAFF&&typeof P!=="undefined"?P.avisos:S.avisos)||[];
-  return L.filter(v=>v.alumnoId===a.id&&v.tipo==="ausencia"&&v.conRecupero&&v.contado===false&&!L.some(x=>x.alumnoId===a.id&&x.tipo==="recupera"&&x.fecha===v.fecha&&x.hora===v.hora)); }
+const avisosDe=()=>(!window.MODO_STAFF&&typeof P!=="undefined"?P.avisos:S.avisos)||[];
+const esFijoDe=(a,club,f,hora)=>(a.horarios||[]).some(h=>Number(h.dia)===isoDate(f).getDay()&&h.hora===hora&&clubH(a,h)===club);
+// La reserva de recuperación del mismo turno (si la hay).
+const recDelTurno=(a,v)=>avisosDe().find(x=>x.alumnoId===a.id&&x.tipo==="recupera"&&x.fecha===v.fecha&&x.hora===v.hora);
+// Faltas que suman para recuperar y todavía no están ubicadas. Incluye recuperaciones canceladas con 24 h (no "al final voy" en su horario fijo).
+function recPendAvisos(a){ return avisosDe().filter(v=>v.alumnoId===a.id&&v.tipo==="ausencia"&&v.conRecupero&&v.contado===false&&!(recDelTurno(a,v)&&esFijoDe(a,v.club,v.fecha,v.hora))); }
+// Hasta cuándo vale: una falta, 2 semanas; una recuperación cancelada a tiempo conserva el vencimiento que tenía.
+function venceAviso(a,v){ const r=recDelTurno(a,v); return r?(r.vence||venceDe(hoyISO)):venceDe(v.fecha); }
 // Devuelve las vigentes: [{vence, n}] ordenadas. a.recuperar manda en la cantidad; si tiene menos, se descuentan las que vencen antes.
-function recBuckets(a,pend=recPendAvisos(a).map(v=>v.fecha)){
+function recBuckets(a,pend=recPendAvisos(a).map(v=>venceAviso(a,v))){
   const tot=Math.max(0,a.recuperar||0); const m={};
   Object.entries(a.recVence||{}).forEach(([k,n])=>{ n=Number(n)||0; if(n>0){ k=recIni(habil(k)); m[k]=(m[k]||0)+n; } });
-  pend.forEach(f=>{ const k=venceDe(f); m[k]=(m[k]||0)+1; });
+  pend.forEach(k=>{ m[k]=(m[k]||0)+1; });
   const sum=Object.values(m).reduce((s,n)=>s+n,0);
   if(tot>sum){ const k=venceDe(hoyISO); m[k]=(m[k]||0)+tot-sum; }
   else if(tot<sum){ let r=sum-tot; for(const k of Object.keys(m).sort()){ const q=Math.min(r,m[k]); m[k]-=q; r-=q; if(!m[k]) delete m[k]; if(!r) break; } }
