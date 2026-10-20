@@ -1262,7 +1262,7 @@ function toast(msg,undo){
 async function safe(p,okMsg){
   if(!S.db){ toast("No hay conexión con la base."); return false; }
   try{ await p(); if(okMsg) toast(okMsg); return true; }
-  catch(e){ console.error(e); toast(e&&e.code==="permission-denied"?"No tenés permiso para cambiar esto.":"No se pudo guardar. Probá de nuevo."); return false; }
+  catch(e){ console.error(e); toast(e&&e.code==="permission-denied"?"No tenés permiso para cambiar esto.":`No se pudo guardar. Probá de nuevo. (${(e&&(e.code||e.name))||"error"}${e&&e.message?": "+String(e.message).slice(0,90):""})`); return false; }
 }
 const colA=()=>S.db.collection("alumnos");
 const colL=()=>S.db.collection("interesados");
