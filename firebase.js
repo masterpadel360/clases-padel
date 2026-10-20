@@ -194,7 +194,7 @@ async function iniciarStaff(perfil, u) {
   { const d = new Date(now); d.setDate(d.getDate() - 8);
     db.collection("reemplazos").where("fecha", ">=", toISO(d)).onSnapshot(snap => { S.reemp = {}; snap.docs.forEach(x => { const r = x.data(); S.reemp[`${r.alumnoId}|${r.fecha}|${r.hora}`] = r; }); vis(); }, () => {}); }
   db.collection("comprobantes").onSnapshot(snap => { S.comps = {}; snap.docs.forEach(d => { S.comps[d.id] = { id: d.id, ...d.data() }; }); aplicarComprobantes(); vis(); }, () => {});
-  db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; publicarTurnos(); aplicarComprobantes(); aplicarAumentosVencidos(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
+  db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; publicarTurnos(); aplicarComprobantes(); aplicarAumentosVencidos(); repararPlanes(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
   db.doc("config/general").onSnapshot(d => { S.cfg = d.exists ? d.data() : {}; publicarInfo(); }, () => {});
   refrescarNotif({ rol: perfil.rol });
 }

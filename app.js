@@ -1106,6 +1106,18 @@ document.addEventListener("change",e=>{ const t=e.target; if(!t||!$("#aumDesde")
     const c=$(".aum-sel .small"); if(c) c.innerHTML=`<b>${n}</b> de ${tot} alumnos`; const b=$('[data-act="aumOk"]'); if(b){ b.textContent=b.textContent.replace(/\d+$/,n); b.disabled=!(n&&AUM.monto>0); } } });
 // Cuando llega el mes de un aumento programado, el precio pasa a ser el nuevo.
 let aumHecho=false;
+// Arreglo del error de pagos (oct 2026): marcar un pago borraba los otros meses. Si a un alumno nuevo le falta algún mes
+// de su plan de arranque (promo o primer mes), se vuelve a cargar. Solo completa lo que falta; no toca nada que exista.
+let planesHecho=false;
+async function repararPlanes(){ if(planesHecho||!S.esOwner||S.modo==="profe"||!S.loaded.a) return; planesHecho=true;
+  const arreglos=[];
+  S.alumnos.forEach(a=>{ const pm=planGuardado(a); if(!pm||!(a.horarios||[]).length||!(a.precioClase||pm.promo)) return;
+    const plan=planPrimerMes(a,pm.ini,pm.promo,pm.modo,pm.dur).pagos; const falta={};
+    Object.keys(plan).forEach(m=>{ if(!(a.pagos||{})[m]) falta[m]=plan[m]; });
+    if(Object.keys(falta).length) arreglos.push([a,falta]); });
+  if(!arreglos.length) return;
+  try{ for(let i=0;i<arreglos.length;i+=400){ const bt=S.db.batch(); arreglos.slice(i,i+400).forEach(([a,falta])=>bt.set(colA().doc(a.id),{pagos:falta},{merge:true})); await bt.commit(); }
+    console.log(`Planes de arranque recuperados: ${arreglos.length}`); }catch(e){ console.error(e); planesHecho=false; } }
 async function aplicarAumentosVencidos(){ if(aumHecho||!S.esOwner||S.modo==="profe") return; const act=mesKey(now);
   const L=S.alumnos.filter(a=>aumentosDe(a).some(x=>!x.aplicado&&x.desde<=act)); if(!L.length){ aumHecho=true; return; } aumHecho=true;
   try{ const bt=S.db.batch(); L.forEach(a=>{ const aus=aumentosDe(a).map(x=>(!x.aplicado&&x.desde<=act)?{...x,aplicado:true}:x); const ult=aus.filter(x=>x.desde<=act).pop(); bt.update(colA().doc(a.id),{aumentos:aus,precioClase:ult.precio}); }); await bt.commit(); }catch(e){ console.error(e); aumHecho=false; } }
@@ -1257,7 +1269,8 @@ const colL=()=>S.db.collection("interesados");
 async function setPago(a,val){
   const cur=(a.pagos&&a.pagos[S.mes])||{}; const c=compDe(a);
   return safe(async()=>{ const bt=S.db.batch();
-    bt.update(colA().doc(a.id),{pagos:{[S.mes]:{pagado:val,monto:val?montoMes(a):(cur.monto||0),fecha:val?hoyISO:null}}});
+    // set con merge: cambia solo este mes y conserva los demás meses y el monto acordado (un update común borraba todos los otros pagos).
+    bt.set(colA().doc(a.id),{pagos:{[S.mes]:{pagado:val,monto:val?montoMes(a):(cur.monto||0),fecha:val?hoyISO:null}}},{merge:true});
     // Si lo pasa a "Debe" y había un comprobante del alumno, queda rechazado (el alumno ve que lo tiene que volver a mandar).
     if(!val&&c&&c.estado==="enviado") bt.update(S.db.doc("comprobantes/"+c.id),{estado:"rechazado",aplicado:true,notificado:true});
     await bt.commit(); });
@@ -1271,7 +1284,7 @@ function aplicarComprobantes(){
   Object.values(S.comps||{}).filter(c=>c.estado==="enviado"&&!c.aplicado&&!compAplicando.has(c.id)).forEach(async c=>{
     const a=S.alumnos.find(x=>x.id===c.alumnoId); if(!a) return; compAplicando.add(c.id);
     try{ const bt=S.db.batch(); const f=c.creado&&c.creado.toDate?toISO(c.creado.toDate()):hoyISO;
-      bt.update(colA().doc(a.id),{pagos:{[c.mes]:{pagado:true,monto:c.monto||montoMes(a,c.mes),fecha:f,comprobante:true}}});
+      bt.set(colA().doc(a.id),{pagos:{[c.mes]:{pagado:true,monto:c.monto||montoMes(a,c.mes),fecha:f,comprobante:true}}},{merge:true});
       bt.update(S.db.doc("comprobantes/"+c.id),{aplicado:true}); await bt.commit(); }
     catch(e){ console.error(e); compAplicando.delete(c.id); } });
 }
