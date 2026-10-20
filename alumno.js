@@ -1,7 +1,9 @@
 /* ---------- App del alumno ---------- */
-const P = { tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], comps: {}, reemp: {}, cargado: false, ocupado: false };
+const P = { susp: {}, tab: "inicio", perfil: null, uid: null, a: null, turnos: {}, info: {}, cupos: {}, avisos: [], asis: [], comps: {}, reemp: {}, cargado: false, ocupado: false };
 const DIA_MS = 86400000;
 const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
+// Turnos suspendidos por Gabriel (lluvia o día sin clases): no se reservan ni se avisan.
+const esSusp = (club, fecha, hora) => !!(P.susp || {})[`${club}|${fecha}|${hora}`];
 const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
 const fechaLarga = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()}`; };
 const fechaRel = f => { const ayer = new Date(now); ayer.setDate(ayer.getDate() - 1); if (f === toISO(ayer)) return "Ayer"; const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };
@@ -46,6 +48,7 @@ function iniciarPortal(perfil, u) {
   setTimeout(pedirNotifAlEntrar, 700);
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
+  fdb.doc("publico/suspendidas").onSnapshot(d => { P.susp = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.collection("cupos").where("fecha", ">=", hoyISO).onSnapshot(s => { P.cupos = {}; s.docs.forEach(d => P.cupos[d.id] = d.data()); pr(); }, () => {});
   fdb.collection("reemplazos").where("alumnoId", "==", id).onSnapshot(s => { P.reemp = {}; s.docs.forEach(d => { const r = d.data(); P.reemp[`${r.fecha}|${r.hora}`] = r; }); pr(); }, () => {});
   fdb.collection("comprobantes").where("alumnoId", "==", id).onSnapshot(s => { P.comps = {}; s.docs.forEach(d => { const c = d.data(); P.comps[c.mes] = c; }); pr(); }, () => {});
@@ -85,7 +88,7 @@ function misClases(dias = 14, rango = null) {
   }
   P.avisos.filter(v => v.tipo === "recupera" && v.fecha >= toISO(ini) && !esVuelta(v.fecha, v.hora)).forEach(v => out.push({ fecha: v.fecha, hora: v.hora, club: v.club, nivel: v.nivel || "", tipo: "recupera" }));
   return out.filter(c => inicioDe(c.fecha, c.hora).getTime() > corte && (!a.inicio || c.fecha >= a.inicio))
-    .map(c => { const vuelve = esVuelta(c.fecha, c.hora); return { ...c, vuelve, aus: vuelve ? null : P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }; })
+    .map(c => { const vuelve = esVuelta(c.fecha, c.hora); return { ...c, vuelve, susp: esSusp(c.club, c.fecha, c.hora), aus: vuelve ? null : P.avisos.find(v => v.tipo === "ausencia" && v.fecha === c.fecha && v.hora === c.hora) }; })
     .sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
 }
 // "Al final voy": un aviso de ausencia + una reserva en ese mismo turno. Queda fijo, no se puede volver a cambiar.
@@ -109,6 +112,7 @@ function opcionesRec() {
       if (!cl.has(club) || Number(dia) !== d.getDay() || mios.has(`${club}|${dia}|${hora}`)) return;
       if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
       if (inicioDe(f, hora).getTime() < limite) return;
+      if (esSusp(club, f, hora)) return;
       if (P.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
       const libres = libresDe(club, f, hora); if (libres > 0) out.push({ club, fecha: f, hora, nivel: t.nivel, dia: d.getDay(), libres });
     });
@@ -145,7 +149,7 @@ function estPago(a, m) {
 }
 
 /* ---- Vista: tres pestañas (Inicio · Ausencias · Pagos) ---- */
-const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"], lluvia: ["Se suspendió por lluvia · te queda para recuperar", "var(--jump)"] };
+const EST_AL = { vino: ["Viniste", "var(--ok)"], falto: ["Faltaste sin avisar", "var(--warn)"], recupera: ["Avisaste · recuperás", "var(--sun)"], recuperando: ["Recuperaste", "var(--jump)"], lluvia: ["Clase suspendida · te queda para recuperar", "var(--jump)"] };
 const P_TABS = [
   ["inicio", "Inicio", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M5 9c4 2 10 2 14 0M5 15c4-2 10-2 14 0"/></svg>'],
   ["ausencias", "Ausencias", '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M10 13l4 4M14 13l-4 4"/></svg>'],
@@ -171,7 +175,7 @@ function claseHTML(c, marcas) { const rp = P.reemp[`${c.fecha}|${c.hora}`]; cons
         <div style="display:grid;gap:2px;min-width:0"><span class="name" style="font-weight:700">${fechaRel(c.fecha)}${c.fecha === hoyISO || fechaRel(c.fecha) === "Mañana" ? `<span class="muted" style="font-weight:500"> · ${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span>` : ""}</span>
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}</span>
           ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}${rp ? `<span class="small" style="color:var(--jump);font-weight:700">Va ${esc(rp.quien)} en tu lugar</span>` : ""}</div>
-        ${pasada || c.aus || c.vuelve ? "" : rp ? `<button class="mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
+        ${c.susp && !pasada ? '<span class="small" style="color:var(--jump);font-weight:700">Suspendida · te queda para recuperar</span>' : pasada || c.aus || c.vuelve ? "" : rp ? `<button class="mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
           : `<span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}</span>`}</div>`; }
 function marcasAl(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
 
@@ -381,7 +385,7 @@ function confirmar(titulo, texto, boton, accion) {
 // Guarda con un tope de espera. Si la señal se corta o el alumno minimiza la app en el medio,
 // no sabemos si llegó: lo confirmamos con el servidor antes de decirle que falló.
 const ESPERA_TX = 20000;
-const ERR_LOGICOS = ["ya", "lleno", "sin-clases", "ocupado"];
+const ERR_LOGICOS = ["ya", "lleno", "sin-clases", "ocupado", "susp"];
 async function guardarSeguro(vRef, tipo, hacer) {
   let err;
   try { return { r: await Promise.race([hacer(), new Promise((_, mal) => setTimeout(() => mal({ code: "lento" }), ESPERA_TX))]) }; }
@@ -403,6 +407,7 @@ async function avisarNoVoy(fecha, hora, tipo) {
   const d = isoDate(fecha); const hFija = (a.horarios || []).find(x => x.dia === d.getDay() && x.hora === hora);
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
   const cid = cupoId(club, fecha, hora);
+  if (esSusp(club, fecha, hora)) throw { code: "susp" };
   if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
   const vRef = fdb.doc("avisos/" + avId);
   const res = await guardarSeguro(vRef, "ausencia", () => fdb.runTransaction(async tx => {
@@ -420,6 +425,7 @@ async function avisarNoVoy(fecha, hora, tipo) {
 async function reservarRec(fecha, hora, clubElegido) {
   const a = P.a; const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(club, fecha, hora); const cupo = P.info.cupo || CUPO;
+  if (esSusp(club, fecha, hora)) throw { code: "susp" };
   if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
   const vRef = fdb.doc("avisos/" + avId);
   await guardarSeguro(vRef, "recupera", () => fdb.runTransaction(async tx => {
@@ -434,7 +440,7 @@ async function reservarRec(fecha, hora, clubElegido) {
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   }));
 }
-const ERR_AL = { ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
+const ERR_AL = { susp: "Esa clase está suspendida: no hace falta avisar, ya te queda para recuperar.", ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
 document.addEventListener("click", async e => {
   if (window.MODO_STAFF) return;
   const b = e.target.closest("[data-pa]"); if (!b) return;

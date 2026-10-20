@@ -53,6 +53,24 @@ async function enviar(uid, { title, body, tag }) {
   }
 }
 
+/* ---------- 0a) Días sin clases: un aviso por alumno con todas sus clases suspendidas ---------- */
+{
+  const porAlumno = {}; Object.entries(tokens).forEach(([uid, t]) => { if (t.rol === "alumno" && t.alumnoId && t.tokens && t.tokens.length) (porAlumno[t.alumnoId] = porAlumno[t.alumnoId] || []).push(uid); });
+  for (const d of (await db.collection("suspensiones").where("notificado", "==", false).get()).docs) {
+    const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
+    if (!ok) continue;
+    const suyas = {}; (d.data().items || []).forEach(it => (it.alumnos || []).forEach(aid => (suyas[aid] = suyas[aid] || []).push(it)));
+    let n = 0;
+    for (const [aid, its] of Object.entries(suyas)) {
+      its.sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+      const txt = its.map(it => `${it.fecha === hoy ? "hoy" : fechaTxt(it.fecha).replace(/^el /, "")} ${it.hora}`);
+      const lista = txt.length > 1 ? txt.slice(0, -1).join(", ") + " y " + txt[txt.length - 1] : txt[0];
+      for (const uid of porAlumno[aid] || []) n += await enviar(uid, { title: its.length > 1 ? "📢 Se suspenden tus clases" : `📢 No hay clase ${lista}`, body: `${its.length > 1 ? `No hay clases ${lista}. Te quedan` : "Se suspende tu clase. Te queda"} para recuperar: reservá otro horario desde la app.`, tag: "suspension" });
+    }
+    console.log(`Suspensión ${d.id}: ${n} notificaciones`);
+  }
+}
+
 /* ---------- 0b) Lo que hace Esteban (respaldo del aviso al instante) ---------- */
 for (const d of (await db.collection("staffAvisos").where("notificado", "==", false).get()).docs) {
   const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().notificado) return false; tx.update(d.ref, { notificado: true }); return true; });
@@ -194,6 +212,9 @@ if (alumnosConApp.length) {
   const turnos = ((await db.doc("publico/turnos").get()).data() || {}).t || {};
   const cupo = ((await db.doc("publico/info").get()).data() || {}).cupo || 4;
   const cupos = {}; (await db.collection("cupos").where("fecha", "in", [hoy, manana]).get()).docs.forEach(d => { cupos[d.id] = d.data(); });
+  // Turnos suspendidos (lluvia o día sin clases): ni recordatorio ni ofrecerlos para recuperar.
+  const susp = ((await db.doc("publico/suspendidas").get()).data() || {}).t || {};
+  const suspendida = (club, f, h) => !!susp[`${club}|${f}|${h}`];
   const yaEnviado = async id => (await db.doc("recordatorios/" + id).get()).exists;
   const marcar = (id, extra = {}) => db.doc("recordatorios/" + id).set({ enviado: admin.firestore.FieldValue.serverTimestamp(), ...extra });
   const lugarTxt = c => CLUB[c] || c;
@@ -238,6 +259,7 @@ if (alumnosConApp.length) {
 
     // El día antes (unas 26 h antes): "mañana tenés clase; si no podés, avisá ahora y la recuperás".
     for (const f of [hoy, manana]) for (const c of clasesDelDia(a, f, avisos)) {
+      if (suspendida(c.club, f, c.hora)) continue;
       const falta = (inicioDe(f, c.hora) - ahora) / 60000;
       if (falta <= 1450 || falta > 1620) continue;
       const id = `${a.id}_${f}_${hhmm(c.hora)}_dia`; if (await yaEnviado(id)) continue;
@@ -247,12 +269,13 @@ if (alumnosConApp.length) {
     }
     // El mismo día, 3 horas antes. Si tiene clases para recuperar y hay lugar en la hora siguiente, se lo ofrece.
     for (const c of clasesDelDia(a, hoy, avisos)) {
+      if (suspendida(c.club, hoy, c.hora)) continue;
       const falta = (inicioDe(hoy, c.hora) - ahora) / 60000;
       if (falta <= 0 || falta > 180) continue;
       const id = `${a.id}_${hoy}_${hhmm(c.hora)}`; if (await yaEnviado(id)) continue;
       let extra = "";
       const sig = masUnaHora(c.hora); const ts = sig && turnos[`${c.club}|${diaSemana(hoy)}|${sig}`]; const cats = catsDe(a);
-      if (nRec > 0 && ts && (!cats.size || (ts.nivel && cats.has(catNorm(ts.nivel)))) && libres(turnos, cupos, cupo, c.club, hoy, sig) > 0 && !(a.horarios || []).some(h => h.hora === sig && h.dia === diaSemana(hoy)))
+      if (nRec > 0 && ts && (!cats.size || (ts.nivel && cats.has(catNorm(ts.nivel)))) && libres(turnos, cupos, cupo, c.club, hoy, sig) > 0 && !suspendida(c.club, hoy, sig) && !(a.horarios || []).some(h => h.hora === sig && h.dia === diaSemana(hoy)))
         extra = ` ¿Te quedás? A las ${sig} hay lugar para recuperar una clase: reservalo en la app.`;
       await mandar(id, { title: "Hoy tenés pádel 🎾", body: `${nombre}, te esperamos a las ${c.hora} en ${lugarTxt(c.club)}${c.tipo === "recupera" ? " (recuperación)" : ""}.${extra}`, tag: "recordatorio" });
     }
@@ -264,7 +287,7 @@ if (alumnosConApp.length) {
     // Días que no entrena: si hoy hay lugar para recuperar, avisarle (máximo 3 por semana).
     if ((a.horarios || []).some(h => h.dia === diaSemana(hoy))) continue;
     const idHoy = `rec_${a.id}_${hoy}`; if (await yaEnviado(idHoy)) continue;
-    const ops = opcionesDelDia(a, hoy, turnos, cupos, cupo, avisos, ahora.getTime() + 90 * 60e3);
+    const ops = opcionesDelDia(a, hoy, turnos, cupos, cupo, avisos, ahora.getTime() + 90 * 60e3).filter(o => !suspendida(o.club, hoy, o.hora));
     if (!ops.length) continue;
     const semana = []; for (let f = lunes; f < hoy; f = sumarDias(f, 1)) semana.push(db.doc(`recordatorios/rec_${a.id}_${f}`));
     const yaSemana = semana.length ? (await db.getAll(...semana)).filter(x => x.exists).length : 0;

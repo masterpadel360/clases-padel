@@ -168,6 +168,10 @@ service cloud.firestore {
     match /lluvias/{id} {
       allow read, write: if esStaff();
     }
+    // Días sin clases (Gabriel o Esteban suspenden): el proceso automático les avisa a los alumnos.
+    match /suspensiones/{id} {
+      allow read, write: if esStaff();
+    }
     match /extras/{id} {
       allow read, write: if esStaff();
     }

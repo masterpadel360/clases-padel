@@ -33,7 +33,8 @@
   function estadoClase(c, marcas, proxKey) {
     const m = marcas[`${c.fecha}|${c.hora}`];
     if (m === "vino" || m === "recuperando") return "fui";
-    if (m === "falto" || m === "recupera" || m === "lluvia" || c.aus) return "falta";
+    if (m === "lluvia" || c.susp) return "susp";
+    if (m === "falto" || m === "recupera" || c.aus) return "falta";
     if (`${c.fecha}|${c.hora}` === proxKey) return "prox";
     if (inicioDe(c.fecha, c.hora).getTime() < Date.now()) return "pasada";
     return "luego";
@@ -69,7 +70,7 @@
     const est = cl.map(c => estadoClase(c, marcas, proxKey));
     const fui = est.filter(e => e === "fui").length, fal = est.filter(e => e === "falta").length, q = est.filter(e => e === "prox" || e === "luego").length;
     if (selClase === null || selClase >= cl.length) { const i = est.indexOf("prox"); selClase = i >= 0 ? i : 0; }
-    const TG = { fui: "Fuiste", falta: "Falta", prox: "Próxima", luego: "", pasada: "" };
+    const TG = { fui: "Fuiste", falta: "Falta", susp: "Suspendida", prox: "Próxima", luego: "", pasada: "" };
     return `<section class="v2-sec"><div class="v2-head"><h2>Tus clases</h2><span class="k">${MESN[Number(mk.slice(5, 7)) - 1]}</span></div>
       <div class="v2-caja v2-clases">
         <div class="v2-prog-top"><span class="v2-prog-n">${fui}</span><span class="k">de ${cl.length} clases</span></div>
@@ -86,11 +87,11 @@
     if (!c) return "";
     const d = isoDate(c.fecha); const rp = P.reemp[`${c.fecha}|${c.hora}`];
     const tit = `${DC[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${c.hora}${c.tipo === "recupera" ? " · recuperación" : ""}`;
-    let tx = e === "fui" ? '<b class="fui">Fuiste</b> a esta clase.' : e === "falta" ? (c.aus && c.aus.conRecupero ? '<b class="falta">Faltaste.</b> Te quedó para recuperar.' : '<b class="falta">Faltaste.</b>') : e === "prox" ? "<b>Tu próxima clase.</b> Te esperamos." : e === "pasada" ? "Todavía no se cargó la asistencia." : `Clase en ${lugarTxt(c.club)}.`;
+    let tx = e === "fui" ? '<b class="fui">Fuiste</b> a esta clase.' : e === "falta" ? (c.aus && c.aus.conRecupero ? '<b class="falta">Faltaste.</b> Te quedó para recuperar.' : '<b class="falta">Faltaste.</b>') : e === "prox" ? "<b>Tu próxima clase.</b> Te esperamos." : e === "susp" ? "<b>Clase suspendida.</b> Te queda para recuperar en otro horario." : e === "pasada" ? "Todavía no se cargó la asistencia." : `Clase en ${lugarTxt(c.club)}.`;
     if (rp) tx += ` Va <b>${esc(rp.quien)}</b> en tu lugar.`;
     if (c.vuelve) tx += " Confirmaste que venís.";
     const futura = inicioDe(c.fecha, c.hora).getTime() > Date.now();
-    const acc = !futura || c.aus || c.vuelve ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar reemplazo</button>`
+    const acc = !futura || c.aus || c.vuelve || c.susp ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar reemplazo</button>`
       : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="v2-mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}`;
     return `<span class="dl">${tit}</span><span>${tx}</span>${acc ? `<span class="v2-acc">${acc}</span>` : ""}`;
   }
@@ -128,7 +129,7 @@
 
   window.vInicio = function (a, wa) {
     const rg = rangoMes(); const cl = misClases(0, rg).filter(c => c.fecha.startsWith(mesKey(now)));
-    const mk0 = marcasAl(a); const prox = misClases(70).find(c => !c.aus && mk0[`${c.fecha}|${c.hora}`] !== "lluvia" && inicioDe(c.fecha, c.hora).getTime() > Date.now());
+    const mk0 = marcasAl(a); const prox = misClases(70).find(c => !c.aus && mk0[`${c.fecha}|${c.hora}`] !== "lluvia" && !c.susp && inicioDe(c.fecha, c.hora).getTime() > Date.now());
     const marcas = marcasAl(a); const proxKey = prox ? `${prox.fecha}|${prox.hora}` : "";
     const rec = recAl().reduce((s, x) => s + x.n, 0); const bk = recAl();
     const estMes = estPago(a, mesKey(now));
@@ -171,8 +172,10 @@
     } else if (est === "pendiente" && conPlazo(mes) && dias >= 0 && dias <= 3) {
       out.push(`<button class="v2-recordar suave" data-pa="pagar" data-m="${mes}">${icoP}<span class="tx"><b>${dias === 0 ? "Hoy vence tu cuota" : `Te ${dias === 1 ? "queda 1 día" : `quedan ${dias} días`} para pagar`}</b><small>La cuota de ${MESN[now.getMonth()]} vence el ${pagoVence(mes)}</small></span><span class="v2-cta">Pagar</span></button>`);
     }
-    { const mk = marcasAl(a); const ll = Object.keys(mk).filter(k => mk[k] === "lluvia" && k.slice(0, 10) >= hoyISO).sort();
-      ll.forEach(k => { const [f, h] = k.split("|"); const d = isoDate(f); out.push(`<div class="v2-recordar suave"><span class="ico" style="font-size:20px">🌧</span><span class="tx"><b>Se suspendió tu clase ${f === hoyISO ? "de hoy" : `del ${DC[d.getDay()].toLowerCase()} ${d.getDate()}`} ${h}</b><small>Por lluvia. Te queda para recuperar.</small></span></div>`); }); }
+    { const mk = marcasAl(a); const ks = new Set(Object.keys(mk).filter(k => mk[k] === "lluvia" && k.slice(0, 10) >= hoyISO));
+      misClases(21).filter(c => c.susp).forEach(c => ks.add(`${c.fecha}|${c.hora}`));
+      [...ks].sort().forEach(k => { const [f, h] = k.split("|"); const d = isoDate(f); const mot = Object.entries(P.susp || {}).find(([x]) => x.endsWith(`|${f}|${h}`)); const ll = !mot || mot[1] === "lluvia";
+        out.push(`<div class="v2-recordar suave"><span class="ico" style="font-size:20px">${ll ? "🌧" : "📢"}</span><span class="tx"><b>${ll ? "Se suspendió tu clase" : "No hay clase"} ${f === hoyISO ? "de hoy" : `el ${DC[d.getDay()].toLowerCase()} ${d.getDate()}`} ${h}</b><small>${ll ? "Por lluvia. " : ""}Te queda para recuperar en otro horario.</small></span></div>`); }); }
     { const px = aumentoProx(a); if (px && (tab === "inicio" || tab === "pagos")) out.push(`<div class="v2-recordar suave v2-aum">${icoP}<span class="tx"><b>Desde ${MESN[Number(px.desde.slice(5, 7)) - 1]} la clase pasa a ${money(px.precio).replace(/\$\s+/, "$")}</b><small>Hasta entonces seguís pagando ${money(px.antes).replace(/\$\s+/, "$")} por clase.</small></span></div>`); }
     if (rec) out.push(`<button class="v2-recordar" data-pa="${tab === "inicio" ? "irRec" : "v2irRec"}">${ico}<span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>`);
     return out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "";
@@ -305,12 +308,12 @@
   document.addEventListener("input", e => { if (window.MODO_STAFF && e.target.id === "suQ" && SU) { SU.q = e.target.value; clearTimeout(SU.t); SU.t = setTimeout(() => { pintarSumar(); const q = $("#suQ"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 200); } });
 
   /* ---- Ausencias ---- */
-  const ESTV = { vino: ["Fuiste", "fui"], recuperando: ["Recuperaste", "fui"], falto: ["Faltaste sin avisar", "falta"], recupera: ["Avisaste · recuperás", "aviso"], lluvia: ["Suspendida por lluvia · recuperás", "lluvia"] };
+  const ESTV = { vino: ["Fuiste", "fui"], recuperando: ["Recuperaste", "fui"], falto: ["Faltaste sin avisar", "falta"], recupera: ["Avisaste · recuperás", "aviso"], lluvia: ["Clase suspendida · recuperás", "lluvia"] };
   function fichaClase(c) {
     const d = isoDate(c.fecha); const rp = P.reemp[`${c.fecha}|${c.hora}`];
     const estado = c.aus ? (c.aus.conRecupero ? '<span class="st aviso">No venís · te quedó para recuperar</span>' : '<span class="st falta">No venís</span>')
-      : c.vuelve ? '<span class="st fui">Confirmaste que venís</span>' : rp ? `<span class="st aviso">Va ${esc(rp.quien)} en tu lugar</span>` : "";
-    const acc = c.aus || c.vuelve ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
+      : c.susp ? '<span class="st aviso">Suspendida · te queda para recuperar</span>' : c.vuelve ? '<span class="st fui">Confirmaste que venís</span>' : rp ? `<span class="st aviso">Va ${esc(rp.quien)} en tu lugar</span>` : "";
+    const acc = c.aus || c.vuelve || c.susp ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
       : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="v2-mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}`;
     return `<div class="v2-ficha${c.aus ? " off" : ""}"><div class="v2-fecha"><span>${DC[d.getDay()]}</span><b>${d.getDate()}</b></div>
       <div class="v2-ficha-tx"><b>${c.hora}${c.tipo === "recupera" ? ' <i class="v2-tag">Recuperación</i>' : ""}</b><span>${lugarTxt(c.club)} · ${fechaRel(c.fecha)}</span>${estado}</div>
