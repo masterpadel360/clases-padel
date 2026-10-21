@@ -142,9 +142,9 @@ function turnos(club){
   }));
   return Object.values(map);
 }
-// Grilla fija de Jump: de lunes a viernes, de 16:30 a 22:30 (Espacio queda solo con los turnos que tienen alumnos). Aunque no haya ningún alumno fijo,
+// Grilla fija de Jump: de lunes a viernes, de 16:30 a 22:30, último turno 21:30 (Espacio queda solo con los turnos que tienen alumnos). Aunque no haya ningún alumno fijo,
 // el turno aparece (vacío, con los 4 lugares libres) para ofrecerlo y para que los alumnos recuperen ahí.
-const GRILLA={clubes:["JUMP"],dias:[1,2,3,4,5],horas:["16:30","17:30","18:30","19:30","20:30","21:30","22:30"]};
+const GRILLA={clubes:["JUMP"],dias:[1,2,3,4,5],horas:["16:30","17:30","18:30","19:30","20:30","21:30"]};
 function turnosGrilla(club){
   const ts=turnos(club); const ya=new Set(ts.map(t=>`${t.club}|${t.dia}|${t.hora}`));
   GRILLA.clubes.filter(c=>!club||c===club).forEach(c=>GRILLA.dias.forEach(d=>GRILLA.horas.forEach(h=>{
