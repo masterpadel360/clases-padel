@@ -100,6 +100,14 @@ function libresDe(club, fecha, hora) {
 }
 // Clases para recuperar del alumno, con hasta cuándo valen (incluye las que acaba de avisar).
 function recAl() { return P.a ? recBuckets(P.a) : []; }
+// Un turno sin alumnos fijos (vacío en la grilla) se ofrece a cualquier nivel. Cuando alguien reserva ahí,
+// el turno queda con el nivel de ese alumno para esa fecha, y solo lo ven los de su mismo nivel.
+function nivelCupo(club, fecha, hora) { const c = P.cupos[cupoId(club, fecha, hora)] || {}; return (c.rec || 0) - (c.aus || 0) > 0 ? (c.nivel || "") : ""; }
+function nivelOk(t, cats, club, fecha, hora) {
+  if (t.nivel) return cats.has(catNorm(t.nivel));
+  if ((t.n || 0) > 0) return false;
+  const nv = nivelCupo(club, fecha, hora); return !nv || cats.has(catNorm(nv));
+}
 function opcionesRec() {
   const a = P.a; if (!a) return [];
   const bk = recAl(); if (!bk.length) return []; const hasta = bk[bk.length - 1].vence;
@@ -110,7 +118,7 @@ function opcionesRec() {
     Object.entries(P.turnos).forEach(([k, t]) => {
       const [club, dia, hora] = k.split("|");
       if (!cl.has(club) || Number(dia) !== d.getDay() || mios.has(`${club}|${dia}|${hora}`)) return;
-      if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
+      if (cats.size && !nivelOk(t, cats, club, f, hora)) return;
       if (inicioDe(f, hora).getTime() < limite) return;
       if (esSusp(club, f, hora)) return;
       if (P.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
@@ -416,7 +424,7 @@ async function avisarNoVoy(fecha, hora, tipo) {
     const [aS, cS] = [await tx.get(aRef), await tx.get(cRef)];
     const c = cS.exists ? cS.data() : {};
     tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: con, inicio: firebase.firestore.Timestamp.fromDate(ini), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
-    tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: avId });
+    tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: avId, ...(c.nivel ? { nivel: c.nivel } : {}) });
     if (con) tx.update(aRef, { recuperar: ((aS.data() || {}).recuperar || 0) + 1, ultimoAviso: avId });
     return con;
   }));
@@ -435,7 +443,9 @@ async function reservarRec(fecha, hora, clubElegido) {
     const base = ((tS.data() || {}).t || {})[`${club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
     if (!base || cupo - base.n + (c.aus || 0) - (c.rec || 0) < 1) throw { code: "lleno" };
     tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: (recAl()[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
-    tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId });
+    // Turno vacío: el primero que reserva le pone su nivel para esa fecha (no se muestra a los alumnos).
+    const nivelC = c.nivel || (!base.n && !base.nivel ? ([...catsDe(a)][0] || "") : "");
+    tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId, ...(nivelC ? { nivel: nivelC } : {}) });
     // Guardamos hasta cuándo valía la clase que usa: si después cancela con 24 h, le vuelve con esa misma fecha.
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   }));

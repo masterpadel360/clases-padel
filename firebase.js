@@ -147,7 +147,8 @@ function publicarTurnos() {
   clearTimeout(tTurnos);
   tTurnos = setTimeout(() => {
     const t = {};
-    turnos("").forEach(x => { t[`${x.club}|${x.dia}|${x.hora}`] = { n: x.al.length, nivel: x.nivel || "" }; });
+    // Incluye los turnos vacíos de la grilla (n: 0) para que los alumnos puedan recuperar ahí.
+    turnosGrilla("").forEach(x => { t[`${x.club}|${x.dia}|${x.hora}`] = { n: x.al.length, nivel: x.nivel || "" }; });
     const j = JSON.stringify(t); if (j === ultTurnos) return; ultTurnos = j;
     fdb.doc("publico/turnos").set({ t, actualizado: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => { ultTurnos = ""; });
   }, 1200);

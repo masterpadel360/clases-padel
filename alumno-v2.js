@@ -203,7 +203,7 @@
       <div class="tu-h"><span class="hr">${t.hora || "—"}</span>${ahora ? '<span class="vivo">Ahora</span>' : ""}</div>
       <div class="tu-c">
         <div class="tu-top">${S.club ? "" : `<span class="tag ${t.club}">${t.club === "ESPACIO" ? "Espacio" : "Jump"}</span>`}
-          <button class="tu-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel ? esc(t.nivel) : "+ Categoría"} ✎</button>
+          ${t.al.length ? `<button class="tu-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel ? esc(t.nivel) : "+ Categoría"} ✎</button>` : (aj.rec.length ? "" : `<span class="tu-cat">Turno libre</span>`)}
           <span class="tu-cupo ${libresTot > 0 ? "" : "lleno"}"><span class="pts">${cupoHTML(vanTot)}</span>${libresTot > 0 ? `${libresTot} libre${libresTot > 1 ? "s" : ""}` : "Completo"}</span></div>
         <div class="tu-lista">${lista || '<span class="tu-vacio">Sin alumnos</span>'}</div>
         <div class="tu-pie">${paso ? "" : `<button class="tu-sumar" data-xa="sumar" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${f}">+ Sumar a alguien</button>`}<button class="tu-lluvia" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${f}">Suspender por lluvia</button></div>

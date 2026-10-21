@@ -142,13 +142,22 @@ function turnos(club){
   }));
   return Object.values(map);
 }
-function slotsDe(dia){ return turnos(S.club).filter(t=>t.dia===dia).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
+// Grilla fija: de lunes a viernes, de 16:30 a 22:30, en Jump y en Espacio. Aunque no haya ningún alumno fijo,
+// el turno aparece (vacío, con los 4 lugares libres) para ofrecerlo y para que los alumnos recuperen ahí.
+const GRILLA={clubes:["JUMP","ESPACIO"],dias:[1,2,3,4,5],horas:["16:30","17:30","18:30","19:30","20:30","21:30","22:30"]};
+function turnosGrilla(club){
+  const ts=turnos(club); const ya=new Set(ts.map(t=>`${t.club}|${t.dia}|${t.hora}`));
+  GRILLA.clubes.filter(c=>!club||c===club).forEach(c=>GRILLA.dias.forEach(d=>GRILLA.horas.forEach(h=>{
+    if(!ya.has(`${c}|${d}|${h}`)) ts.push({club:c,dia:d,hora:h,nivel:"",al:[],vacio:true}); })));
+  return ts;
+}
+function slotsDe(dia){ return turnosGrilla(S.club).filter(t=>t.dia===dia).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
 const catNorm = c => String(c||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^iniciales$/,"inicial");
 function catsDe(a){ const set=new Set(); String(a.categoria||"").split(",").map(catNorm).filter(Boolean).forEach(c=>set.add(c)); (a.horarios||[]).forEach(h=>h.nivel&&set.add(catNorm(h.nivel))); return set; }
 function ordenSemana(t){ const hoyD=now.getDay()||7; return (((t.dia||7)-hoyD+7)%7)*10000+Number(String(t.hora).replace(":","")); }
 function opcionesRecupera(a,max=3){
   const mios=new Set((a.horarios||[]).map(h=>`${clubH(a,h)}|${h.dia}|${h.hora}`)); const cats=catsDe(a); const cl=clubsDe(a);
-  return turnos("").filter(t=>cl.has(t.club) && t.al.length<CUPO && !mios.has(`${t.club}|${t.dia}|${t.hora}`) && (cats.size ? (t.nivel && cats.has(catNorm(t.nivel))) : true))
+  return turnosGrilla("").filter(t=>cl.has(t.club) && t.al.length<CUPO && !mios.has(`${t.club}|${t.dia}|${t.hora}`) && (cats.size&&t.al.length ? (t.nivel && cats.has(catNorm(t.nivel))) : true))
     .sort((x,y)=>ordenSemana(x)-ordenSemana(y)).slice(0,max);
 }
 
@@ -293,8 +302,8 @@ const wico=(k,cl="")=>`<svg class="${cl}" viewBox="0 0 24 24" fill="none" stroke
 let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
 /* ---------- Agenda fija de la semana: quién va cada día y hora (para contestar a los que preguntan) ---------- */
 function vSemana(){
-  const cl=S.semClub||""; const todos=turnos("").filter(t=>!cl||t.club===cl);
-  const dias=[1,2,3,4,5,6,0].filter(d=>turnos("").some(t=>t.dia===d));
+  const cl=S.semClub||""; const todos=turnosGrilla("").filter(t=>!cl||t.club===cl);
+  const dias=[1,2,3,4,5,6,0].filter(d=>turnosGrilla("").some(t=>t.dia===d));
   if(S.semDia===undefined||!dias.includes(S.semDia)) S.semDia=dias.includes(now.getDay())?now.getDay():(dias[0]??1);
   const d=S.semDia; const ts=todos.filter(t=>t.dia===d).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
   const n=x=>todos.filter(t=>t.dia===x).length;
@@ -304,7 +313,7 @@ function vSemana(){
   <div class="w-seg">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button data-act="semClub" data-v="${v}" aria-pressed="${cl===v}">${l}</button>`).join("")}</div>
   <p class="sem-res">${/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"} · ${ts.length} turno${ts.length===1?"":"s"} · ${al} alumnos · <b>${lib} lugar${lib===1?"":"es"} libre${lib===1?"":"s"}</b></p>
   ${ts.length?ts.map(t=>{ const lb=Math.max(0,CUPO-t.al.length);
-    return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span><button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(t.nivel):"+ Categoría"}</button><span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
+    return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.al.length?`<button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(t.nivel):"+ Categoría"}</button>`:`<span class="sem-cat">Vacío</span>`}<span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
       <div class="sem-al">${t.al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>`<button data-act="editA" data-id="${a.id}">${esc(a.nombre)}${(()=>{ const hh=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); const ds=[a.inicio,hh&&hh.desde].filter(Boolean).sort().pop(); return ds&&ds>hoyISO?` <small>empieza ${fechaDM(ds)}</small>`:""; })()}</button>`).join("")}${lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
   <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="tab" data-t="hoy">Ver por fecha (con avisos y lluvia) ›</button></section>`;
 }
@@ -331,7 +340,7 @@ function vInicioG(){
   const nAl=activos().length, nAlA=A.cobran.length; const dif=nAl-nAlA;
   const pct=P.cobran.length?Math.round(P.pag.length/P.cobran.length*100):0;
   const hc=S.hoyClub||"";
-  const ts=turnos("").filter(t=>t.dia===now.getDay()&&(!hc||t.club===hc)).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
+  const ts=turnosGrilla("").filter(t=>t.dia===now.getDay()&&(!hc||t.club===hc)).map(t=>({...t,e:estHoy(t)})).filter(t=>t.e.al.length||t.e.recs.length).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
   const nT=c=>turnos(c).filter(t=>t.dia===now.getDay()).length;
   const filas=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm;
     const st=e.lluvia?'<span class="w-st">⛔ Suspendida</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar asistencia</span>':`<span class="w-st">${e.vienen} vienen</span>`;
@@ -447,7 +456,7 @@ function vAlumnos(){
 function esNuevo(a){ if(a.codigo||!a.alta) return false; const d=new Date(now); d.setDate(d.getDate()-21); return a.alta>=toISO(d); }
 function slotHTML(t,fecha){
   const aj=fecha?ajusteTurno(t,fecha):{aus:new Set(),rec:[]}; const libres=CUPO-t.al.length+aj.aus.size-aj.rec.length;
-  return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}<button class="linkish" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" style="justify-self:start;font-size:12px;text-align:left">${t.nivel?esc(t.nivel):"+ Categoría"} ✎</button><span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
+  return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}${t.al.length?`<button class="linkish" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" style="justify-self:start;font-size:12px;text-align:left">${t.nivel?esc(t.nivel):"+ Categoría"} ✎</button>`:(aj.rec.length?"":`<span class="small muted">Vacío</span>`)}<span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
     <div style="display:grid;gap:4px;min-width:0"><div class="who">${t.al.map(a=>`<button class="pill ${t.club} ${esNuevo(a)?"nuevo":""} ${aj.aus.has(a.id)?"aus":""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)?' <b class="nuevo-b">Nuevo</b>':""}${aj.aus.has(a.id)?' <b class="aus-b">No viene</b>':""}</button>`).join("")}${aj.rec.map(a=>`<button class="pill rec" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <b class="rec-b">Recupera</b></button>`).join("")}</div>
     <button class="linkish suspend" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${fecha||hoyISO}">Suspender por lluvia</button></div></div>`;
 }
@@ -467,8 +476,8 @@ function vAgenda(){
   const mesTxt=sel.toLocaleDateString("es-AR",{month:"long"});
   return `
   <section class="sec" style="margin-top:4px">
-    <div class="days" id="daysStrip">${fechas.map((f,i)=>{const k=toISO(f);const n=slotsDe(f.getDay()).length;const mes=(i===0||f.getDate()===1)?`<span class="mes">${f.toLocaleDateString("es-AR",{month:"short"}).replace(".","")}</span>`:"";return `<button class="day ${k===hoyISO?"hoy":""}" data-act="fecha" data-f="${k}" aria-pressed="${k===iso}" aria-label="${DIAS_LARGO[f.getDay()]} ${f.getDate()}">${mes}<small>${DIAS[f.getDay()]}</small><b class="num">${f.getDate()}</b><span class="cnt num">${n?n+" t":"–"}</span></button>`}).join("")}</div>
-    <div class="sec-head" style="margin-top:6px"><h2 class="disp">${DIAS_LARGO[S.dia]} ${sel.getDate()}</h2><span class="small muted num">${extra}<span style="text-transform:capitalize">${mesTxt}</span> · ${S.modo==="profe"?`${slots.length} hora${slots.length===1?"":"s"} de clase · ${al} alumnos`:`${slots.length} turnos · ${al} alumnos · ${lib} libres`}</span></div>
+    <div class="days" id="daysStrip">${fechas.map((f,i)=>{const k=toISO(f);const n=turnos(S.club).filter(t=>t.dia===f.getDay()).length;const mes=(i===0||f.getDate()===1)?`<span class="mes">${f.toLocaleDateString("es-AR",{month:"short"}).replace(".","")}</span>`:"";return `<button class="day ${k===hoyISO?"hoy":""}" data-act="fecha" data-f="${k}" aria-pressed="${k===iso}" aria-label="${DIAS_LARGO[f.getDay()]} ${f.getDate()}">${mes}<small>${DIAS[f.getDay()]}</small><b class="num">${f.getDate()}</b><span class="cnt num">${n?n+" t":"–"}</span></button>`}).join("")}</div>
+    <div class="sec-head" style="margin-top:6px"><h2 class="disp">${DIAS_LARGO[S.dia]} ${sel.getDate()}</h2><span class="small muted num">${extra}<span style="text-transform:capitalize">${mesTxt}</span> · ${S.modo==="profe"?(()=>{ const nh=slots.filter(x=>{const j=ajusteTurno(x,iso0); return x.al.length-j.aus.size+j.rec.length>0;}).length; return `${nh} hora${nh===1?"":"s"} de clase · ${al} alumnos · ${lib} libres`; })():`${slots.length} turnos · ${al} alumnos · ${lib} libres`}</span></div>
     ${slots.length&&iso>=hoyISO?`<span style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini lluvia-btn" data-act="suspender" data-f="${iso}">⛔ Suspender clases</button><button class="mini lluvia-btn" data-act="lluvia" data-f="${iso}">🌧 Por lluvia</button></span>`:""}
     ${slots.length?`<div class="list">${slots.map(t=>slotHTML(t,iso)).join("")}</div>`:`<div class="empty">Sin clases ${DIAS_LARGO[S.dia].toLowerCase()}${S.club?" en "+S.club:""}.</div>`}
   </section>`;
@@ -490,7 +499,7 @@ function recRow(a){
 function vRecuperar(){
   const recs=activos().filter(a=>recN(a)>0).sort((x,y)=>(recN(y)-recN(x))||x.nombre.localeCompare(y.nombre));
   const tot=recs.reduce((s,a)=>s+recN(a),0);
-  const libres=turnos(S.club).filter(t=>t.al.length<CUPO);
+  const libres=turnosGrilla(S.club).filter(t=>t.al.length<CUPO);
   const grupos={}; libres.forEach(t=>{ const k=`${t.club} · ${t.nivel||"sin categoría"}`; (grupos[k]=grupos[k]||[]).push(t); });
   return `
   <section class="sec" style="margin-top:4px">
@@ -506,7 +515,7 @@ function vRecuperar(){
 /* ---------- Lugares libres para ofrecer a gente nueva ---------- */
 const capCat=c=>c?c.charAt(0).toUpperCase()+c.slice(1):"Sin categoría";
 function libresPorCat(club){ const g={};
-  turnos(club).filter(t=>t.al.length<CUPO).forEach(t=>{ const k=t.nivel?catNorm(t.nivel):""; (g[k]=g[k]||{nombre:t.nivel?String(t.nivel).trim():"",ts:[]}).ts.push(t); });
+  turnosGrilla(club).filter(t=>t.al.length<CUPO).forEach(t=>{ const k=t.nivel?catNorm(t.nivel):""; (g[k]=g[k]||{nombre:t.nivel?String(t.nivel).trim():"",ts:[]}).ts.push(t); });
   Object.values(g).forEach(x=>x.ts.sort((a,b)=>(a.dia||7)-(b.dia||7)||a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club)));
   return Object.keys(g).sort((a,b)=>(!a)-(!b)||a.localeCompare(b)).map(k=>({k,...g[k],n:g[k].ts.reduce((s,t)=>s+CUPO-t.al.length,0)})); }
 function libresHoyHTML(){ const gs=libresPorCat(S.club); const n=gs.reduce((s,g)=>s+g.n,0); if(!n) return "";
@@ -860,7 +869,10 @@ async function marcar(a,hora,estado){
 function vAsist(){
   if(window.escucharExtras) window.escucharExtras();
   const f=isoDate(S.asFecha); const dow=f.getDay(); const esHoy=S.asFecha===hoyISO;
-  const slots=turnos(S.asClub).filter(t=>t.dia===dow).sort((x,y)=>x.hora.localeCompare(y.hora));
+  // Turnos con alguien (fijos, recuperaciones o pruebas). Los vacíos de la grilla quedan abajo, para sumar a alguien que viene a recuperar.
+  const tg=turnosGrilla(S.asClub).filter(t=>t.dia===dow).sort((x,y)=>x.hora.localeCompare(y.hora));
+  const conGente=t=>t.al.some(a=>vaEn(a,t,S.asFecha))||asistEstado(t).vienen>0||Object.keys(S.asMarcas).some(k=>k.endsWith("|"+t.hora));
+  const slots=tg.filter(conGente), vacios=tg.filter(t=>!conGente(t));
   const vals=Object.values(S.asMarcas); const cnt=e=>vals.filter(v=>v===e).length;
   const extras=Object.keys(S.asMarcas).filter(k=>S.asMarcas[k]==="recuperando").map(k=>{const [id,hora]=k.split("|"); return {a:S.alumnos.find(x=>x.id===id),hora};}).filter(x=>x.a);
   return `
@@ -873,7 +885,8 @@ function vAsist(){
     ${slots.length?asistPendHTML(slots):""}
     ${slots.length?`<p class="small muted num" style="margin:0;text-align:center"><b class="free">${cnt("vino")}</b> vinieron · <b class="due">${cnt("falto")}</b> faltaron · ${cnt("recuperando")} recuperaron${cnt("lluvia")?` · ${cnt("lluvia")} por lluvia`:""}</p>`:""}
   </section>
-  ${slots.length?slots.map(t=>asistTurnoHTML(t,extras)).join(""):`<div class="empty" style="margin-top:16px">No hay turnos en ${S.asClub==="ESPACIO"?"Espacio":"Jump"} los ${DIAS_PL[dow]}.</div>`}
+  ${slots.length?slots.map(t=>asistTurnoHTML(t,extras)).join(""):`<div class="empty" style="margin-top:16px">No hay nadie anotado en ${S.asClub==="ESPACIO"?"Espacio":"Jump"} este día.</div>`}
+  ${vacios.length?`<section class="sec"><div class="sec-head"><h3>Turnos vacíos</h3></div><p class="small muted" style="margin:0">Sin alumnos fijos ni recuperaciones. Si viene alguien a recuperar, tocá el horario.</p><div style="display:flex;gap:8px;flex-wrap:wrap">${vacios.map(t=>`<button class="mini" data-act="asRecAdd" data-hora="${t.hora}">${t.hora} · 4 libres</button>`).join("")}</div></section>`:""}
   ${S.modo!=="profe"&&S.downloads?`<button class="mini" data-act="asCSV" style="margin-top:16px">Descargar asistencia de ${mesSolo(S.asFecha.slice(0,7))} (CSV)</button>`:""}
   <p class="small muted" style="margin:18px 0 0"><b style="color:var(--ink)">✓ Vinieron todos</b> marca presentes a los que faltan marcar; después tocá <b style="color:var(--ink)">✗</b> al que no vino. <b style="color:var(--ink)">Faltó</b> sin avisar: pierde la clase (si querés dársela igual, sumásela desde su ficha). Los que avisaron por la app aparecen abajo y no hace falta marcarlos.</p>`;
 }
@@ -960,7 +973,7 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
 
 // Suspender un turno por lluvia (o deshacerlo): queda marcado en la asistencia y cada alumno suma (o resta) una clase para recuperar.
 async function lluviaTurno(club,fecha,hora,auto=false){
-  let t=turnos(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return; t={...t,al:t.al.filter(a=>vaEn(a,t,fecha))};
+  let t=turnosGrilla(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return; t={...t,al:t.al.filter(a=>vaEn(a,t,fecha))};
   const ref=S.db.collection("asistencia").doc(`${fecha}_${club}`); let mk={};
   if(S.asKey===`${fecha}_${club}`) mk={...S.asMarcas}; else { try{ const d=await ref.get(); mk={...((d.exists&&d.data().marcas)||{})}; }catch(e){} }
   const quitar=!auto&&t.al.length&&t.al.every(a=>mk[`${a.id}|${hora}`]==="lluvia");
@@ -993,7 +1006,7 @@ function vCaptar(){
   const L=S.leads.filter(l=>!S.club||!l.club||l.club===S.club);
   const ganados=L.filter(l=>l.estado==="alumno"&&(l.ganado||"").startsWith(S.mes));
   const act=L.filter(l=>["nuevo","contactado","prueba"].includes(l.estado));
-  const libres=turnos(S.club).reduce((s,t)=>s+Math.max(0,CUPO-t.al.length),0);
+  const libres=turnosGrilla(S.club).reduce((s,t)=>s+Math.max(0,CUPO-t.al.length),0);
   return `
   <section class="sec" style="margin-top:4px">
     <div class="sec-head"><h2 class="disp">Interesados</h2><button class="cta" data-act="newL" style="padding:6px 6px 6px 14px;font-size:13px">Nuevo <i>+</i></button></div>
