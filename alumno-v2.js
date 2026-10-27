@@ -97,7 +97,7 @@
   }
 
   function cuota(a) {
-    const mes = mesKey(now); const est = estPago(a, mes); const monto = montoMes(a, mes); const n = clasesMes(a, mes);
+    const mes = a.pruebaPagos && mesKey(now) < PAGO_DESDE ? PAGO_DESDE : mesKey(now); const est = estPago(a, mes); // pruebaPagos: Gabriel deja probar el pago de noviembre antes const monto = montoMes(a, mes); const n = clasesMes(a, mes);
     const pm = (a.pagos || {})[mes] || {}; const det = ajusteDe(a, mes) !== null ? esc(pm.nota || "Monto acordado") : `${n} clases`;
     const deuda = mesesPago().filter(m => m !== mes && conPlazo(m) && estPago(a, m) !== "pagado");
     const vence = new Date(now.getFullYear(), now.getMonth(), DIA_PAGO); const dias = Math.ceil((vence - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS);
@@ -161,7 +161,7 @@
     const bk = recAl(); const rec = bk.reduce((s, x) => s + x.n, 0);
     const ico = '<span class="ico"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>';
     const icoP = '<span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg></span>';
-    const mes = mesKey(now); const est = estPago(a, mes);
+    const mes = a.pruebaPagos && mesKey(now) < PAGO_DESDE ? PAGO_DESDE : mesKey(now); const est = estPago(a, mes); // pruebaPagos: Gabriel deja probar el pago de noviembre antes
     const deuda = mesesPago().filter(m => m !== mes && conPlazo(m) && estPago(a, m) !== "pagado");
     const dias = Math.ceil((new Date(now.getFullYear(), now.getMonth(), DIA_PAGO) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / DIA_MS);
     if (deuda.length || est === "vencido") {

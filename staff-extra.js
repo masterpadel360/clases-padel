@@ -68,10 +68,14 @@ async function desvincularManeja(a) {
   bt.set(fdb.doc("alumnos/" + a.id), { manejaUid: FV.delete(), manejaId: FV.delete() }, { merge: true });
   try { await bt.commit(); delete a.manejaUid; delete a.manejaId; toast("Desvinculado"); return true; } catch (e) { console.error(e); toast("No se pudo desvincular."); return false; }
 }
+function pruebaPagoHTML(a) {
+  if (mesKey(now) >= "2026-11" || !(a.usuario || a.manejaUid)) return "";
+  return `<div class="field"><span class="flabel">Prueba de pago</span><span class="small muted">${a.pruebaPagos ? "Activada: en su app ya puede pagar la cuota de noviembre para probar." : "Para probar el pago antes de noviembre con este alumno."}</span><button type="button" class="mini" data-act="accPruebaPago" data-id="${a.id}" style="justify-self:start">${a.pruebaPagos ? "Desactivar prueba" : "Dejar probar el pago de noviembre"}</button></div>`;
+}
 function accesoHTML(a) {
   if (!S.esOwner) return "";
-  if (a.manejaUid) return manejaHTML(a);
-  return manejaHTML(a) + `<div class="field"><span class="flabel">Acceso a la app del alumno</span>${a.usuario
+  if (a.manejaUid) return manejaHTML(a) + pruebaPagoHTML(a);
+  return manejaHTML(a) + pruebaPagoHTML(a) + `<div class="field"><span class="flabel">Acceso a la app del alumno</span>${a.usuario
     ? `<span class="small">Usuario: <b>${esc(a.usuario)}</b> <span class="muted">(lo puede cambiar desde su app, en Mi cuenta)</span></span><span class="small muted">Si se olvidó la contraseña, generale una nueva y se la mandás por WhatsApp.</span><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="mini go" data-act="accClave" data-uid="${a.uid || ""}" data-id="${a.id}">Contraseña nueva</button><button type="button" class="linkish" style="font-size:12px" data-act="accesoCrear" data-id="${a.id}">Crear un acceso nuevo de cero</button></div>`
     : `<span class="small muted">Con un usuario y contraseña ve sus clases, asistencia y pagos, avisa si no va y reserva para recuperar.</span><button type="button" class="mini go" data-act="accesoCrear" data-id="${a.id}" style="justify-self:start">Crear acceso</button>`}</div>`;
 }
@@ -210,6 +214,9 @@ window.accionExtra = async (act, b, A) => {
       try { const bt = fdb.batch(); ids.forEach(id => bt.update(fdb.doc("avisos/" + id), { visto: true })); await bt.commit(); } catch (e) {} break; }
     case "asRecApp": if (A) { S.asMarcas[`${A.id}|${b.dataset.hora}`] = "recuperando"; render(); if (await guardarAsist()) { toast(`${A.nombre} vino a recuperar`); avisarDueno(`${nomProfe()}: ${A.nombre} vino a recuperar`, `${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub === "ESPACIO" ? "Espacio" : "Jump"}`); } } break;
     case "accesoCrear": if (A) openAcceso(A, "alumno"); break;
+    case "accPruebaPago": if (A) { const v = !A.pruebaPagos; b.disabled = true;
+      try { await fdb.doc("alumnos/" + A.id).set({ pruebaPagos: v ? true : firebase.firestore.FieldValue.delete() }, { merge: true }); if (v) A.pruebaPagos = true; else delete A.pruebaPagos; toast(v ? `${nombreCorto(A.nombre)} ya puede probar el pago de noviembre` : "Prueba desactivada"); closeSheet(); formAlumno(A); cargarHist(A); }
+      catch (e) { console.error(e); toast("No se pudo cambiar."); b.disabled = false; } } break;
     case "accVincular": if (A) { const pid = ($("#accManeja") || {}).value; if (!pid) { toast("Elegí quién lo maneja."); break; } b.disabled = true; if (await vincularManeja(A, pid)) { closeSheet(); formAlumno(A); cargarHist(A); } else b.disabled = false; } break;
     case "accDesvincular": if (A) { b.disabled = true; if (await desvincularManeja(A)) { closeSheet(); formAlumno(A); cargarHist(A); } else b.disabled = false; } break;
     case "accMasivo": openAccesosMasivo(); break;
