@@ -188,7 +188,7 @@ window.accionExtra = async (act, b, A) => {
     case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
     case "profeCrear": openAcceso(null, "profe"); break;
     case "accClave": await claveNuevaPara(b.dataset.uid, A); break;
-    case "telGSave": { const v = $("#cTelG").value.trim(); if (await safe(() => fdb.doc("config/general").set({ ...S.cfg, telGabriel: v }), "Guardado")) S.cfg = { ...S.cfg, telGabriel: v }; break; }
+    case "telGSave": { const v = $("#cTelG").value.trim(); if (await safe(() => fdb.doc("config/general").update({ ...S.cfg, telGabriel: v }), "Guardado")) S.cfg = { ...S.cfg, telGabriel: v }; break; }
   }
 };
 
@@ -212,8 +212,9 @@ async function deshacerAviso(id) {
       const cRef = fdb.doc(`cupos/${d.club}_${d.fecha}_${d.hhmm}`); const aRef = fdb.doc("alumnos/" + d.alumnoId);
       const cS = await tx.get(cRef); const aS = await tx.get(aRef);
       const c = cS.exists ? cS.data() : {}; const ad = { ...(aS.data() || {}), id: d.alumnoId };
-      recPendAvisos(ad).forEach(x => { if (x.id !== id) tx.update(fdb.doc("avisos/" + x.id), { contado: true }); });
+      // Firestore exige hacer todas las lecturas antes de la primera escritura.
       const otroRef = fdb.doc(`avisos/${d.alumnoId}_${d.fecha}_${d.hhmm}_${d.tipo === "ausencia" ? "recupera" : "ausencia"}`); const oS = await tx.get(otroRef);
+      recPendAvisos(ad).forEach(x => { if (x.id !== id) tx.update(fdb.doc("avisos/" + x.id), { contado: true }); });
       if (d.tipo === "ausencia" && oS.exists) { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1), rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.delete(otroRef); }
       else if (d.tipo === "ausencia") { tx.set(cRef, { aus: Math.max(0, (c.aus || 0) - 1) }, { merge: true }); if (d.conRecupero) tx.update(aRef, recCambio(ad, -1, hoyISO, venceDe(d.fecha))); }
       else { tx.set(cRef, { rec: Math.max(0, (c.rec || 0) - 1) }, { merge: true }); tx.update(aRef, recCambio(ad, 1, hoyISO)); }

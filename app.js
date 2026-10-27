@@ -580,7 +580,7 @@ function usoAuto(club,f,desde){ const mk=((S.asMes||{})[`${club}|${f}`])||null; 
 function usoDia(C,f){ const a=C.aj[f]; if(a) return {luz:Number(a.luz)||0,sin:Number(a.sin)||0,manual:true}; const u=usoAuto(C.club,f,C.desde); return {...u,manual:false}; }
 let asMesUnsub=null, asMesKey="";
 function escucharAsMes(m){ if(asMesKey===m||!S.db) return; asMesKey=m; if(asMesUnsub) asMesUnsub(); const [y,mm]=m.split("-").map(Number);
-  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${m}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy"||S.tab==="dinero")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
+  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${mesAnt(m)}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy"||S.tab==="dinero")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
 function canchaTotal(club,m){ const C=canchaDe(club); const pg=C.pagos[m]; if(pg&&pg.pagado&&pg.monto!==undefined) return Number(pg.monto)||0;
   const [y,mm]=m.split("-").map(Number); let hl=0,hs=0; for(let d=1;d<=new Date(y,mm,0).getDate();d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); hl+=u.luz; hs+=u.sin; } return hl*C.luz+hs*C.sin; }
 function canchaHTML(club,m){ const C=canchaDe(club); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate(); let hl=0,hs=0; const filas=[];
@@ -848,12 +848,19 @@ const toISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())
 const ESTADOS = {vino:"Vino", falto:"Faltó", recupera:"Recupera"};
 function subAsist(){
   if(!S.db) return; const key=`${S.asFecha}_${S.asClub}`; if(S.asKey===key) return;
-  if(S.asUnsub) S.asUnsub(); S.asKey=key; S.asMarcas={};
-  S.asUnsub=S.db.collection("asistencia").doc(key).onSnapshot(d=>{ if(asPend>0) return; S.asMarcas={...((d.exists&&d.data().marcas)||{})}; S.asQuien={...((d.exists&&d.data().quien)||{})}; if(S.tab==="asist"&&$("#overlay").hidden) render(); },()=>{});
+  if(S.asUnsub) S.asUnsub(); S.asKey=key; S.asMarcas={}; S.asBase={};
+  S.asUnsub=S.db.collection("asistencia").doc(key).onSnapshot(d=>{ if(asPend>0) return; S.asMarcas={...((d.exists&&d.data().marcas)||{})}; S.asBase={...S.asMarcas}; S.asQuien={...((d.exists&&d.data().quien)||{})}; if(S.tab==="asist"&&$("#overlay").hidden) render(); },()=>{});
 }
 let asPend=0, asQueue=Promise.resolve();
-function guardarAsist(){ const yo=S.esOwner&&S.modo!=="profe"?"Gabriel":(S.esOwner?"Gabriel":"Esteban"); S.asQuien=S.asQuien||{}; Object.keys(S.asMarcas).forEach(k=>{ if(!S.asQuien[k]) S.asQuien[k]=yo; }); Object.keys(S.asQuien).forEach(k=>{ if(!S.asMarcas[k]) delete S.asQuien[k]; }); const m={...S.asMarcas}, q={...S.asQuien}; const f=S.asFecha, c=S.asClub; asPend++;
-  const p=asQueue.then(()=>safe(()=>S.db.collection("asistencia").doc(`${f}_${c}`).set({fecha:f,club:c,marcas:m,quien:q}))).finally(()=>{ asPend--; if(asPend===0&&(S.asFecha!==f||S.asClub!==c)){ S.asKey=null; if(S.tab==="asist"&&$("#overlay").hidden) render(); } });
+// Guarda solo las marcas que cambiaron (campo por campo), así Gabriel y Esteban no se pisan si marcan el mismo día.
+function guardarAsist(){ const yo=S.esOwner&&S.modo!=="profe"?"Gabriel":(S.esOwner?"Gabriel":"Esteban"); const FV=firebase.firestore.FieldValue; S.asQuien=S.asQuien||{};
+  const base=S.asBase||{}, cur=S.asMarcas, dm={}, dq={};
+  Object.keys(cur).forEach(k=>{ if(cur[k]!==base[k]){ if(!S.asQuien[k]) S.asQuien[k]=yo; dm[k]=cur[k]; dq[k]=S.asQuien[k]; } });
+  Object.keys(base).forEach(k=>{ if(!(k in cur)){ dm[k]=FV.delete(); dq[k]=FV.delete(); delete S.asQuien[k]; } });
+  const prevBase=base; S.asBase={...cur}; const f=S.asFecha, c=S.asClub;
+  if(!Object.keys(dm).length) return Promise.resolve(true);
+  asPend++;
+  const p=asQueue.then(()=>safe(()=>S.db.collection("asistencia").doc(`${f}_${c}`).set({fecha:f,club:c,marcas:dm,quien:dq},{merge:true}))).then(ok=>{ if(!ok&&S.asFecha===f&&S.asClub===c){ S.asBase=prevBase; S.asKey=null; } return ok; }).finally(()=>{ asPend--; if(asPend===0&&(S.asFecha!==f||S.asClub!==c)){ S.asKey=null; if(S.tab==="asist"&&$("#overlay").hidden) render(); } });
   asQueue=p.catch(()=>{}); return p; }
 async function marcar(a,hora,estado){
   S.asQuien=S.asQuien||{}; delete S.asQuien[`${a.id}|${hora}`];
@@ -958,8 +965,10 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
   { const t={}; ts.forEach(x=>t[suspKey(x.club,x.fecha,x.hora)]=LL.motivo);
     try{ const d=await suspRef().get(); const lim=toISO(new Date(now.getFullYear(),now.getMonth(),now.getDate()-7)); Object.keys((d.exists&&d.data().t)||{}).forEach(k=>{ if(k.split("|")[1]<lim) t[k]=FV.delete(); }); }catch(e){}
     if(!(await safe(()=>suspRef().set({t},{merge:true})))){ b.disabled=false; b.textContent="Reintentar"; return; } }
-  for(const t of ts){ const ids=await lluviaTurno(t.club,t.fecha,t.hora,true); if(!ids) continue; tot+=ids.length; lineas.push(`${t.fecha}|${t.hora} (${t.club==="ESPACIO"?"Espacio La 10":"Jump"})`); if(ids.length) items.push({club:t.club,fecha:t.fecha,hora:t.hora,alumnos:ids});
+  const fallaron=[];
+  for(const t of ts){ const ids=await lluviaTurno(t.club,t.fecha,t.hora,true); if(!ids){ fallaron.push(t); continue; } tot+=ids.length; lineas.push(`${t.fecha}|${t.hora} (${t.club==="ESPACIO"?"Espacio La 10":"Jump"})`); if(ids.length) items.push({club:t.club,fecha:t.fecha,hora:t.hora,alumnos:ids});
     if(ll) await safe(()=>S.db.doc(`lluvias/${t.fecha}_${t.club}_${hhmmDe(t.hora)}`).set({club:t.club,fecha:t.fecha,hora:t.hora,alumnos:ids,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})); }
+  if(fallaron.length){ const t={}; fallaron.forEach(x=>t[suspKey(x.club,x.fecha,x.hora)]=FV.delete()); await safe(()=>suspRef().set({t},{merge:true})); fallaron.forEach(x=>LL.ya.delete&&LL.ya.delete(x.k)); }
   if(!ll&&items.length) await safe(()=>S.db.collection("suspensiones").doc(`${Date.now().toString(36)}`).set({items,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()}));
   const fechas=[...new Set(ts.map(t=>t.fecha))].sort(); const dias=listaY(fechas.map(fechaTxtLL)); const club=LL.club?` en ${LL.club==="ESPACIO"?"Espacio La 10":"Jump"}`:"";
   const det=fechas.length>1?lineas.map(x=>{ const [f,r]=x.split("|"); return `${fechaTxtLL(f)} ${r}`; }):lineas.map(x=>x.split("|")[1]);
@@ -967,7 +976,8 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
     :`📢 Aviso: ${dias} no hay clases${club}. A cada uno le queda la clase para recuperar: la pueden recuperar ${llOpciones(fechas)}, donde haya lugar. La reservan desde la app (tienen 2 semanas): ${typeof LINK_APP!=="undefined"?LINK_APP:""}`;
   try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){}
   render(); openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">${ll?"🌧":"⛔"}</div><h2 class="disp" style="margin:0">Clases suspendidas</h2>
-    <p class="small" style="margin:0">${ts.length} turno${ts.length===1?"":"s"} · ${tot} alumnos con clase para recuperar. La notificación les llega en unos minutos.</p>
+    <p class="small" style="margin:0">${ts.length-fallaron.length} turno${ts.length-fallaron.length===1?"":"s"} · ${tot} alumnos con clase para recuperar. La notificación les llega en unos minutos.</p>
+    ${fallaron.length?`<p class="small" style="margin:0;color:var(--warn);font-weight:700">No se pudieron suspender: ${esc(fallaron.map(x=>`${fechaTxtLL(x.fecha)} ${x.hora}`).join(", "))}. Revisá la conexión y volvé a suspenderlos.</p>`:""}
     <div class="msg" style="text-align:left;width:100%"><span class="small muted">Mensaje para el grupo de WhatsApp:</span><div class="bubble">${esc(msg)}</div><button class="mini" data-act="copy" data-text="${esc(msg)}">Copiar mensaje</button></div>
     <button class="btn pri" data-act="close" style="width:100%">Listo</button></div>`); }
 
@@ -975,7 +985,8 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
 async function lluviaTurno(club,fecha,hora,auto=false){
   let t=turnosGrilla(club).find(x=>x.dia===isoDate(fecha).getDay()&&x.hora===hora); if(!t) return; t={...t,al:t.al.filter(a=>vaEn(a,t,fecha))};
   const ref=S.db.collection("asistencia").doc(`${fecha}_${club}`); let mk={};
-  if(S.asKey===`${fecha}_${club}`) mk={...S.asMarcas}; else { try{ const d=await ref.get(); mk={...((d.exists&&d.data().marcas)||{})}; }catch(e){} }
+  if(S.asKey===`${fecha}_${club}`) mk={...S.asMarcas}; else { try{ const d=await ref.get(); mk={...((d.exists&&d.data().marcas)||{})}; }catch(e){ toast("Sin conexión: no se pudo leer la asistencia. Probá de nuevo."); return; } }
+  const mk0={...mk};
   const quitar=!auto&&t.al.length&&t.al.every(a=>mk[`${a.id}|${hora}`]==="lluvia");
   if(!auto&&!confirm(quitar?`¿Quitar la suspensión por lluvia de las ${hora}? A cada uno se le descuenta la clase para recuperar.`:`¿Se suspendió por lluvia la clase de las ${hora}? Queda anotado en la asistencia y a cada alumno (${t.al.length}) le suma una clase para recuperar.`)) return;
   const cambios=[];
@@ -987,7 +998,8 @@ async function lluviaTurno(club,fecha,hora,auto=false){
   const recs=S.avisos.filter(v=>v.tipo==="recupera"&&v.club===club&&v.fecha===fecha&&v.hora===hora&&!vuelveApp(v.alumnoId,fecha,hora)).map(v=>S.alumnos.find(x=>x.id===v.alumnoId)).filter(Boolean);
   recs.forEach(a=>{ const k=`${a.id}|${hora}`; if(quitar){ if(mk[k]==="lluvia"){ delete mk[k]; cambios.push([a,-1]); } } else if(mk[k]!=="lluvia"){ mk[k]="lluvia"; cambios.push([a,1]); } });
   if(S.asKey===`${fecha}_${club}`){ S.asMarcas=mk; if(!(await guardarAsist())) return; }
-  else if(!(await safe(()=>ref.set({fecha,club,marcas:mk},{merge:false})))) return;
+  else { const FV=firebase.firestore.FieldValue, dm={}; Object.keys(mk).forEach(k=>{ if(mk[k]!==mk0[k]) dm[k]=mk[k]; }); Object.keys(mk0).forEach(k=>{ if(!(k in mk)) dm[k]=FV.delete(); });
+    if(Object.keys(dm).length&&!(await safe(()=>ref.set({fecha,club,marcas:dm},{merge:true})))) return; }
   for(const [a,d] of cambios) await setRec(a,d,fecha);
   if(!auto){ const FV=firebase.firestore.FieldValue; await safe(()=>suspRef().set({t:{[suspKey(club,fecha,hora)]:quitar?FV.delete():"lluvia"}},{merge:true})); }
   if(quitar) { try{ const lr=S.db.doc(`lluvias/${fecha}_${club}_${hhmmDe(hora)}`); const ld=await lr.get(); if(ld.exists&&!ld.data().notificado) await lr.delete(); }catch(e){} }
@@ -1157,7 +1169,7 @@ function openObjetivo(){ const meta=Number(S.cfg.objetivoAlumnos)||0; const n=S.
     <div class="field"><label for="objIn">Otro número</label><input id="objIn" type="number" inputmode="numeric" min="0" step="1" value="${meta||""}" placeholder="Ej: 120"></div>
     <p class="small muted" style="margin:12px 0 0">Tip: deslizá la franja para arriba y se achica; para abajo, vuelve.</p>
     <div class="btns" style="margin-top:14px">${meta?`<button class="btn sec2" data-act="objBorrar">Sacarlo</button>`:"<span></span>"}<button class="btn pri" data-act="objSave">Guardar</button></div>`); }
-async function guardarObjetivo(v){ if(await safe(()=>S.db.doc("config/general").set({...S.cfg,objetivoAlumnos:v}),v?`Objetivo: ${v} alumnos`:"Objetivo sacado")){ S.cfg={...S.cfg,objetivoAlumnos:v}; closeSheet(); render(); } }
+async function guardarObjetivo(v){ if(await safe(()=>S.db.doc("config/general").update({...S.cfg,objetivoAlumnos:v}),v?`Objetivo: ${v} alumnos`:"Objetivo sacado")){ S.cfg={...S.cfg,objetivoAlumnos:v}; closeSheet(); render(); } }
 
 /* ---------- Actualizar solo lo que cambió (en vez de redibujar toda la pantalla) ---------- */
 function morph(a,b){
@@ -1202,15 +1214,16 @@ async function historialDe(id){ return historialDeSnap(await hastaTiempo(qHist()
 async function cargarHist(a){
   const el=$("#histA"); if(!el||!S.db) return;
   // Primero lo que ya está guardado en el celu (aparece al instante), después lo actualizado.
-  try{ const c=await qHist().get({source:"cache"}); if(c.size&&$("#histA")&&$("#histA").dataset.ok!=="1") pintarHist(historialDeSnap(c,a.id)); }catch(e){}
-  try{ const h=await historialDe(a.id); if(!$("#histA")) return; $("#histA").dataset.ok="1"; pintarHist(h); }
-  catch(e){ const el2=$("#histA"); if(!el2||el2.dataset.ok==="1") return; if(el2.dataset.cache==="1") return;
+  const mismo=()=>$("#histA")&&$("#fA")&&$("#fA").dataset.id===a.id;
+  try{ const c=await qHist().get({source:"cache"}); if(c.size&&mismo()&&$("#histA").dataset.ok!=="1") pintarHist(historialDeSnap(c,a.id)); }catch(e){}
+  try{ const h=await historialDe(a.id); if(!mismo()) return; $("#histA").dataset.ok="1"; pintarHist(h); }
+  catch(e){ if(!mismo()) return; const el2=$("#histA"); if(el2.dataset.ok==="1") return; if(el2.dataset.cache==="1"){ el2.insertAdjacentHTML("beforeend",`<p class="small muted" style="margin:6px 0 0">Puede faltar lo último: sin conexión.</p>`); return; }
     el2.innerHTML=`No se pudo cargar el historial. <button type="button" class="linkish" id="histRe">Reintentar</button>`; const b=$("#histRe"); if(b) b.onclick=()=>{ el2.innerHTML="Cargando…"; cargarHist(a); }; }
 }
 function pintarHist(h){
   if(!$("#histA")) return;
   { $("#histA").dataset.cache="1";
-    if(!h.length){ $("#histA").innerHTML="Todavía no hay asistencias marcadas."; return; }
+    if(!h.length){ $("#histA").innerHTML="Sin asistencias marcadas en los últimos 4 meses."; return; }
     const cnt=e=>h.filter(x=>x.estado===e).length;
     $("#histA").innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;color:var(--ink)"><span><b class="num">${cnt("vino")+cnt("recuperando")}</b> vino</span><span style="color:var(--warn)"><b class="num">${cnt("falto")}</b> faltó</span><span style="color:var(--sun)"><b class="num">${cnt("recupera")}</b> avisó</span></div>
       <div style="display:grid;gap:4px;max-height:220px;overflow:auto">${h.map(x=>{const d=isoDate(x.fecha); return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line-2)"><span style="color:var(--ink)"><span style="text-transform:capitalize">${DIAS[d.getDay()]}</span> ${d.getDate()}/${d.getMonth()+1} · ${x.hora}</span><span style="color:${EST_COL[x.estado]||"var(--muted)"};font-weight:700;text-align:right">${EST_TXT[x.estado]||x.estado}${x.quien?` <span class="muted" style="font-weight:500">· ${esc(x.quien)}</span>`:""}</span></div>`;}).join("")}</div>`;
@@ -1243,7 +1256,7 @@ function formAlumno(a={},leadId=""){
       <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="${!pm||pm.modo!=="sig"}">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="${!!pm&&pm.modo==="sig"}">Las suma al mes siguiente</button></div>
       <span class="small" id="aPromoCalc" style="line-height:1.5"></span>${a.id?'<span class="small muted">Si cambiás la fecha, la cuota del primer mes se recalcula sola (los meses que ya pagó no se tocan).</span>':""}</div>`; })()}
     <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
-    <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
+    <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec" data-orig="${recN(a)||0}">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
     ${a.id?accesoHTML(a):""}
     ${a.id?avisosFichaHTML(a):""}
@@ -1290,13 +1303,13 @@ async function safe(p,okMsg){
 }
 const colA=()=>S.db.collection("alumnos");
 const colL=()=>S.db.collection("interesados");
-async function setPago(a,val){
+async function setPago(a,val,rechazar=false){
   const cur=(a.pagos&&a.pagos[S.mes])||{}; const c=compDe(a);
   return safe(async()=>{ const bt=S.db.batch();
     // set con merge: cambia solo este mes y conserva los demás meses y el monto acordado (un update común borraba todos los otros pagos).
     bt.set(colA().doc(a.id),{pagos:{[S.mes]:{pagado:val,monto:val?montoMes(a):(cur.monto||0),fecha:val?hoyISO:null}}},{merge:true});
     // Si lo pasa a "Debe" y había un comprobante del alumno, queda rechazado (el alumno ve que lo tiene que volver a mandar).
-    if(!val&&c&&c.estado==="enviado") bt.update(S.db.doc("comprobantes/"+c.id),{estado:"rechazado",aplicado:true,notificado:true});
+    if(!val&&rechazar&&c&&c.estado==="enviado") bt.update(S.db.doc("comprobantes/"+c.id),{estado:"rechazado",aplicado:true,notificado:true});
     await bt.commit(); });
 }
 /* ---------- Comprobantes que sube el alumno al pagar ----------
@@ -1403,11 +1416,11 @@ document.addEventListener("click",async e=>{
     case "verComp": if(A) verComprobante(A); break;
     case "turnoCat": openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
     case "turnoCatOk": guardarTurnoCat(b); break;
-    case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
+    case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false,true)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
     case "asCSV": exportAsist(); break;
     case "irAsist": S.asFecha=b.dataset.f; if(b.dataset.c) S.asClub=b.dataset.c; if(S.modo!=="profe") S.prevTab=S.tab; S.tab="asist"; render(); scrollTo(0,0); break;
     case "irHoras": S.horasFecha=b.dataset.f; S.tab="horas"; render(); setTimeout(()=>{ const el=document.querySelector('[data-act="hStep"]'); el&&el.scrollIntoView({block:"center"}); },50); break;
-    case "telProfeSave": { const v=$("#telProfe").value.trim(); if(await safe(()=>S.db.doc("config/general").set({...S.cfg,telProfe:v}),"Teléfono guardado")){ S.cfg={...S.cfg,telProfe:v}; render(); } break; }
+    case "telProfeSave": { const v=$("#telProfe").value.trim(); if(await safe(()=>S.db.doc("config/general").update({...S.cfg,telProfe:v}),"Teléfono guardado")){ S.cfg={...S.cfg,telProfe:v}; render(); } break; }
     case "verGastos": S.modo="profe"; S.tab="plata"; S.finMes=S.mes; S.asKey=null; render(); scrollTo(0,0); break;
     case "finNuevo": openFin(b.dataset.t); break;
     case "finCat": { fCat=b.dataset.c; document.querySelectorAll("#finCats .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.c===fCat)); break; }
@@ -1415,7 +1428,7 @@ document.addEventListener("click",async e=>{
     case "finMes": { const [y,mm]=S.finMes.split("-").map(Number); S.finMes=mesKey(new Date(y,mm-1+Number(b.dataset.d),1)); render(); break; }
     case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.hMovs=S.hMovs.filter(x=>x.id!==b.dataset.id); render(); await guardarHorasDoc(); break; }
     case "pagoTodo": { $("#ppMonto").value=Math.max(0,saldoProfe().saldo); break; }
-    case "vhSave": { const v=Number($("#vh2").value)||0; if(await safe(()=>S.db.doc("config/general").set({...S.cfg,valorHora:v}),`Valor por hora: ${money(v)}`)) render(); break; }
+    case "vhSave": { const v=Number($("#vh2").value)||0; if(await safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v}),`Valor por hora: ${money(v)}`)) render(); break; }
     case "objetivo": if(objMin()) setObjMin(false); else openObjetivo(); break;
     case "objPick": { $("#objIn").value=b.dataset.v; b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); break; }
     case "objSave": { const v=Math.max(0,Math.round(Number($("#objIn").value)||0)); await guardarObjetivo(v); break; }
@@ -1425,8 +1438,8 @@ document.addEventListener("click",async e=>{
     case "ajuste": if(A) openAjuste(A); break;
     case "ajStep": { const i=$("#ajMonto"); i.value=Math.max(0,(Number(i.value)||0)+Number(b.dataset.d)); ajPreview(); break; }
     case "ajReset": { const a=S.alumnos.find(x=>x.id===$("#fAj").dataset.id); $("#ajMonto").value=cuotaMes(a); $("#ajNota").value=""; ajPreview(); break; }
-    case "valorSave": { const v=Number($("#vHora").value)||0; if(await safe(()=>S.db.doc("config/general").set({...S.cfg,valorHora:v}),"Valor por hora guardado")) render(); break; }
-    case "aumSave": { const v=Math.round((S.cfg.valorHora||0)*(1+(Number($("#aumPct").value)||0)/100)); if(v&&await safe(()=>S.db.doc("config/general").set({...S.cfg,valorHora:v,ultimoAumento:hoyISO}),`Nuevo valor: ${money(v)} por hora`)) render(); break; }
+    case "valorSave": { const v=Number($("#vHora").value)||0; if(await safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v}),"Valor por hora guardado")) render(); break; }
+    case "aumSave": { const v=Math.round((S.cfg.valorHora||0)*(1+(Number($("#aumPct").value)||0)/100)); if(v&&await safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v,ultimoAumento:hoyISO}),`Nuevo valor: ${money(v)} por hora`)) render(); break; }
     case "modoProfe": closeSheet(); { const e=S.equipo[0];  if(!e) toast("Esteban todavía no cargó horas: vas a ver la pantalla vacía."); } S.modo="profe"; S.tab="horas"; S.asKey=null; render(); scrollTo(0,0); break;
     case "modoOwner": S.modo="owner"; S.tab="hoy"; S.club=""; S.asClub="ESPACIO"; S.asKey=null; render(); break;
     case "hDia": { const d=isoDate(S.horasFecha); d.setDate(d.getDate()+Number(b.dataset.d)); if(toISO(d)<=hoyISO){ S.horasFecha=toISO(d); render(); } break; }
@@ -1484,7 +1497,7 @@ document.addEventListener("submit",async e=>{
     const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; { const pa=S.alumnos.find(x=>x.id===f.dataset.id); const ph=pa&&(pa.horarios||[]).find(x=>x.dia===h.dia&&x.hora===h.hora&&clubH(pa,x)===h.club); if(ph&&ph.desde&&ph.desde>hoyISO.slice(0,8)+"01") h.desde=ph.desde; } return h;}).filter(h=>h.hora);
     const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim()};
     const prevA=S.alumnos.find(x=>x.id===f.dataset.id)||{}; const pendA=prevA.id?recPendAvisos(prevA):[];
-    { const nuevoRec=Number($("#aRec").textContent)||0; Object.assign(data,recCambio(prevA,nuevoRec-recN(prevA))); }
+    { const el=$("#aRec"); const dRec=(Number(el.textContent)||0)-(Number(el.dataset.orig)||0); if(dRec) Object.assign(data,recCambio(prevA,dRec)); }
     if(!data.nombre) return;
     const id=f.dataset.id,lead=f.dataset.lead;
     if(id&&$("#aIni")){ const pm=planGuardado(prevA); const ini=$("#aIni").value||prevA.inicio; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este"; const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1;
@@ -1527,7 +1540,7 @@ document.addEventListener("submit",async e=>{
   }
   if(f.id==="fC"){
     const data={alias:$("#cAlias").value.trim(),objetivoHoras:Number($("#cObj").value)||0,tpl:{cobro:$("#cCobro").value.trim()||TPL_DEF.cobro,lluvia:$("#cLluvia").value.trim()||TPL_DEF.lluvia,recupera:$("#cRec").value.trim()||TPL_DEF.recupera}};
-    if(await safe(()=>S.db.doc("config/general").set({...S.cfg,...data}),"Guardado")) closeSheet();
+    if(await safe(()=>S.db.doc("config/general").update({...S.cfg,...data}),"Guardado")) closeSheet();
   }
 });
 
