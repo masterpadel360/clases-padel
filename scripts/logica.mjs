@@ -45,7 +45,8 @@ export const masUnaHora = h => { const [hh, mm] = h.split(":").map(Number); retu
 export function clasesDelDia(a, f, avisos) {
   const dow = diaSemana(f); const mios = avisos.filter(v => v.alumnoId === a.id && v.fecha === f);
   const tiene = (tipo, hora) => mios.some(v => v.tipo === tipo && v.hora === hora);
-  const out = (a.horarios || []).filter(h => h.dia === dow && !(h.desde && h.desde > f)).map(h => ({ hora: h.hora, club: clubH(a, h), tipo: "fija" }));
+  if (a.inicio && a.inicio > f) return [];
+  const out = (a.horarios || []).filter(h => Number(h.dia) === dow && !(h.desde && h.desde > f)).map(h => ({ hora: h.hora, club: clubH(a, h), tipo: "fija" }));
   mios.filter(v => v.tipo === "recupera" && !out.some(c => c.hora === v.hora)).forEach(v => out.push({ hora: v.hora, club: v.club, tipo: "recupera" }));
   // Avisó que no va (y no volvió atrás) → no cuenta.
   return out.filter(c => !(tiene("ausencia", c.hora) && !(c.tipo === "fija" && tiene("recupera", c.hora))));

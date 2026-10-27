@@ -221,6 +221,7 @@ if (alumnosConApp.length) {
   const lunes = sumarDias(hoy, -((diaSemana(hoy) + 6) % 7));
   let enviados = 0;
   for (const [uid, t] of alumnosConApp) {
+    try {
     const aS = await db.doc("alumnos/" + t.alumnoId).get(); if (!aS.exists) continue;
     const a = { id: aS.id, ...aS.data() }; if (a.activo === false) continue;
     const nombre = primerNombre(a.nombre);
@@ -295,6 +296,7 @@ if (alumnosConApp.length) {
     const horas = [...new Set(ops.map(o => o.hora))].slice(0, 3); const clubs = [...new Set(ops.map(o => lugarTxt(o.club)))];
     const lista = horas.length > 1 ? horas.slice(0, -1).join(", ") + " y " + horas[horas.length - 1] : horas[0];
     await mandar(idHoy, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, hoy hay lugar a las ${lista} en ${clubs.join(" y ")}. Recuperá antes del ${diaDM(vences[0])}: reservá en la app.`, tag: "recuperar" });
+    } catch (e) { console.log("Aviso a alumno", t.alumnoId, e && e.message); }
   }
   console.log(`Avisos a alumnos: ${enviados}`);
 }
@@ -306,7 +308,7 @@ if (alumnosConApp.length) {
   const horaAR = ar.getUTCHours(), minAR = ar.getUTCMinutes();
   // A la noche (desde las 21:30) revisa hoy; a la mañana (desde las 10) revisa ayer.
   const revisar = [];
-  if (horaAR > 21 || (horaAR === 21 && minAR >= 30)) revisar.push({ f: hoy, id: "noche", cuando: "hoy" });
+  if (horaAR > 22 || (horaAR === 22 && minAR >= 45)) revisar.push({ f: hoy, id: "noche", cuando: "hoy" });
   if (horaAR >= 10 && horaAR < 20) revisar.push({ f: sumarDias(hoy, -1), id: "manana", cuando: "ayer" });
   if (profes.length && revisar.length) {
     let alumnos = null;
@@ -319,7 +321,7 @@ if (alumnosConApp.length) {
       const avs = (await db.collection("avisos").where("fecha", "==", r.f).get()).docs.map(d => d.data());
       const avisoNoVa = (id, h) => avs.some(v => v.alumnoId === id && v.hora === h && v.tipo === "ausencia") && !avs.some(v => v.alumnoId === id && v.hora === h && v.tipo === "recupera");
       alumnos.forEach(a => { if (a.inicio && a.inicio > r.f) return; (a.horarios || []).forEach(h => { if (h.dia === dow && clubH(a, h) === "JUMP" && !(h.desde && h.desde > r.f) && !avisoNoVa(a.id, h.hora)) (turnos[h.hora] = turnos[h.hora] || []).push(a.id); }); });
-      const horas = Object.keys(turnos).sort(); if (!horas.length) continue;
+      const horas = Object.keys(turnos).sort(); if (!horas.length) { await ref.set({ enviado: admin.firestore.FieldValue.serverTimestamp(), nada: true }); continue; }
       const marcas = ((await db.doc(`asistencia/${r.f}_JUMP`).get()).data() || {}).marcas || {};
       const sinAsist = horas.filter(h => turnos[h].some(id => !marcas[`${id}|${h}`]));
       const sinHoras = !((((await db.doc("horas/" + uid).get()).data() || {}).dias || {})[r.f]);

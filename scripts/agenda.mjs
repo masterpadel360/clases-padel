@@ -70,7 +70,11 @@ export async function correrAgenda({ db, admin, enviar, uids, ahora, hoy, link }
   let n = 0;
   for (const uid of uids) {
     const cfgS = await db.doc("agenda/" + uid).get();
-    const items = (await db.collection(`agenda/${uid}/items`).get()).docs.map(d => ({ id: d.id, ...d.data() }));
+    // No se leen todos los gastos de siempre: solo lo que puede avisar y los gastos de hoy.
+    const col = db.collection(`agenda/${uid}/items`);
+    const [q1, q2] = await Promise.all([col.where("tipo", "in", ["evento", "pendiente", "hoy"]).get(), col.where("fecha", "==", hoy).get()]);
+    const vistos = new Set(); const items = [];
+    for (const d of [...q1.docs, ...q2.docs]) { if (vistos.has(d.id)) continue; vistos.add(d.id); items.push({ id: d.id, ...d.data() }); }
     if (!cfgS.exists && !items.length) continue;
     for (const a of avisosAgenda(items, cfgS.exists ? cfgS.data() : {}, ahora.getTime(), hoy)) {
       const ref = db.doc(`recordatorios/ag_${uid}_${a.key}`);
