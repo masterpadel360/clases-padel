@@ -333,6 +333,52 @@ if (alumnosConApp.length) {
     }
   }
 }
+/* ---------- 4b) Al profe de Jump: 15 minutos antes de cada clase, quién viene ---------- */
+try {
+  const profesJ = Object.entries(tokens).filter(([, t]) => t.rol === "profe" && t.tokens && t.tokens.length).map(([uid]) => uid);
+  const dowHoy = diaSemana(hoy);
+  if (profesJ.length && dowHoy >= 1 && dowHoy <= 5) {
+    const nowMs = ahora.getTime();
+    const avsHoy = (await db.collection("avisos").where("fecha", "==", hoy).get()).docs.map(d => d.data()).filter(v => v.club === "JUMP");
+    const alumnosJ = (await db.collection("alumnos").get()).docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.activo !== false && !(a.inicio && a.inicio > hoy));
+    const susp = ((await db.doc("publico/suspendidas").get()).data() || {}).t || {};
+    const reemp = (await db.collection("reemplazos").where("fecha", "==", hoy).get()).docs.map(d => d.data()).filter(r => r.club === "JUMP");
+    const extras = (await db.collection("extras").where("fecha", "==", hoy).get()).docs.map(d => d.data()).filter(x => x.club === "JUMP");
+    const nom = a => { const p = String(a.nombre || "").trim().split(/\s+/); return primerNombre(p[0]) + (p[1] ? " " + p[1][0].toUpperCase() + "." : ""); };
+    const listaY = l => l.length > 1 ? l.slice(0, -1).join(", ") + " y " + l[l.length - 1] : (l[0] || "");
+    const turnos = {};
+    const t = h => turnos[h] || (turnos[h] = { fijos: [], noVan: [], recs: [], otros: [] });
+    alumnosJ.forEach(a => (a.horarios || []).forEach(h => { if (Number(h.dia) === dowHoy && clubH(a, h) === "JUMP" && !(h.desde && h.desde > hoy)) t(h.hora).fijos.push(a); }));
+    const porId = Object.fromEntries(alumnosJ.map(a => [a.id, a]));
+    const tieneAv = (id, h, tipo) => avsHoy.some(v => v.alumnoId === id && v.hora === h && v.tipo === tipo);
+    avsHoy.filter(v => v.tipo === "recupera" && !tieneAv(v.alumnoId, v.hora, "ausencia")).forEach(v => { const a = porId[v.alumnoId] || { nombre: v.nombre }; t(v.hora).recs.push(a); });
+    extras.forEach(x => t(x.hora).otros.push((x.nombre || "Prueba") + (x.tipo === "invitado" ? " (invitado)" : " (prueba)")));
+    for (const [hora, tt] of Object.entries(turnos)) {
+      if (susp[`JUMP|${hoy}|${hora}`]) continue;
+      const empieza = inicioDe(hoy, hora).getTime(); const falta = (empieza - nowMs) / 60e3;
+      if (falta > 20 || falta < -5) continue; // sale unos 15 min antes (el proceso corre cada 10 min)
+      const vienen = [], noVan = [];
+      tt.fijos.forEach(a => { const r = reemp.find(x => x.alumnoId === a.id && x.hora === hora);
+        if (tieneAv(a.id, hora, "ausencia") && !tieneAv(a.id, hora, "recupera")) { if (r) vienen.push(`${r.quien} (por ${nom(a)})`); else noVan.push(nom(a)); }
+        else vienen.push(nom(a)); });
+      const recs = tt.recs.map(nom);
+      const total = vienen.length + recs.length + tt.otros.length; if (!total) continue;
+      const partes = [];
+      if (vienen.length) partes.push(listaY(vienen));
+      if (recs.length) partes.push(`recupera${recs.length > 1 ? "n" : ""} ${listaY(recs)}`);
+      if (tt.otros.length) partes.push(listaY(tt.otros));
+      if (noVan.length) partes.push(`no ${noVan.length > 1 ? "vienen" : "viene"} ${listaY(noVan)}`);
+      for (const uid of profesJ) {
+        const ref = db.doc(`recordatorios/clase_${uid}_${hoy}_${hora.replace(":", "")}`);
+        const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp() }); return true; });
+        if (!nuevo) continue;
+        await enviar(uid, { title: `🎾 ${hora} · Clase en Jump (${total})`, body: partes.join(" · ").replace(/\.?$/, ".") + " Al terminar, marcá la asistencia.", tag: "clase-" + hoy + "-" + hora });
+        console.log(`Aviso de clase al profe: ${hora} (${total})`);
+      }
+    }
+  }
+} catch (e) { console.log("Aviso de clase al profe:", e && e.message); }
+
 /* ---------- 5) Mi Agenda (personal de Gabriel) ---------- */
 try {
   const { correrAgenda } = await import("./agenda.mjs");
