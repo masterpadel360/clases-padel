@@ -92,7 +92,7 @@
     if (c.vuelve) tx += " Confirmaste que venís.";
     const futura = inicioDe(c.fecha, c.hora).getTime() > Date.now();
     const acc = !futura || c.aus || c.vuelve || c.susp ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar reemplazo</button>`
-      : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="v2-mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}`;
+      : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`;
     return `<span class="dl">${tit}</span><span>${tx}</span>${acc ? `<span class="v2-acc">${acc}</span>` : ""}`;
   }
 
@@ -314,7 +314,7 @@
     const estado = c.aus ? (c.aus.conRecupero ? '<span class="st aviso">No venís · te quedó para recuperar</span>' : '<span class="st falta">No venís</span>')
       : c.susp ? '<span class="st aviso">Suspendida · te queda para recuperar</span>' : c.vuelve ? '<span class="st fui">Confirmaste que venís</span>' : rp ? `<span class="st aviso">Va ${esc(rp.quien)} en tu lugar</span>` : "";
     const acc = c.aus || c.vuelve || c.susp ? "" : rp ? `<button class="v2-mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
-      : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="v2-mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}`;
+      : `<button class="v2-mini rojo" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>`;
     return `<div class="v2-ficha${c.aus ? " off" : ""}"><div class="v2-fecha"><span>${DC[d.getDay()]}</span><b>${d.getDate()}</b></div>
       <div class="v2-ficha-tx"><b>${c.hora}${c.tipo === "recupera" ? ' <i class="v2-tag">Recuperación</i>' : ""}</b><span>${lugarTxt(c.club)} · ${fechaRel(c.fecha)}</span>${estado}</div>
       <div class="v2-ficha-acc">${acc}</div></div>`;

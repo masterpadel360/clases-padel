@@ -203,7 +203,7 @@ function claseHTML(c, marcas) { const rp = P.reemp[`${c.fecha}|${c.hora}`]; cons
           <span class="meta small muted">${c.tipo === "recupera" ? '<span class="tag rec">Recuperación</span> ' : ""}${clubTxt(c.club)}</span>
           ${c.aus ? `<span class="small" style="color:var(--sun);font-weight:700">No venís${c.aus.conRecupero ? " · te quedó para recuperar" : ""}</span>` : ""}${c.vuelve ? '<span class="small" style="color:var(--ok);font-weight:700">Confirmaste que venís · ya no se puede cambiar</span>' : ""}${pasada && e ? `<span class="small" style="color:${e[1]};font-weight:700">${e[0]}</span>` : ""}${rp ? `<span class="small" style="color:var(--jump);font-weight:700">Va ${esc(rp.quien)} en tu lugar</span>` : ""}</div>
         ${c.susp && !pasada ? '<span class="small" style="color:var(--jump);font-weight:700">Suspendida · te queda para recuperar</span>' : pasada || c.aus || c.vuelve ? "" : rp ? `<button class="mini" data-pa="reempNo" data-f="${c.fecha}" data-h="${c.hora}">Cancelar</button>`
-          : `<span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button>${c.tipo === "recupera" ? `<button class="mini" data-pa="reemp" data-f="${c.fecha}" data-h="${c.hora}" data-c="${c.club}">Va otro</button>` : ""}</span>`}</div>`; }
+          : `<span style="display:grid;gap:6px;justify-items:end"><button class="mini" data-pa="novoy" data-f="${c.fecha}" data-h="${c.hora}" data-t="${c.tipo}">No voy</button></span>`}</div>`; }
 function marcasAl(a) { const m = {}; P.asis.forEach(x => Object.keys(x.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) m[`${x.fecha}|${hora}`] = x.marcas[k]; })); return m; }
 
 function vInicio(a, wa) {
@@ -509,9 +509,7 @@ document.addEventListener("click", async e => {
   }
   if (pa === "reservar") {
     const { f, h, c } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
-    confirmar(`¿Recuperás ${cuando}?`, `Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.
-      <span style="display:grid;gap:6px;margin-top:12px"><b>¿No podés ir vos?</b> Podés mandar a otra persona a recuperar en tu lugar (opcional):
-      <input id="recQuien" type="text" maxlength="40" placeholder="Nombre de quién va (si no vas vos)" autocomplete="off" style="font-size:16px"></span>`, "Reservar", async () => {
+    confirmar(`¿Recuperás ${cuando}?`, `Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.`, "Reservar", async () => {
       const quien = (($("#recQuien") || {}).value || "").trim().replace(/\s+/g, " ");
       await reservarRec(f, h, c);
       if (quien.length >= 2) {
