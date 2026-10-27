@@ -106,6 +106,9 @@ h2{font-family:var(--f-display);font-stretch:80%;font-weight:700;font-size:14px;
 .grid2>*{min-width:0}
 .field input[type=date],.field input[type=time]{text-align:left;min-height:46px;line-height:24px}
 .field input::-webkit-date-and-time-value{text-align:left}
+.modo{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--card);border-radius:999px;padding:4px}
+.modo button{border:0;background:transparent;border-radius:999px;padding:10px 8px;font-weight:700}
+.modo button[aria-pressed="true"]{background:var(--accent);color:var(--ball)}
 .dias{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .dias button{aspect-ratio:1;border:0;border-radius:50%;background:var(--card);font-weight:800;font-family:var(--f-display);font-size:17px;padding:0}
 .dias button[aria-pressed="true"]{background:var(--accent);color:var(--ball)}
@@ -325,7 +328,7 @@ function vistaAgenda() {
   }
   return `<div class="top"><div><p class="eyebrow">Próximas 3 semanas</p><h1>Agenda</h1><p class="sub">Clases, entrenamientos, turnos y horarios</p></div></div>
     <button class="btn" id="btnNuevoEv">+ Agregar a la agenda</button>
-    ${hay ? html : S.cargado ? `<h2>Nada agendado</h2><div class="empty">Por ejemplo: “Clase” los martes de 19 a 21. Elegís los días, el horario y te aviso antes.</div>` : ""}`;
+    ${hay ? html : S.cargado ? `<h2>Nada agendado</h2><div class="empty">Cargá cosas de un solo día (dentista el jueves 10:00) o que se repiten (clase los martes de 19 a 21). Te aviso antes.</div>` : ""}`;
 }
 function vistaGastos() {
   const [y, m] = S.mes.split("-").map(Number);
@@ -392,9 +395,10 @@ function editar(id, fOcurrencia, tipoNuevo) {
   const esEv = x.tipo === "evento";
   const titulo = id ? (esEv ? "Editar en la agenda" : x.tipo === "hoy" ? "Tarea de hoy" : "Pendiente") : "Nuevo en la agenda";
   hoja(`<h3>${titulo}</h3>
-    <div class="field"><label for="eTxt">${esEv ? "Qué" : "Tarea"}</label><input id="eTxt" value="${esc(x.texto)}" placeholder="${esEv ? "Dar clase en Jump, entrenar, esperar al técnico…" : ""}" autocomplete="off"></div>
+    <div class="field"><label for="eTxt">${esEv ? "Qué" : "Tarea"}</label><input id="eTxt" value="${esc(x.texto)}" placeholder="${esEv ? "Dentista, clase, entrenar, esperar al técnico…" : ""}" autocomplete="off"></div>
     ${esEv ? `<div class="field"><label for="eLugar">Dónde (opcional)</label><input id="eLugar" value="${esc(x.lugar || "")}" autocomplete="off"></div>` : ""}
-    ${esEv ? `<div class="field"><span class="lbl">Qué días (todas las semanas)</span><div class="dias" id="eDias">${ORDEN.map(d => `<button type="button" data-d="${d}" aria-label="${DIAS[d]}" aria-pressed="${diasDe(x).includes(d)}">${LETRA[d]}</button>`).join("")}</div><span class="hint" id="eDiasTxt" style="margin:0"></span></div>` : ""}
+    ${esEv ? `<div class="field"><span class="lbl">¿Cuándo?</span><div class="modo" id="eModo"><button type="button" data-m="una" aria-pressed="${!diasDe(x).length}">Un solo día</button><button type="button" data-m="sem" aria-pressed="${diasDe(x).length > 0}">Todas las semanas</button></div></div>
+    <div class="field" id="eDiasBox"><span class="lbl">Qué días</span><div class="dias" id="eDias">${ORDEN.map(d => `<button type="button" data-d="${d}" aria-label="${DIAS[d]}" aria-pressed="${diasDe(x).includes(d)}">${LETRA[d]}</button>`).join("")}</div><span class="hint" id="eDiasTxt" style="margin:0"></span></div>` : ""}
     <div class="field" id="eFechaBox"><label for="eFecha">${esEv ? "Fecha" : "Para cuándo"}</label><input id="eFecha" type="date" value="${esc(x.fecha || "")}"></div>
     <div class="grid2"><div class="field"><label for="eHora">${esEv ? "De" : "Hora"}</label><input id="eHora" type="time" value="${esc(x.hora || "")}"></div>
       ${esEv ? `<div class="field"><label for="eHastaH">Hasta</label><input id="eHastaH" type="time" value="${esc(x.hasta_h || "")}"></div>` : ""}</div>
@@ -408,13 +412,16 @@ function editar(id, fOcurrencia, tipoNuevo) {
     bg.querySelector("#eAviso").onchange = hint; hint();
     const hh = bg.querySelector("#eHastaH"); if (hh) { if (hh.value) hh.dataset.tocado = "1"; hh.oninput = () => hh.dataset.tocado = "1"; }
     const selDias = () => [...bg.querySelectorAll("#eDias [aria-pressed=true]")].map(b => Number(b.dataset.d));
-    const pintarDias = () => { if (!esEv) return; const d = selDias(); bg.querySelector("#eFechaBox").hidden = d.length > 0; bg.querySelector("#eDiasTxt").textContent = d.length ? repTxt({ dias: d }) + ". Te aviso cada semana." : "Si no marcás ningún día, es solo para la fecha de abajo."; };
+    const modoSem = () => esEv && bg.querySelector('#eModo [data-m="sem"]').getAttribute("aria-pressed") === "true";
+    const pintarDias = () => { if (!esEv) return; const sem = modoSem(), d = selDias(); bg.querySelector("#eDiasBox").hidden = !sem; bg.querySelector("#eFechaBox").hidden = sem; bg.querySelector("#eDiasTxt").textContent = d.length ? repTxt({ dias: d }) + ". Te aviso cada semana." : "Tocá los días que se repite."; };
+    if (esEv) bg.querySelectorAll("#eModo button").forEach(b => b.onclick = () => { bg.querySelectorAll("#eModo button").forEach(o => o.setAttribute("aria-pressed", o === b)); pintarDias(); });
     bg.querySelectorAll("#eDias button").forEach(b => b.onclick = () => { b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); pintarDias(); });
     pintarDias();
     bg.querySelector("#eOk").onclick = () => {
       const texto = bg.querySelector("#eTxt").value.trim(); if (!texto) { bg.querySelector("#eTxt").focus(); return; }
       const d = { tipo: x.tipo, texto, fecha: bg.querySelector("#eFecha").value, hora: bg.querySelector("#eHora").value, avisoMin: Number(bg.querySelector("#eAviso").value) };
-      if (esEv) { d.dias = selDias(); d.repetir = ""; if (d.dias.length && (!x.fecha || !id)) d.fecha = hoyStr(); else if (d.dias.length) d.fecha = x.fecha; if (!d.fecha) d.fecha = hoyStr(); d.hasta_h = bg.querySelector("#eHastaH").value; d.lugar = bg.querySelector("#eLugar").value.trim(); }
+      if (esEv && modoSem() && !selDias().length) { bg.querySelector("#eDiasTxt").textContent = "Elegí al menos un día, o tocá Un solo día."; return; }
+      if (esEv) { d.dias = modoSem() ? selDias() : []; d.repetir = ""; if (d.dias.length && (!x.fecha || !id)) d.fecha = hoyStr(); else if (d.dias.length) d.fecha = x.fecha; if (!d.fecha) d.fecha = hoyStr(); d.hasta_h = bg.querySelector("#eHastaH").value; d.lugar = bg.querySelector("#eLugar").value.trim(); }
       if (x.tipo === "hoy" && !d.fecha) d.fecha = hoyStr();
       bg.remove();
       if (id) cambiar(id, d); else crear({ ...d, hecho: false });
@@ -474,7 +481,7 @@ function bajarIcs(x) {
 }
 
 /* Al volver a la app (o al cambiar de día) se redibuja con la fecha nueva, y si hay versión nueva se actualiza sola */
-window.AG_V = "202610271903";
+window.AG_V = "202610271929";
 async function verVersion() {
   try { const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return; const nv = (await r.json()).v;
     if (nv && nv !== window.AG_V && new URLSearchParams(location.search).get("v") !== nv) location.replace(location.pathname + "?v=" + nv); } catch (e) {}
