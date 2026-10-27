@@ -26,12 +26,12 @@ const primerNombre = n => String(n || "").trim().split(/\s+/)[0].replace(/^./, c
 const tokens = {};
 (await db.collection("tokens").get()).forEach(d => { tokens[d.id] = d.data(); });
 
-async function enviar(uid, { title, body, tag }) {
+async function enviar(uid, { title, body, tag, link }) {
   const t = tokens[uid]; if (!t || !t.tokens || !t.tokens.length) return 0;
   const res = await fcm.sendEachForMulticast({
     tokens: t.tokens,
-    data: { title, body, tag: tag || "", link: LINK },
-    webpush: { headers: { Urgency: "high", TTL: "7200" }, fcmOptions: { link: LINK } },
+    data: { title, body, tag: tag || "", link: link || LINK },
+    webpush: { headers: { Urgency: "high", TTL: "7200" }, fcmOptions: { link: link || LINK } },
   });
   const malos = [];
   res.responses.forEach((r, i) => { if (!r.success && ["messaging/registration-token-not-registered", "messaging/invalid-registration-token", "messaging/invalid-argument"].includes(r.error && r.error.code)) malos.push(t.tokens[i]); });
@@ -328,4 +328,9 @@ if (alumnosConApp.length) {
     }
   }
 }
+/* ---------- 5) Mi Agenda (personal de Gabriel) ---------- */
+try {
+  const { correrAgenda } = await import("./agenda.mjs");
+  await correrAgenda({ db, admin, enviar, uids: staff, ahora, hoy, link: LINK + "agenda/" });
+} catch (e) { console.log("Mi Agenda:", e.message); }
 console.log("Listo");

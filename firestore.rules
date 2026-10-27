@@ -198,5 +198,12 @@ service cloud.firestore {
     match /finanzas/{uid} {
       allow read, write: if esDueno() || (esProfe() && request.auth.uid == uid);
     }
+    // Mi Agenda (personal de Gabriel): tareas, pendientes, agenda y gastos. Solo él.
+    match /agenda/{uid} {
+      allow read, write: if esDueno() && request.auth.uid == uid;
+      match /items/{id} {
+        allow read, write: if esDueno() && request.auth.uid == uid;
+      }
+    }
   }
 }
