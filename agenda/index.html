@@ -473,8 +473,14 @@ function bajarIcs(x) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" })); a.download = "agenda.ics"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
 }
 
-/* Al volver a la app (o al cambiar de día) se redibuja con la fecha nueva */
-document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+/* Al volver a la app (o al cambiar de día) se redibuja con la fecha nueva, y si hay versión nueva se actualiza sola */
+window.AG_V = "202610271903";
+async function verVersion() {
+  try { const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return; const nv = (await r.json()).v;
+    if (nv && nv !== window.AG_V && new URLSearchParams(location.search).get("v") !== nv) location.replace(location.pathname + "?v=" + nv); } catch (e) {}
+}
+verVersion();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); verVersion(); } });
 </script>
 </body>
 </html>
