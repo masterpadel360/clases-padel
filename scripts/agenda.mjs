@@ -14,12 +14,10 @@ export function ocurre(ev, f) {
   if (!ev.fecha || f < ev.fecha) return false;
   if (ev.hasta && f > ev.hasta) return false;
   if ((ev.saltear || []).includes(f)) return false;
-  const r = ev.repetir || "";
-  if (!r) return f === ev.fecha;
-  if (r === "diario") return true;
-  if (r === "lav") return dow(f) >= 1 && dow(f) <= 5;
-  if (r === "semanal") return dow(f) === dow(ev.fecha);
-  return false;
+  let d = Array.isArray(ev.dias) ? ev.dias : null;
+  if (!d) { const r = ev.repetir || ""; d = r === "diario" ? [0, 1, 2, 3, 4, 5, 6] : r === "lav" ? [1, 2, 3, 4, 5] : r === "semanal" ? [dow(ev.fecha)] : []; }
+  if (!d.length) return f === ev.fecha;
+  return d.includes(dow(f));
 }
 
 function cuandoTxt(f, hoy, hora) {
@@ -42,7 +40,9 @@ export function avisosAgenda(items, cfg, nowMs, hoy) {
       if (nowMs > empieza + 30 * 60e3) continue; // ya pasó hace rato: no tiene sentido avisar
       const ya = nowMs >= empieza - 5 * 60e3;
       const title = it.tipo === "evento" ? `🗓️ ${it.texto}` : `✅ ${it.texto}`;
-      const body = ya ? `Ahora, ${it.hora}${it.lugar ? " · " + it.lugar : ""}` : `${cuandoTxt(f, hoy, it.hora)}${it.lugar ? " · " + it.lugar : ""}`;
+      const rango = it.hasta_h ? ` a ${it.hasta_h}` : "";
+      const lugar = it.lugar ? " · " + it.lugar : "";
+      const body = ya ? (rango ? `Ahora, de ${it.hora}${rango}${lugar}` : `Ahora, ${it.hora}${lugar}`) : `${cuandoTxt(f, hoy, it.hora).replace(" a las ", rango ? " de " : " a las ")}${rango}${lugar}`;
       out.push({ key: `${it.id}_${f}_${it.avisoMin}`, title, body, tag: `ag-${it.id}` });
     }
   }
