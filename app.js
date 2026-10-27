@@ -1191,19 +1191,30 @@ function hRow(h={dia:1,hora:"18:00"},club){
 }
 const EST_TXT={vino:"Vino",falto:"Faltó sin avisar",recupera:"Avisó · recupera",recuperando:"Vino a recuperar",lluvia:"Clase suspendida · recupera"};
 const EST_COL={vino:"var(--ok)",falto:"var(--warn)",recupera:"var(--sun)",recuperando:"var(--jump)",lluvia:"#2f5f9e"};
-async function historialDe(id){
-  const snap=await S.db.collection("asistencia").get(); const out=[];
+// Solo los últimos 4 meses (antes bajaba la asistencia de todos los días y se trababa).
+function hastaTiempo(p,ms){ return Promise.race([p,new Promise((_,no)=>setTimeout(()=>no(new Error("tiempo")),ms))]); }
+function historialDeSnap(snap,id){ const out=[];
   snap.docs.forEach(d=>{ const v=d.data(); Object.keys(v.marcas||{}).forEach(k=>{ const [aid,hora]=k.split("|"); if(aid===id) out.push({fecha:v.fecha,club:v.club,hora,estado:v.marcas[k],quien:(v.quien||{})[k]||""}); }); });
   return out.sort((x,y)=>(y.fecha+y.hora).localeCompare(x.fecha+x.hora));
 }
+function qHist(){ const d=new Date(); d.setDate(d.getDate()-120); const desde=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; return S.db.collection("asistencia").where("fecha",">=",desde); }
+async function historialDe(id){ return historialDeSnap(await hastaTiempo(qHist().get(),12000),id); }
 async function cargarHist(a){
   const el=$("#histA"); if(!el||!S.db) return;
-  try{ const h=await historialDe(a.id); if(!$("#histA")) return;
+  // Primero lo que ya está guardado en el celu (aparece al instante), después lo actualizado.
+  try{ const c=await qHist().get({source:"cache"}); if(c.size&&$("#histA")&&$("#histA").dataset.ok!=="1") pintarHist(historialDeSnap(c,a.id)); }catch(e){}
+  try{ const h=await historialDe(a.id); if(!$("#histA")) return; $("#histA").dataset.ok="1"; pintarHist(h); }
+  catch(e){ const el2=$("#histA"); if(!el2||el2.dataset.ok==="1") return; if(el2.dataset.cache==="1") return;
+    el2.innerHTML=`No se pudo cargar el historial. <button type="button" class="linkish" id="histRe">Reintentar</button>`; const b=$("#histRe"); if(b) b.onclick=()=>{ el2.innerHTML="Cargando…"; cargarHist(a); }; }
+}
+function pintarHist(h){
+  if(!$("#histA")) return;
+  { $("#histA").dataset.cache="1";
     if(!h.length){ $("#histA").innerHTML="Todavía no hay asistencias marcadas."; return; }
     const cnt=e=>h.filter(x=>x.estado===e).length;
     $("#histA").innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;color:var(--ink)"><span><b class="num">${cnt("vino")+cnt("recuperando")}</b> vino</span><span style="color:var(--warn)"><b class="num">${cnt("falto")}</b> faltó</span><span style="color:var(--sun)"><b class="num">${cnt("recupera")}</b> avisó</span></div>
       <div style="display:grid;gap:4px;max-height:220px;overflow:auto">${h.map(x=>{const d=isoDate(x.fecha); return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line-2)"><span style="color:var(--ink)"><span style="text-transform:capitalize">${DIAS[d.getDay()]}</span> ${d.getDate()}/${d.getMonth()+1} · ${x.hora}</span><span style="color:${EST_COL[x.estado]||"var(--muted)"};font-weight:700;text-align:right">${EST_TXT[x.estado]||x.estado}${x.quien?` <span class="muted" style="font-weight:500">· ${esc(x.quien)}</span>`:""}</span></div>`;}).join("")}</div>`;
-  }catch(e){ $("#histA").innerHTML="No se pudo cargar el historial."; }
+  }
 }
 async function exportAsist(){
   const m=S.asFecha.slice(0,7); const snap=await S.db.collection("asistencia").get(); const rows=[["Fecha","Club","Hora","Alumno","Estado","Marcó"]];
