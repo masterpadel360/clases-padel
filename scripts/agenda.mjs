@@ -80,7 +80,7 @@ export async function correrAgenda({ db, admin, enviar, uids, ahora, hoy, link }
       const ref = db.doc(`recordatorios/ag_${uid}_${a.key}`);
       const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp() }); return true; });
       if (!nuevo) continue;
-      await enviar(uid, { title: a.title, body: a.body, tag: a.tag, link }); n++;
+      await enviar(uid + "__agenda", { title: a.title, body: a.body, tag: a.tag, link }); n++;
     }
   }
   if (n) console.log(`Mi Agenda: ${n} avisos`);

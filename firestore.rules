@@ -207,7 +207,8 @@ service cloud.firestore {
     }
     match /tokens/{uid} {
       allow read: if tienePerfil() && (request.auth.uid == uid || uid.matches(request.auth.uid + '__.*'));
-      allow create, update: if tienePerfil() && ((request.auth.uid == uid && tokenOk()) || tokenExtraOk(uid));
+      allow create, update: if tienePerfil() && ((request.auth.uid == uid && tokenOk()) || tokenExtraOk(uid)
+        || (esDueno() && uid == request.auth.uid + '__agenda' && request.resource.data.get('rol', '') == 'agenda'));
       allow delete: if tienePerfil() && (request.auth.uid == uid || uid.matches(request.auth.uid + '__.*'));
     }
     match /recordatorios/{id} {

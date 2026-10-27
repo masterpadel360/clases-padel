@@ -263,7 +263,9 @@ async function registrarToken() {
   if (sw && sw.state !== "activated") await new Promise(ok => { const t = setTimeout(ok, 8000); sw.addEventListener("statechange", () => { if (sw.state === "activated") { clearTimeout(t); ok(); } }); });
   const token = await firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg });
   if (!token) throw new Error("sin token");
-  await db.doc("tokens/" + S.uid).set({ rol: "dueño", tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  // Mi Agenda tiene su propia lista de avisos: así acá no llegan los de las clases (ni al revés).
+  await db.doc("tokens/" + S.uid + "__agenda").set({ rol: "agenda", tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  try { await db.doc("tokens/" + S.uid).set({ tokens: firebase.firestore.FieldValue.arrayRemove(token) }, { merge: true }); } catch (e) {}
   try { localStorage.setItem("agNotif", "1"); } catch (e) {}
 }
 async function activarNotif() {
@@ -481,7 +483,7 @@ function bajarIcs(x) {
 }
 
 /* Al volver a la app (o al cambiar de día) se redibuja con la fecha nueva, y si hay versión nueva se actualiza sola */
-window.AG_V = "202610271929";
+window.AG_V = "202610272042";
 async function verVersion() {
   try { const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) return; const nv = (await r.json()).v;
     if (nv && nv !== window.AG_V && new URLSearchParams(location.search).get("v") !== nv) location.replace(location.pathname + "?v=" + nv); } catch (e) {}
