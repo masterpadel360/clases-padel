@@ -38,7 +38,7 @@ service cloud.firestore {
     }
     match /alumnos/{id} {
       allow read: if esStaff() || (esAlumno() && miAlumno() == id);
-      allow create, delete: if esStaff();
+      allow create, delete: if esDueno();
       allow update: if esStaff() || (esAlumno() && miAlumno() == id && cambioPorAviso(id));
     }
 
@@ -120,18 +120,18 @@ service cloud.firestore {
         && d.alumnoId == miAlumno() && d.uid == request.auth.uid
         && d.mes is string && d.mes.matches('^20[0-9][0-9]-(0[1-9]|1[0-2])$')
         && id == d.alumnoId + '_' + d.mes
-        && d.monto is number && d.estado == 'enviado' && d.aplicado == false && d.notificado == false
+        && d.monto is number && d.monto > 0 && d.estado == 'enviado' && d.aplicado == false && d.notificado == false
         && d.creado == request.time
         && compPrevioOk(id)
         && existsAfter(doc('fotosPago', id));
     }
     match /comprobantes/{id} {
-      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow read: if esDueno() || (esAlumno() && resource.data.alumnoId == miAlumno());
       allow create, update: if esStaff() || (esAlumno() && comprobanteOk(id));
       allow delete: if esStaff();
     }
     match /fotosPago/{id} {
-      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow read: if esDueno() || (esAlumno() && resource.data.alumnoId == miAlumno());
       allow create, update: if esStaff() || (esAlumno()
         && request.resource.data.keys().hasOnly(['alumnoId', 'mes', 'foto'])
         && request.resource.data.alumnoId == miAlumno()
@@ -149,7 +149,8 @@ service cloud.firestore {
     }
     match /publico/{id} {
       allow read: if tienePerfil();
-      allow write: if esStaff();
+      // El profe solo publica la grilla de turnos y las suspensiones; el alias y los datos de cobro, solo Gabriel.
+      allow write: if esDueno() || (esProfe() && id in ['turnos', 'suspendidas']);
     }
     // Pruebas e invitados que Gabriel suma a un turno (ocupan lugar).
     // Primer ingreso de cada alumno a la app (y si activó las notificaciones).
@@ -180,7 +181,8 @@ service cloud.firestore {
       allow read, write: if esDueno();
     }
     match /config/{id} {
-      allow read, write: if esStaff();
+      allow read: if esStaff();
+      allow write: if esDueno();
     }
     match /interesados/{id} {
       allow read, write: if esDueno();
@@ -189,8 +191,16 @@ service cloud.firestore {
       allow read, write: if esDueno() || (esProfe() && request.auth.uid == uid);
     }
     // Notificaciones: cada uno guarda sus propios códigos de aviso. Los recordatorios los maneja el proceso automático.
+    // Cada uno se anota solo con su propio rol (un alumno no puede anotarse como Gabriel ni como otro alumno).
+    function tokenOk() {
+      let d = request.resource.data;
+      return esDueno() ? d.get('rol', 'dueño') == 'dueño'
+        : (d.get('rol', '') == perfil().rol && (perfil().rol != 'alumno' || d.get('alumnoId', '') == miAlumno()));
+    }
     match /tokens/{uid} {
-      allow read, write: if tienePerfil() && request.auth.uid == uid;
+      allow read: if tienePerfil() && request.auth.uid == uid;
+      allow create, update: if tienePerfil() && request.auth.uid == uid && tokenOk();
+      allow delete: if tienePerfil() && request.auth.uid == uid;
     }
     match /recordatorios/{id} {
       allow read, write: if false;

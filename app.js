@@ -727,6 +727,7 @@ function vHoras(){
   const f=isoDate(S.horasFecha); const hd=S.horas[S.horasFecha]||0; const sug=turnosDadosJump(S.horasFecha);
   const diasMes=Object.keys(S.horas).filter(k=>k.startsWith(m)).sort().reverse();
   return `
+  ${!S.esOwner&&typeof tarjetaNotif==="function"?tarjetaNotif("profe"):""}
   ${pendientesHoy()}
   <section class="hero" aria-label="Tus horas del mes">${COURT_SVG}
     <span class="pill-date" style="justify-self:start">${mesLbl(m)} · Jump</span>
@@ -749,7 +750,7 @@ function vHoras(){
   </section>
   <section class="sec"><div class="sec-head"><h3>Cobros de tus horas</h3></div>
     ${cuentaHTML(false)}
-    <div class="field"><label for="vh2">Valor por hora</label><div style="display:flex;gap:8px"><input id="vh2" type="number" inputmode="numeric" min="0" step="500" value="${S.cfg.valorHora||""}" placeholder="Ej: 12000" style="flex:1"><button class="mini go" data-act="vhSave">Guardar</button></div><span class="small muted">Se multiplica por las horas que cargás. Cuando te pagan, tocá Marcar pagado.</span></div>
+    ${S.esOwner?`<div class="field"><label for="vh2">Valor por hora</label><div style="display:flex;gap:8px"><input id="vh2" type="number" inputmode="numeric" min="0" step="500" value="${S.cfg.valorHora||""}" placeholder="Ej: 12000" style="flex:1"><button class="mini go" data-act="vhSave">Guardar</button></div><span class="small muted">Se multiplica por las horas que cargás. Cuando te pagan, tocá Marcar pagado.</span></div>`:`<div class="field"><span class="flabel">Valor por hora</span><b class="num">${money(S.cfg.valorHora||0)}</b><span class="small muted">Lo define Gabriel. Se multiplica por las horas que cargás.</span></div>`}
   </section>
   <section class="sec"><div class="sec-head"><h3>Días cargados en ${mesSolo(m)}</h3><span class="small muted num">${diasMes.length} días</span></div>
     ${diasMes.length?`<div class="list">${diasMes.map(k=>{const d=isoDate(k); return `<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;width:100%;text-align:left" data-act="hSet" data-f="${k}"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span><span class="num" style="font-weight:700">${fmtH(S.horas[k])} h</span></button>`}).join("")}</div>`:`<div class="empty">Todavía no cargaste horas este mes. Usá los botones de arriba: cada toque suma media hora.</div>`}
@@ -772,7 +773,7 @@ function faltantes(){
   for(let k=7;k>=0;k--){ const d=new Date(now); d.setDate(d.getDate()-k); const f=toISO(d); if(f<INICIO_PROFE) continue;
     const ts=turnos("JUMP").filter(t=>t.dia===d.getDay()).sort((a,b)=>a.hora.localeCompare(b.hora)); if(!ts.length) continue;
     const mk=marcasDe(f); const esHoy=f===hoyISO;
-    const sinAsist=ts.filter(t=>!esHoy||t.hora<=hhmm).map(t=>({hora:t.hora,n:t.al.filter(a=>!mk[`${a.id}|${t.hora}`]).length})).filter(x=>x.n);
+    const sinAsist=ts.filter(t=>!esHoy||t.hora<=hhmm).map(t=>({hora:t.hora,n:t.al.filter(a=>vaEn(a,t,f)&&!(avisoApp(a.id,f,t.hora,"ausencia")&&!vuelveApp(a.id,f,t.hora))&&!mk[`${a.id}|${t.hora}`]).length})).filter(x=>x.n);
     const ultimo=ts[ts.length-1].hora; const termino=!esHoy||hhmm>=ultimo;
     const sinHoras=!S.horas[f]&&termino;
     out.push({fecha:f,esHoy,ts,sinAsist,sinHoras,termino,proximos:esHoy?ts.filter(t=>t.hora>hhmm):[]});

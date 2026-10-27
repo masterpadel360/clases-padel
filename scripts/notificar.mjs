@@ -315,7 +315,10 @@ if (alumnosConApp.length) {
       const ref = db.doc(`recordatorios/profe_${uid}_${r.f}_${r.id}`); if ((await ref.get()).exists) continue;
       if (!alumnos) alumnos = (await db.collection("alumnos").get()).docs.map(d => ({ id: d.id, ...d.data() })).filter(a => a.activo !== false);
       const dow = diaSemana(r.f); const turnos = {};
-      alumnos.forEach(a => (a.horarios || []).forEach(h => { if (h.dia === dow && clubH(a, h) === "JUMP") (turnos[h.hora] = turnos[h.hora] || []).push(a.id); }));
+      // Los que avisaron por la app que no van (y no volvieron) no hace falta marcarlos.
+      const avs = (await db.collection("avisos").where("fecha", "==", r.f).get()).docs.map(d => d.data());
+      const avisoNoVa = (id, h) => avs.some(v => v.alumnoId === id && v.hora === h && v.tipo === "ausencia") && !avs.some(v => v.alumnoId === id && v.hora === h && v.tipo === "recupera");
+      alumnos.forEach(a => { if (a.inicio && a.inicio > r.f) return; (a.horarios || []).forEach(h => { if (h.dia === dow && clubH(a, h) === "JUMP" && !(h.desde && h.desde > r.f) && !avisoNoVa(a.id, h.hora)) (turnos[h.hora] = turnos[h.hora] || []).push(a.id); }); });
       const horas = Object.keys(turnos).sort(); if (!horas.length) continue;
       const marcas = ((await db.doc(`asistencia/${r.f}_JUMP`).get()).data() || {}).marcas || {};
       const sinAsist = horas.filter(h => turnos[h].some(id => !marcas[`${id}|${h}`]));

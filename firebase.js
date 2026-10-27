@@ -194,8 +194,8 @@ async function iniciarStaff(perfil, u) {
   }
   { const d = new Date(now); d.setDate(d.getDate() - 8);
     db.collection("reemplazos").where("fecha", ">=", toISO(d)).onSnapshot(snap => { S.reemp = {}; snap.docs.forEach(x => { const r = x.data(); S.reemp[`${r.alumnoId}|${r.fecha}|${r.hora}`] = r; }); vis(); }, () => {}); }
-  db.collection("comprobantes").onSnapshot(snap => { S.comps = {}; snap.docs.forEach(d => { S.comps[d.id] = { id: d.id, ...d.data() }; }); aplicarComprobantes(); vis(); }, () => {});
-  db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; publicarTurnos(); aplicarComprobantes(); aplicarAumentosVencidos(); repararPlanes(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
+  if (S.esOwner) db.collection("comprobantes").onSnapshot(snap => { S.comps = {}; snap.docs.forEach(d => { S.comps[d.id] = { id: d.id, ...d.data() }; }); aplicarComprobantes(); vis(); }, () => {});
+  db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; if (!snap.metadata.fromCache) publicarTurnos(); aplicarComprobantes(); aplicarAumentosVencidos(); repararPlanes(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
   db.doc("config/general").onSnapshot(d => { S.cfg = d.exists ? d.data() : {}; publicarInfo(); }, () => {});
   refrescarNotif({ rol: perfil.rol });
 }
@@ -247,7 +247,7 @@ async function refrescarNotif(datos) {
 }
 function tarjetaNotif(quien) {
   const st = estadoNotif(); if (st === "off" || st === "activas") return "";
-  const para = quien === "alumno" ? "Te avisamos el día antes de cada clase, el mismo día y cuando se libera un lugar para recuperar." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
+  const para = quien === "alumno" ? "Te avisamos el día antes de cada clase, el mismo día y cuando se libera un lugar para recuperar." : quien === "profe" ? "Te llega un aviso cuando un alumno de Jump cancela o reserva, y un recordatorio si te falta cargar asistencia u horas." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
   if (st === "instalar") return `<div class="msg notif-card" style="gap:8px"><div class="msg-k"><b>Activá las notificaciones</b></div>
     <span class="small">${para} En iPhone primero hay que instalar la app:</span>
     <ol class="small" style="margin:0;padding-left:18px;line-height:1.6"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b> acá</li></ol></div>`;
