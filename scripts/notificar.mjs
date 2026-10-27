@@ -48,7 +48,7 @@ async function enviar(uid, { title, body, tag, link }) {
     if (!ok) continue;
     const l = d.data(); const cuando = l.fecha === hoy ? "de hoy" : `del ${fechaTxt(l.fecha).replace(/^el /, "")}`;
     let n = 0;
-    for (const aid of l.alumnos || []) for (const uid of porAlumno[aid] || []) n += await enviar(uid, { title: `🌧 Se suspendió tu clase ${cuando} ${l.hora}`, body: `Por lluvia. Te queda una clase para recuperar: reservala desde la app cuando quieras.`, tag: "lluvia" });
+    for (const aid of l.alumnos || []) for (const uid of porAlumno[aid] || []) n += await enviar(uid, { title: `🌧 Se suspendió tu clase ${cuando} ${l.hora}`, body: `Por lluvia. Te queda una clase para recuperar: reservala desde la app cuando quieras.`, tag: "lluvia-" + aid });
     console.log(`Lluvia ${l.fecha} ${l.hora} ${l.club}: ${n} notificaciones`);
   }
 }
@@ -65,7 +65,7 @@ async function enviar(uid, { title, body, tag, link }) {
       its.sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
       const txt = its.map(it => `${it.fecha === hoy ? "hoy" : fechaTxt(it.fecha).replace(/^el /, "")} ${it.hora}`);
       const lista = txt.length > 1 ? txt.slice(0, -1).join(", ") + " y " + txt[txt.length - 1] : txt[0];
-      for (const uid of porAlumno[aid] || []) n += await enviar(uid, { title: its.length > 1 ? "📢 Se suspenden tus clases" : `📢 No hay clase ${lista}`, body: `${its.length > 1 ? `No hay clases ${lista}. Te quedan` : "Se suspende tu clase. Te queda"} para recuperar: reservá otro horario desde la app.`, tag: "suspension" });
+      for (const uid of porAlumno[aid] || []) n += await enviar(uid, { title: its.length > 1 ? "📢 Se suspenden tus clases" : `📢 No hay clase ${lista}`, body: `${its.length > 1 ? `No hay clases ${lista}. Te quedan` : "Se suspende tu clase. Te queda"} para recuperar: reservá otro horario desde la app.`, tag: "suspension-" + aid });
     }
     console.log(`Suspensión ${d.id}: ${n} notificaciones`);
   }
@@ -236,8 +236,8 @@ if (alumnosConApp.length) {
         const id1 = `aum_${a.id}_${px.desde}_${px.precio}`;
         const [yy, mm] = px.desde.split("-").map(Number); const mesAntes = `${mm === 1 ? yy - 1 : yy}-${pad(mm === 1 ? 12 : mm - 1)}`;
         const id2 = `aum2_${a.id}_${px.desde}_${px.precio}`;
-        if (!(await yaEnviado(id1))) await mandar(id1, { title: `Nuevo precio desde ${MN}`, body: `${nombre}, desde ${MN} la clase pasa a ${plata(px.precio)}. Hasta entonces seguís pagando ${plata(px.antes || a.precioClase)}.`, tag: "aumento" });
-        else if (act === mesAntes && Number(hoy.slice(8)) >= 20 && !(await yaEnviado(id2))) await mandar(id2, { title: `Recordatorio: desde ${MN} cambia el precio`, body: `${nombre}, desde el 1 de ${MN} la clase pasa a ${plata(px.precio)}.`, tag: "aumento" });
+        if (!(await yaEnviado(id1))) await mandar(id1, { title: `Nuevo precio desde ${MN}`, body: `${nombre}, desde ${MN} la clase pasa a ${plata(px.precio)}. Hasta entonces seguís pagando ${plata(px.antes || a.precioClase)}.`, tag: "aumento-" + a.id });
+        else if (act === mesAntes && Number(hoy.slice(8)) >= 20 && !(await yaEnviado(id2))) await mandar(id2, { title: `Recordatorio: desde ${MN} cambia el precio`, body: `${nombre}, desde el 1 de ${MN} la clase pasa a ${plata(px.precio)}.`, tag: "aumento-" + a.id });
       }
     }
 
@@ -253,7 +253,7 @@ if (alumnosConApp.length) {
         const idP = `pago_${a.id}_${mesAct}_${dia}`;
         if (!(await yaEnviado(idP))) {
           const comp = (await db.doc(`comprobantes/${a.id}_${mesAct}`).get()).data();
-          if (!(comp && comp.estado === "enviado")) await mandar(idP, { ...PAGO, tag: "pago" });
+          if (!(comp && comp.estado === "enviado")) await mandar(idP, { ...PAGO, tag: "pago-" + a.id });
         }
       }
     }
@@ -266,7 +266,7 @@ if (alumnosConApp.length) {
       const id = `${a.id}_${f}_${hhmm(c.hora)}_dia`; if (await yaEnviado(id)) continue;
       await mandar(id, { title: "Mañana tenés pádel 🎾", body: c.tipo === "recupera"
         ? `${nombre}, mañana a las ${c.hora} recuperás en ${lugarTxt(c.club)}. Si no venís, la perdés.`
-        : `${nombre}, mañana a las ${c.hora} en ${lugarTxt(c.club)}. Si no podés venir, avisá ahora en la app y la recuperás.`, tag: "dia-antes" });
+        : `${nombre}, mañana a las ${c.hora} en ${lugarTxt(c.club)}. Si no podés venir, avisá ahora en la app y la recuperás.`, tag: "dia-antes-" + a.id });
     }
     // El mismo día, 3 horas antes. Si tiene clases para recuperar y hay lugar en la hora siguiente, se lo ofrece.
     for (const c of clasesDelDia(a, hoy, avisos)) {
@@ -278,13 +278,13 @@ if (alumnosConApp.length) {
       const sig = masUnaHora(c.hora); const ts = sig && turnos[`${c.club}|${diaSemana(hoy)}|${sig}`]; const cats = catsDe(a);
       if (nRec > 0 && ts && (!cats.size || (ts.nivel && cats.has(catNorm(ts.nivel)))) && libres(turnos, cupos, cupo, c.club, hoy, sig) > 0 && !suspendida(c.club, hoy, sig) && !(a.horarios || []).some(h => h.hora === sig && h.dia === diaSemana(hoy)))
         extra = ` ¿Te quedás? A las ${sig} hay lugar para recuperar una clase: reservalo en la app.`;
-      await mandar(id, { title: "Hoy tenés pádel 🎾", body: `${nombre}, te esperamos a las ${c.hora} en ${lugarTxt(c.club)}${c.tipo === "recupera" ? " (recuperación)" : ""}.${extra}`, tag: "recordatorio" });
+      await mandar(id, { title: "Hoy tenés pádel 🎾", body: `${nombre}, te esperamos a las ${c.hora} en ${lugarTxt(c.club)}${c.tipo === "recupera" ? " (recuperación)" : ""}.${extra}`, tag: "recordatorio-" + a.id });
     }
     if (!nRec || horaAR < 10 || horaAR >= 20) continue;
     // Se le vencen en 3 días o menos (una vez por fecha de vencimiento).
     const proxV = vences.find(k => k <= sumarDias(hoy, 3));
     if (proxV) { const id = `venc_${a.id}_${proxV}`;
-      if (!(await yaEnviado(id))) await mandar(id, { title: "Se te vencen clases para recuperar ⏳", body: `${nombre}, tenés ${rec.recVence[proxV]} clase${rec.recVence[proxV] > 1 ? "s" : ""} para recuperar hasta el ${diaDM(proxV)}. Después se pierde${rec.recVence[proxV] > 1 ? "n" : ""}: reservá en la app.`, tag: "recuperar" }); }
+      if (!(await yaEnviado(id))) await mandar(id, { title: "Se te vencen clases para recuperar ⏳", body: `${nombre}, tenés ${rec.recVence[proxV]} clase${rec.recVence[proxV] > 1 ? "s" : ""} para recuperar hasta el ${diaDM(proxV)}. Después se pierde${rec.recVence[proxV] > 1 ? "n" : ""}: reservá en la app.`, tag: "recuperar-" + a.id }); }
     // Días que no entrena: si hoy hay lugar para recuperar, avisarle (máximo 3 por semana).
     if ((a.horarios || []).some(h => h.dia === diaSemana(hoy))) continue;
     const idHoy = `rec_${a.id}_${hoy}`; if (await yaEnviado(idHoy)) continue;
@@ -295,7 +295,7 @@ if (alumnosConApp.length) {
     if (yaSemana >= 3) continue;
     const horas = [...new Set(ops.map(o => o.hora))].slice(0, 3); const clubs = [...new Set(ops.map(o => lugarTxt(o.club)))];
     const lista = horas.length > 1 ? horas.slice(0, -1).join(", ") + " y " + horas[horas.length - 1] : horas[0];
-    await mandar(idHoy, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, hoy hay lugar a las ${lista} en ${clubs.join(" y ")}. Recuperá antes del ${diaDM(vences[0])}: reservá en la app.`, tag: "recuperar" });
+    await mandar(idHoy, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, hoy hay lugar a las ${lista} en ${clubs.join(" y ")}. Recuperá antes del ${diaDM(vences[0])}: reservá en la app.`, tag: "recuperar-" + a.id });
     } catch (e) { console.log("Aviso a alumno", t.alumnoId, e && e.message); }
   }
   console.log(`Avisos a alumnos: ${enviados}`);

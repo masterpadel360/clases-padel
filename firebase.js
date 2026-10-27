@@ -108,7 +108,7 @@ async function salir() { try { Object.keys(localStorage).filter(k => k.startsWit
     try { guardado = JSON.parse(localStorage.getItem(PK) || "null"); } catch (e) {}
     const leer = async () => { try { const d = await fdb.doc("usuarios/" + u.uid).get(); const v = d.exists ? d.data() : null; try { v ? localStorage.setItem(PK, JSON.stringify(v)) : localStorage.removeItem(PK); } catch (e) {} return v; } catch (e) { return undefined; } };
     if (guardado && guardado.rol === "alumno" && guardado.alumnoId) {
-      leer().then(async v => { if (v === null || (v && (v.rol !== "alumno" || v.alumnoId !== guardado.alumnoId))) { try { localStorage.removeItem(PK); } catch (e) {} location.reload(); } });
+      leer().then(async v => { if (v === null || (v && (v.rol !== "alumno" || v.alumnoId !== guardado.alumnoId || JSON.stringify(v.alumnos || []) !== JSON.stringify(guardado.alumnos || [])))) { try { localStorage.removeItem(PK); } catch (e) {} location.reload(); } });
       return iniciarPortal(guardado, u);
     }
     let p = await leer();
@@ -229,6 +229,9 @@ async function activarNotificaciones(datos) {
   try { token = await Promise.race([firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg }), new Promise((_, no) => setTimeout(() => no({ code: "lento" }), 20000))]); }
   catch (e) { console.error(e); throw { code: "token", detalle: e && (e.code || e.message) }; }
   if (!token) throw { code: "sin-token" };
+  // Si la cuenta maneja a otro alumno (hijo, familiar), también se anota para sus avisos.
+  const extra = (datos && datos.extra) || []; datos = { ...datos }; delete datos.extra;
+  for (const aid of extra) { try { await fdb.doc("tokens/" + fauth.currentUser.uid + "__" + aid).set({ rol: "alumno", alumnoId: aid, tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); } catch (e) { console.error(e); } }
   try { await fdb.doc("tokens/" + fauth.currentUser.uid).set({ ...datos, tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); }
   catch (e) { console.error(e); throw { code: "guardar", detalle: e && (e.code || e.message) }; }
   try { localStorage.setItem("notifOK", "1"); } catch (e) {}

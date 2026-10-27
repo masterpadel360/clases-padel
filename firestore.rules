@@ -15,6 +15,9 @@ service cloud.firestore {
     function esStaff() { return esDueno() || esProfe(); }
     function esAlumno() { return signed() && exists(rutaPerfil()) && perfil().rol == 'alumno'; }
     function miAlumno() { return perfil().alumnoId; }
+    // Una cuenta puede manejar a más de un alumno (por ejemplo una mamá con su hijo): 'alumnos' en usuarios/{uid}.
+    function misAlumnos() { return perfil().get('alumnos', []).concat([perfil().alumnoId]); }
+    function esMio(id) { return esAlumno() && id in misAlumnos(); }
     function doc(col, id) { return /databases/$(database)/documents/$(col)/$(id); }
 
     // ---------- Usuarios (accesos) ----------
@@ -37,9 +40,9 @@ service cloud.firestore {
           || (av.tipo == 'recupera' && o.get('recuperar', 0) >= 1 && d.recuperar == o.get('recuperar', 0) - 1));
     }
     match /alumnos/{id} {
-      allow read: if esStaff() || (esAlumno() && miAlumno() == id);
+      allow read: if esStaff() || esMio(id);
       allow create, delete: if esDueno();
-      allow update: if esStaff() || (esAlumno() && miAlumno() == id && cambioPorAviso(id));
+      allow update: if esStaff() || (esMio(id) && cambioPorAviso(id));
     }
 
     // ---------- Avisos: "no voy" y reservas para recuperar ----------
@@ -50,7 +53,7 @@ service cloud.firestore {
     }
     function avisoValido(id) {
       let d = request.resource.data;
-      return d.alumnoId == miAlumno() && d.uid == request.auth.uid
+      return esMio(d.alumnoId) && d.uid == request.auth.uid
         && d.tipo in ['ausencia', 'recupera']
         && id == d.alumnoId + '_' + d.fecha + '_' + d.hhmm + '_' + d.tipo
         && d.inicio is timestamp && d.inicio > request.time
@@ -63,15 +66,15 @@ service cloud.firestore {
     }
     // ---------- Pedidos de alumnos para sumar un día ----------
     match /solicitudes/{id} {
-      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
-      allow create: if esAlumno() && request.resource.data.alumnoId == miAlumno()
+      allow read: if esStaff() || esMio(resource.data.alumnoId);
+      allow create: if esAlumno() && esMio(request.resource.data.alumnoId)
         && request.resource.data.estado == 'pendiente' && request.resource.data.notificado == false
         && request.resource.data.keys().hasOnly(['alumnoId','nombre','club','dia','hora','nivel','estado','notificado','creado']);
       allow update: if esStaff();
-      allow delete: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow delete: if esStaff() || esMio(resource.data.alumnoId);
     }
     match /avisos/{id} {
-      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow read: if esStaff() || esMio(resource.data.alumnoId);
       allow create: if esStaff() || (esAlumno() && avisoValido(id));
       allow update, delete: if esStaff();
     }
@@ -81,7 +84,7 @@ service cloud.firestore {
       let d = request.resource.data;
       let o = resource == null ? {'aus': 0, 'rec': 0} : resource.data;
       let av = getAfter(doc('avisos', d.ultimo)).data;
-      return !exists(doc('avisos', d.ultimo)) && av.alumnoId == miAlumno()
+      return !exists(doc('avisos', d.ultimo)) && esMio(av.alumnoId)
         && ((av.tipo == 'ausencia' && d.aus == o.get('aus', 0) + 1 && d.rec == o.get('rec', 0))
           || (av.tipo == 'recupera' && d.rec == o.get('rec', 0) + 1 && d.aus == o.get('aus', 0)));
     }
@@ -96,17 +99,17 @@ service cloud.firestore {
     function reemplazoOk(id) {
       let d = request.resource.data;
       return d.keys().hasOnly(['alumnoId', 'uid', 'nombre', 'quien', 'fecha', 'hora', 'hhmm', 'club', 'inicio', 'creado', 'notificado'])
-        && d.alumnoId == miAlumno() && d.uid == request.auth.uid
+        && esMio(d.alumnoId) && d.uid == request.auth.uid
         && id == d.alumnoId + '_' + d.fecha + '_' + d.hhmm
         && d.quien is string && d.quien.size() >= 2 && d.quien.size() <= 40
         && d.inicio is timestamp && d.inicio > request.time
         && d.creado == request.time && d.notificado == false;
     }
     match /reemplazos/{id} {
-      allow read: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow read: if esStaff() || esMio(resource.data.alumnoId);
       allow create: if esStaff() || (esAlumno() && reemplazoOk(id));
       allow update: if esStaff();
-      allow delete: if esStaff() || (esAlumno() && resource.data.alumnoId == miAlumno() && resource.data.inicio > request.time);
+      allow delete: if esStaff() || (esMio(resource.data.alumnoId) && resource.data.inicio > request.time);
     }
 
     // ---------- Pagos: el alumno sube el comprobante y el mes queda pagado ----------
@@ -117,7 +120,7 @@ service cloud.firestore {
     function comprobanteOk(id) {
       let d = request.resource.data;
       return d.keys().hasOnly(['alumnoId', 'uid', 'nombre', 'mes', 'monto', 'estado', 'aplicado', 'notificado', 'creado'])
-        && d.alumnoId == miAlumno() && d.uid == request.auth.uid
+        && esMio(d.alumnoId) && d.uid == request.auth.uid
         && d.mes is string && d.mes.matches('^20[0-9][0-9]-(0[1-9]|1[0-2])$')
         && id == d.alumnoId + '_' + d.mes
         && d.monto is number && d.monto > 0 && d.estado == 'enviado' && d.aplicado == false && d.notificado == false
@@ -126,19 +129,19 @@ service cloud.firestore {
         && existsAfter(doc('fotosPago', id));
     }
     match /comprobantes/{id} {
-      allow read: if esDueno() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow read: if esDueno() || esMio(resource.data.alumnoId);
       allow create, update: if esStaff() || (esAlumno() && comprobanteOk(id));
       allow delete: if esStaff();
     }
     match /fotosPago/{id} {
-      allow read: if esDueno() || (esAlumno() && resource.data.alumnoId == miAlumno());
+      allow read: if esDueno() || esMio(resource.data.alumnoId);
       allow create, update: if esStaff() || (esAlumno()
         && request.resource.data.keys().hasOnly(['alumnoId', 'mes', 'foto'])
-        && request.resource.data.alumnoId == miAlumno()
-        && id == miAlumno() + '_' + request.resource.data.mes
+        && esMio(request.resource.data.alumnoId)
+        && id == request.resource.data.alumnoId + '_' + request.resource.data.mes
         && request.resource.data.foto is string && request.resource.data.foto.size() < 750000
         && compPrevioOk(id)
-        && getAfter(doc('comprobantes', id)).data.alumnoId == miAlumno());
+        && getAfter(doc('comprobantes', id)).data.alumnoId == request.resource.data.alumnoId);
       allow delete: if esStaff();
     }
 
@@ -156,10 +159,10 @@ service cloud.firestore {
     // Primer ingreso de cada alumno a la app (y si activó las notificaciones).
     match /ingresos/{uid} {
       allow read: if esStaff() || (esAlumno() && request.auth.uid == uid);
-      allow create: if esAlumno() && request.auth.uid == uid && request.resource.data.alumnoId == miAlumno()
+      allow create: if esAlumno() && request.auth.uid == uid && esMio(request.resource.data.alumnoId)
         && request.resource.data.notificado == false
         && request.resource.data.keys().hasOnly(['alumnoId', 'nombre', 'primera', 'ultimo', 'notif', 'notificado']);
-      allow update: if esAlumno() && request.auth.uid == uid && request.resource.data.alumnoId == miAlumno()
+      allow update: if esAlumno() && request.auth.uid == uid && esMio(request.resource.data.alumnoId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ultimo', 'notif', 'nombre']);
     }
     match /staffAvisos/{id} {
@@ -197,10 +200,15 @@ service cloud.firestore {
       return esDueno() ? d.get('rol', 'dueño') == 'dueño'
         : (d.get('rol', '') == perfil().rol && (perfil().rol != 'alumno' || d.get('alumnoId', '') == miAlumno()));
     }
+    // Avisos de otro alumno que maneja la misma cuenta (tokens/{uid}__{alumnoId}).
+    function tokenExtraOk(tid) {
+      let d = request.resource.data;
+      return esAlumno() && d.get('rol', '') == 'alumno' && esMio(d.get('alumnoId', '')) && tid == request.auth.uid + '__' + d.alumnoId;
+    }
     match /tokens/{uid} {
-      allow read: if tienePerfil() && request.auth.uid == uid;
-      allow create, update: if tienePerfil() && request.auth.uid == uid && tokenOk();
-      allow delete: if tienePerfil() && request.auth.uid == uid;
+      allow read: if tienePerfil() && (request.auth.uid == uid || uid.matches(request.auth.uid + '__.*'));
+      allow create, update: if tienePerfil() && ((request.auth.uid == uid && tokenOk()) || tokenExtraOk(uid));
+      allow delete: if tienePerfil() && (request.auth.uid == uid || uid.matches(request.auth.uid + '__.*'));
     }
     match /recordatorios/{id} {
       allow read, write: if false;

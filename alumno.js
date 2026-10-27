@@ -30,8 +30,15 @@ function pedirNotifAlEntrar() {
 // Le pide al servidor que le avise a Gabriel ya mismo (si no responde, sale igual en el próximo envío automático).
 function avisarAlInstante() { if (!window.AVISOS_URL) return; try { fetch(window.AVISOS_URL, { method: "POST", keepalive: true }).catch(() => {}); } catch (e) {} }
 
+// Cuentas que manejan a más de un alumno (por ejemplo Carla y su hijo Frank): se elige cuál se ve.
+const KSEL = uid => "alumnoSel_" + uid;
+function datosNotif() { const pr = P.perfil.alumnoPrincipal || P.perfil.alumnoId; return { rol: "alumno", alumnoId: pr, extra: (P.lista || []).filter(x => x !== pr) }; }
 function iniciarPortal(perfil, u) {
+  P.lista = [...new Set([perfil.alumnoId, ...(perfil.alumnos || [])])].filter(Boolean);
+  { let sel = null; try { sel = localStorage.getItem(KSEL(u.uid)); } catch (e) {}
+    if (sel && sel !== perfil.alumnoId && P.lista.includes(sel)) perfil = { ...perfil, alumnoPrincipal: perfil.alumnoId, alumnoId: sel }; }
   P.perfil = perfil; P.uid = u.uid;
+  if (P.lista.length > 1) setTimeout(() => barraCuentas(u.uid), 0);
   document.getElementById("login").hidden = true; document.getElementById("portal").hidden = false;
   const id = perfil.alumnoId;
   // Abre al instante con lo último que se vio en este celu; después se actualiza solo con lo nuevo.
@@ -43,7 +50,7 @@ function iniciarPortal(perfil, u) {
   // Si la primera vez tarda mucho (mala señal), ofrecemos reintentar en vez de quedar trabado.
   setTimeout(() => { if (!P.cargado) { const v = $("#pView"); if (v) v.innerHTML = `<div class="notice" style="display:grid;gap:10px">Está tardando en cargar. Revisá la conexión.<button class="btn pri" onclick="location.reload()" style="justify-self:start">Reintentar</button></div>`; } }, 8000);
   fdb.doc("alumnos/" + id).onSnapshot(d => { if (!d.exists && d.metadata && d.metadata.fromCache && !P.a) return; P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
-  refrescarNotif({ rol: "alumno", alumnoId: id });
+  refrescarNotif(datosNotif());
   setTimeout(() => registrarIngreso(), 2500);
   setTimeout(pedirNotifAlEntrar, 700);
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
@@ -58,6 +65,18 @@ function iniciarPortal(perfil, u) {
     fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
 }
 
+async function barraCuentas(uid) {
+  const top = document.querySelector("#portal header.top"); if (!top || document.getElementById("pCuentas")) return;
+  const NK = "nombresCuentas_" + uid; let nombres = {}; try { nombres = JSON.parse(localStorage.getItem(NK) || "{}"); } catch (e) {}
+  const bar = document.createElement("div"); bar.id = "pCuentas"; bar.className = "cuentas"; bar.setAttribute("role", "tablist"); bar.setAttribute("aria-label", "Ver las clases de");
+  const pintar = () => { bar.innerHTML = P.lista.map(id => `<button type="button" role="tab" data-cuenta="${esc(id)}" aria-selected="${id === P.perfil.alumnoId}">${esc((nombres[id] || "…").split(/\s+/)[0])}</button>`).join(""); };
+  pintar(); top.appendChild(bar);
+  bar.addEventListener("click", e => { const b = e.target.closest("[data-cuenta]"); if (!b || b.dataset.cuenta === P.perfil.alumnoId || P.ocupado) return;
+    try { localStorage.setItem(KSEL(uid), b.dataset.cuenta); } catch (x) {} bar.querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x === b)); location.reload(); });
+  for (const id of P.lista) { try { const d = await fdb.doc("alumnos/" + id).get(); if (d.exists) nombres[id] = d.data().nombre || ""; } catch (e) {} }
+  try { localStorage.setItem(NK, JSON.stringify(nombres)); } catch (e) {} pintar();
+}
+
 // Le avisa a Gabriel la primera vez que el alumno entra, y guarda si tiene las notificaciones activas.
 let ingresoHecho = false;
 async function registrarIngreso(forzar) {
@@ -66,7 +85,7 @@ async function registrarIngreso(forzar) {
   const nombre = (P.a && P.a.nombre) || P.perfil.nombre || "";
   try {
     const d = await ref.get();
-    if (!d.exists) { await ref.set({ alumnoId: P.perfil.alumnoId, nombre, primera: firebase.firestore.FieldValue.serverTimestamp(), ultimo: firebase.firestore.FieldValue.serverTimestamp(), notif, notificado: false }); avisarAlInstante(); }
+    if (!d.exists) { await ref.set({ alumnoId: P.perfil.alumnoPrincipal || P.perfil.alumnoId, nombre, primera: firebase.firestore.FieldValue.serverTimestamp(), ultimo: firebase.firestore.FieldValue.serverTimestamp(), notif, notificado: false }); avisarAlInstante(); }
     else { const v = d.data(); const viejo = !v.ultimo || !v.ultimo.toDate || Date.now() - v.ultimo.toDate().getTime() > 6 * 3600e3; if (forzar || viejo || v.notif !== notif) await ref.update({ ultimo: firebase.firestore.FieldValue.serverTimestamp(), notif, nombre }); }
   } catch (e) { console.error(e); }
 }
@@ -511,7 +530,7 @@ document.addEventListener("click", async e => {
   if (pa === "viaje") { abrirViaje(); return; }
   if (pa === "vjModo") { const d = ($("#vjD") || {}).value; abrirViaje(b.dataset.m); if (d) { $("#vjD").value = d; viajePrev(); } return; }
   if (pa === "viajeOk") { const sel = clasesViaje().map(c => ({ f: c.fecha, h: c.hora })); if (!sel.length) return; await avisarLista(b, sel); return; }
-  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones({ rol: "alumno", alumnoId: P.perfil.alumnoId }); registrarIngreso(true); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
+  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones(datosNotif()); registrarIngreso(true); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {

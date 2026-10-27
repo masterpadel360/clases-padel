@@ -45,9 +45,33 @@ function avisosHoyHTML() {
 }
 
 /* ---------- Accesos ---------- */
+// Un alumno puede manejarse desde la cuenta de otro (por ejemplo Frank, de 9 años, desde la cuenta de su mamá Carla).
+function nombreManeja(a) { const p = S.alumnos.find(x => x.id === a.manejaId) || S.alumnos.find(x => x.uid && x.uid === a.manejaUid); return (p && p.nombre) || "otra cuenta"; }
+function manejaHTML(a) {
+  const hijos = S.alumnos.filter(x => x.manejaUid && a.uid && x.manejaUid === a.uid);
+  if (a.manejaUid) return `<div class="field"><span class="flabel">Lo maneja otra cuenta</span><span class="small">Entra desde la cuenta de <b>${esc(nombreManeja(a))}</b> y cambia entre los dos arriba de la app. Le llegan los avisos de ${esc(nombreCorto(a.nombre))} a ese celu.</span><button type="button" class="linkish" data-act="accDesvincular" data-id="${a.id}" style="justify-self:start">Desvincular</button></div>`;
+  const ops = S.alumnos.filter(x => x.id !== a.id && x.uid && x.usuario && x.activo !== false && !x.manejaUid).sort((x, y) => x.nombre.localeCompare(y.nombre));
+  return `${hijos.length ? `<div class="field"><span class="flabel">También maneja</span><span class="small">${esc(hijos.map(x => x.nombre).join(", "))}</span></div>` : ""}
+    ${a.usuario ? "" : `<div class="field"><label class="flabel" for="accManeja">¿Lo maneja otra persona? (hijos, familia)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="accManeja" style="flex:1;min-width:0"><option value="">Elegí quién lo maneja…</option>${ops.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join("")}</select><button type="button" class="mini go" data-act="accVincular" data-id="${a.id}">Vincular</button></div><span class="small muted">Sirve para chicos: usa la misma app y el mismo usuario que esa persona.</span></div>`}`;
+}
+async function vincularManeja(a, pid) {
+  const p = S.alumnos.find(x => x.id === pid); if (!p || !p.uid) { toast("Esa persona todavía no tiene acceso a la app. Creáselo primero."); return false; }
+  const FV = firebase.firestore.FieldValue; const bt = fdb.batch();
+  bt.set(fdb.doc("usuarios/" + p.uid), { alumnos: FV.arrayUnion(a.id) }, { merge: true });
+  bt.set(fdb.doc("alumnos/" + a.id), { manejaUid: p.uid, manejaId: p.id }, { merge: true });
+  try { await bt.commit(); a.manejaUid = p.uid; a.manejaId = p.id; toast(`Listo: ${nombreCorto(p.nombre)} ve también las clases de ${nombreCorto(a.nombre)}`); return true; }
+  catch (e) { console.error(e); toast("No se pudo vincular. Probá de nuevo."); return false; }
+}
+async function desvincularManeja(a) {
+  const FV = firebase.firestore.FieldValue; const bt = fdb.batch();
+  if (a.manejaUid) bt.set(fdb.doc("usuarios/" + a.manejaUid), { alumnos: FV.arrayRemove(a.id) }, { merge: true });
+  bt.set(fdb.doc("alumnos/" + a.id), { manejaUid: FV.delete(), manejaId: FV.delete() }, { merge: true });
+  try { await bt.commit(); delete a.manejaUid; delete a.manejaId; toast("Desvinculado"); return true; } catch (e) { console.error(e); toast("No se pudo desvincular."); return false; }
+}
 function accesoHTML(a) {
   if (!S.esOwner) return "";
-  return `<div class="field"><span class="flabel">Acceso a la app del alumno</span>${a.usuario
+  if (a.manejaUid) return manejaHTML(a);
+  return manejaHTML(a) + `<div class="field"><span class="flabel">Acceso a la app del alumno</span>${a.usuario
     ? `<span class="small">Usuario: <b>${esc(a.usuario)}</b> <span class="muted">(lo puede cambiar desde su app, en Mi cuenta)</span></span><span class="small muted">Si se olvidó la contraseña, generale una nueva y se la mandás por WhatsApp.</span><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="mini go" data-act="accClave" data-uid="${a.uid || ""}" data-id="${a.id}">Contraseña nueva</button><button type="button" class="linkish" style="font-size:12px" data-act="accesoCrear" data-id="${a.id}">Crear un acceso nuevo de cero</button></div>`
     : `<span class="small muted">Con un usuario y contraseña ve sus clases, asistencia y pagos, avisa si no va y reserva para recuperar.</span><button type="button" class="mini go" data-act="accesoCrear" data-id="${a.id}" style="justify-self:start">Crear acceso</button>`}</div>`;
 }
@@ -64,8 +88,10 @@ async function accesoRapido(a) {
     catch (x) { if (x && x.code === "auth/email-already-in-use") { usuario = `${base}.${i + 2}`; continue; } throw x; }
   }
   if (!uid) throw { code: "auth/email-already-in-use" };
+  const otros = a.uid ? ((S.usuarios || []).find(x => x.id === a.uid) || {}).alumnos || [] : [];
   if (a.uid) { try { await fdb.doc("usuarios/" + a.uid).delete(); } catch (x) {} }
-  await fdb.doc("usuarios/" + uid).set({ rol: "alumno", alumnoId: a.id, usuario, nombre: a.nombre, alta: hoyISO });
+  await fdb.doc("usuarios/" + uid).set({ rol: "alumno", alumnoId: a.id, usuario, nombre: a.nombre, alta: hoyISO, ...(otros.length ? { alumnos: otros } : {}) });
+  for (const oid of otros) { try { await fdb.doc("alumnos/" + oid).set({ manejaUid: uid }, { merge: true }); } catch (x) {} }
   await fdb.doc("alumnos/" + a.id).set({ uid, usuario }, { merge: true }); a.uid = uid; a.usuario = usuario;
   return { usuario, clave };
 }
@@ -77,12 +103,13 @@ function filaAcceso(a) {
   if (h) { const txt = msgAcceso(a.nombre, h.usuario, h.clave, a); const url = waURL(a.tel, txt);
     acc = `${url ? `<a class="mini go" href="${url}" target="_blank" rel="noopener" data-accwa="${a.id}">${h.mandado ? "✓ Mandado" : "WhatsApp →"}</a>` : ""}<button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button>`; }
   else if (a.usuario) acc = `<span class="small muted">Ya tiene: ${esc(a.usuario)}</span>`;
+  else if (a.manejaUid) acc = `<span class="small muted">Lo maneja ${esc(nombreManeja(a))}</span>`;
   else acc = `<button class="mini go" data-act="accRapido" data-id="${a.id}">Crear acceso</button>`;
   return `<div class="row" data-k="acc-${a.id}" id="acc-${a.id}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${meta}${h ? `<span>Usuario <b>${esc(h.usuario)}</b> · clave <b>${esc(h.clave)}</b></span>` : ""}</span></span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${acc}</span></div>`;
 }
 function openAccesosMasivo() {
   const al = S.alumnos.filter(a => a.activo !== false && enClub(a, S.club)).sort((x, y) => (!!x.usuario - !!y.usuario) || x.nombre.localeCompare(y.nombre));
-  const sin = al.filter(a => !a.usuario && !ACC_HECHO[a.id]).length;
+  const sin = al.filter(a => !a.usuario && !a.manejaUid && !ACC_HECHO[a.id]).length;
   openSheet(`<div style="display:grid;gap:12px">
     <div style="display:grid;gap:4px"><span class="flabel">App de los alumnos</span><h2 class="disp">Mandar accesos</h2>
       <span class="small muted">Tocá <b>Crear acceso</b> y después <b>WhatsApp</b>: le llega el link, su usuario y contraseña${al.some(a => recN(a)) ? ", las clases que tiene para recuperar" : ""} y cómo funciona desde noviembre. ${sin} sin acceso.</span>
@@ -119,8 +146,10 @@ document.addEventListener("submit", async e => {
   try {
     const uid = await crearCuenta(usuario, clave);
     if (tipo === "alumno") {
+      const otros = a.uid ? ((S.usuarios || []).find(x => x.id === a.uid) || {}).alumnos || [] : [];
       if (a.uid) { try { await fdb.doc("usuarios/" + a.uid).delete(); } catch (x) {} }
-      await fdb.doc("usuarios/" + uid).set({ rol: "alumno", alumnoId: a.id, usuario, nombre: a.nombre, alta: hoyISO });
+      await fdb.doc("usuarios/" + uid).set({ rol: "alumno", alumnoId: a.id, usuario, nombre: a.nombre, alta: hoyISO, ...(otros.length ? { alumnos: otros } : {}) });
+      for (const oid of otros) { try { await fdb.doc("alumnos/" + oid).set({ manejaUid: uid }, { merge: true }); } catch (x) {} }
       await fdb.doc("alumnos/" + a.id).set({ uid, usuario }, { merge: true });
       const txt = msgAcceso(a.nombre, usuario, clave, a); const url = waURL(a.tel, txt);
       openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Acceso creado</span><h2 class="disp">${esc(a.nombre)}</h2></div>
@@ -143,7 +172,7 @@ document.addEventListener("submit", async e => {
 /* ---------- Ajustes extra ---------- */
 function cfgExtraHTML() {
   const profes = S.usuarios.filter(u => u.rol === "profe");
-  const conAcceso = S.alumnos.filter(a => a.usuario).length;
+  const conAcceso = S.alumnos.filter(a => a.usuario || a.manejaUid).length;
   return `<div class="msg" style="gap:10px"><div class="msg-k"><b>App de los alumnos</b></div>
       <span class="small">Link para mandarles: <b>${esc(LINK_APP)}</b></span>
       <span class="small muted">${conAcceso} de ${S.alumnos.filter(a => a.activo !== false).length} alumnos tienen acceso.</span><button type="button" class="mini go" data-act="accMasivo" style="justify-self:start">Mandar accesos a los alumnos</button>
@@ -181,6 +210,8 @@ window.accionExtra = async (act, b, A) => {
       try { const bt = fdb.batch(); ids.forEach(id => bt.update(fdb.doc("avisos/" + id), { visto: true })); await bt.commit(); } catch (e) {} break; }
     case "asRecApp": if (A) { S.asMarcas[`${A.id}|${b.dataset.hora}`] = "recuperando"; render(); if (await guardarAsist()) { toast(`${A.nombre} vino a recuperar`); avisarDueno(`${nomProfe()}: ${A.nombre} vino a recuperar`, `${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub === "ESPACIO" ? "Espacio" : "Jump"}`); } } break;
     case "accesoCrear": if (A) openAcceso(A, "alumno"); break;
+    case "accVincular": if (A) { const pid = ($("#accManeja") || {}).value; if (!pid) { toast("Elegí quién lo maneja."); break; } b.disabled = true; if (await vincularManeja(A, pid)) { closeSheet(); formAlumno(A); cargarHist(A); } else b.disabled = false; } break;
+    case "accDesvincular": if (A) { b.disabled = true; if (await desvincularManeja(A)) { closeSheet(); formAlumno(A); cargarHist(A); } else b.disabled = false; } break;
     case "accMasivo": openAccesosMasivo(); break;
     case "accRapido": if (A) { b.disabled = true; b.textContent = "Creando…";
       try { ACC_HECHO[A.id] = await accesoRapido(A); } catch (x) { console.error(x); toast(x && x.code && String(x.code).startsWith("auth/") ? errorAuth(x) : "No se pudo crear. Probá de nuevo."); b.disabled = false; b.textContent = "Crear acceso"; break; }
