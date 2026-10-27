@@ -226,7 +226,7 @@ async function activarNotificaciones(datos) {
     if (sw && sw.state !== "activated") await new Promise(ok => { const t = setTimeout(ok, 8000); sw.addEventListener("statechange", () => { if (sw.state === "activated") { clearTimeout(t); ok(); } }); });
   } catch (e) { console.error(e); throw { code: "sw", detalle: e && (e.message || e.name) }; }
   let token;
-  try { token = await firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg }); }
+  try { token = await Promise.race([firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg }), new Promise((_, no) => setTimeout(() => no({ code: "lento" }), 20000))]); }
   catch (e) { console.error(e); throw { code: "token", detalle: e && (e.code || e.message) }; }
   if (!token) throw { code: "sin-token" };
   try { await fdb.doc("tokens/" + fauth.currentUser.uid).set({ ...datos, tokens: firebase.firestore.FieldValue.arrayUnion(token), actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }); }

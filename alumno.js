@@ -350,8 +350,8 @@ async function guardarReemplazo(b) {
   if (inicioDe(f, h).getTime() <= Date.now()) { toast("Esa clase ya empezó"); return; }
   b.disabled = true; b.textContent = "Guardando…"; const a = P.a;
   try {
-    await fdb.doc(`reemplazos/${a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: a.id, uid: P.uid, nombre: a.nombre, quien, fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
-      inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false });
+    await conTope(fdb.doc(`reemplazos/${a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: a.id, uid: P.uid, nombre: a.nombre, quien, fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
+      inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false }));
     const d = isoDate(f);
     openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🎾</div><h2 class="disp" style="margin:0">Listo</h2>
       <p class="small" style="margin:0">Le avisamos a Gabriel que el <b>${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth() + 1} a las ${h}</b> va <b>${esc(quien)}</b> en tu lugar.</p>
@@ -374,14 +374,15 @@ function opcionesSumar() {
 function abrirSumar() {
   const ops = opcionesSumar(); const a = P.a; const pc = precioEn ? precioEn(a, mesKey(now)) : a.precioClase;
   openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">Sumá un día más</h2><p class="small" style="margin:0">Elegí el horario que te gustaría sumar. A Gabriel le llega tu pedido y, cuando lo confirma, arrancás ese día todas las semanas.${pc ? ` Cada clase más suma <b>${money(pc)}</b> a tu cuota.` : ""}</p></div>
-    ${ops.length ? `<div class="list">${ops.map(o => `<button class="row" style="width:100%;background:none;border:0;text-align:left" data-pa="sumarElegir" data-c="${o.club}" data-d="${o.dia}" data-h="${o.hora}" data-n="${esc(o.nivel)}"><span class="main"><span class="name">${DIAS_LARGO[o.dia]} ${o.hora}</span><span class="meta"><span class="tag ${o.club}">${o.club === "ESPACIO" ? "Espacio" : "Jump"}</span>${o.nivel ? `<span>${esc(o.nivel)}</span>` : ""}<span style="color:var(--ok)">${o.lib} lugar${o.lib === 1 ? "" : "es"}</span></span></span><span class="small" style="font-weight:700">Elegir ›</span></button>`).join("")}</div>`
+    ${ops.length ? `<div class="list">${ops.map(o => `<button class="row" style="width:100%;background:none;border:0;text-align:left" data-pa="sumarElegir" data-c="${o.club}" data-d="${o.dia}" data-h="${o.hora}" data-n="${esc(o.nivel)}"><span class="main"><span class="name">${DIAS_LARGO[o.dia]} ${o.hora}</span><span class="meta"><span class="tag ${o.club}">${o.club === "ESPACIO" ? "Espacio" : "Jump"}</span><span style="color:var(--ok)">${o.lib} lugar${o.lib === 1 ? "" : "es"}</span></span></span><span class="small" style="font-weight:700">Elegir ›</span></button>`).join("")}</div>`
       : `<div class="empty">Ahora no hay lugares libres de tu nivel en otros días. Escribile a Gabriel y te avisa cuando se libere uno.</div>`}
     <div class="btns"><span></span><button class="btn sec2" data-pa="cerrar">Cerrar</button></div>`);
 }
 async function pedirSumar(b) {
   const a = P.a; const { c, d, h, n } = b.dataset; const dia = Number(d);
-  confirmar(`¿Sumás los ${DIAS_LARGO[dia].toLowerCase()} ${h}?`, `En ${c === "ESPACIO" ? "Espacio La 10" : "Jump"}${n ? ` · ${esc(n)}` : ""}. Le mandamos el pedido a Gabriel y te avisamos cuando lo confirme.`, "Pedir este día", async () => {
-    await fdb.doc(`solicitudes/${a.id}_${c}_${dia}_${hhmmDe(h)}`).set({ alumnoId: a.id, nombre: a.nombre || "", club: c, dia, hora: h, nivel: n || "", estado: "pendiente", notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() });
+  confirmar(`¿Sumás los ${DIAS_LARGO[dia].toLowerCase()} ${h}?`, `En ${c === "ESPACIO" ? "Espacio La 10" : "Jump"}. Le mandamos el pedido a Gabriel y te avisamos cuando lo confirme.`, "Pedir este día", async () => {
+    try { const sr = fdb.doc(`solicitudes/${a.id}_${c}_${dia}_${hhmmDe(h)}`); const ss = await conTope(sr.get(), 5000); if (ss && ss.exists && ss.data().estado !== "pendiente") await conTope(sr.delete(), 5000); } catch (e) {}
+    await conTope(fdb.doc(`solicitudes/${a.id}_${c}_${dia}_${hhmmDe(h)}`).set({ alumnoId: a.id, nombre: a.nombre || "", club: c, dia, hora: h, nivel: n || "", estado: "pendiente", notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() }));
     return { titulo: "¡Pedido enviado!" }; });
 }
 function confirmar(titulo, texto, boton, accion) {
@@ -394,6 +395,8 @@ function confirmar(titulo, texto, boton, accion) {
 // no sabemos si llegó: lo confirmamos con el servidor antes de decirle que falló.
 const ESPERA_TX = 20000;
 const ERR_LOGICOS = ["ya", "lleno", "sin-clases", "ocupado", "susp"];
+// Con mala señal Firestore guarda en el celu y sube solo cuando vuelve la conexión: no dejamos el botón trabado esperando.
+const conTope = (p, ms = 10000) => Promise.race([p, new Promise(ok => setTimeout(ok, ms))]);
 async function guardarSeguro(vRef, tipo, hacer) {
   let err;
   try { return { r: await Promise.race([hacer(), new Promise((_, mal) => setTimeout(() => mal({ code: "lento" }), ESPERA_TX))]) }; }
@@ -462,11 +465,11 @@ document.addEventListener("click", async e => {
   if (pa === "reemp") { abrirReemplazo(b.dataset.f, b.dataset.h, b.dataset.c); return; }
   if (pa === "reempOk") { await guardarReemplazo(b); return; }
   if (pa === "reempNo") { const { f, h } = b.dataset; confirmar("¿Cancelás el reemplazo?", "Tu lugar vuelve a ser tuyo para esa clase.", "Sí, cancelar", async () => {
-      await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).delete(); return { titulo: "Listo", texto: "Cancelaste el reemplazo." }; }); return; }
+      await conTope(fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).delete()); return { titulo: "Listo", texto: "Cancelaste el reemplazo." }; }); return; }
   if (pa === "pagar") { abrirPagar(b.dataset.m); return; }
   if (pa === "sumar") { abrirSumar(); return; }
   if (pa === "sumarElegir") { pedirSumar(b); return; }
-  if (pa === "sumarCancelar") { const id = b.dataset.id; confirmar("¿Cancelás el pedido?", "Gabriel ya no lo va a ver.", "Sí, cancelar", async () => { await fdb.doc("solicitudes/" + id).delete(); return { titulo: "Pedido cancelado" }; }); return; }
+  if (pa === "sumarCancelar") { const id = b.dataset.id; confirmar("¿Cancelás el pedido?", "Gabriel ya no lo va a ver.", "Sí, cancelar", async () => { await conTope(fdb.doc("solicitudes/" + id).delete()); return { titulo: "Pedido cancelado" }; }); return; }
   if (pa === "sumarVisto") { try { await fdb.doc("solicitudes/" + b.dataset.id).delete(); } catch (x) {} return; }
   if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
@@ -493,8 +496,8 @@ document.addEventListener("click", async e => {
       const quien = (($("#recQuien") || {}).value || "").trim().replace(/\s+/g, " ");
       await reservarRec(f, h, c);
       if (quien.length >= 2) {
-        let okR = true; try { await fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: P.a.id, uid: P.uid, nombre: P.a.nombre, quien: quien.slice(0, 40), fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
-          inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false }); } catch (x) { console.error(x); okR = false; }
+        let okR = true; try { await conTope(fdb.doc(`reemplazos/${P.a.id}_${f}_${hhmmDe(h)}`).set({ alumnoId: P.a.id, uid: P.uid, nombre: P.a.nombre, quien: quien.slice(0, 40), fecha: f, hora: h, hhmm: hhmmDe(h), club: c,
+          inicio: firebase.firestore.Timestamp.fromDate(inicioDe(f, h)), creado: firebase.firestore.FieldValue.serverTimestamp(), notificado: false })); } catch (x) { console.error(x); okR = false; }
         if (!okR) return { titulo: "¡Reservado!", texto: `Tu lugar ${cuando} quedó guardado, pero no se pudo anotar que va <b>${esc(quien)}</b>. Avisale a Gabriel por WhatsApp.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}, va ${quien} en mi lugar.` };
         return { titulo: "¡Reservado!", texto: `Va <b>${esc(quien)}</b> a recuperar ${cuando} en tu lugar.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}, va ${quien} en mi lugar.` };
       }
@@ -557,7 +560,7 @@ function abrirVarias() {
   const porSemana = {}; cl.forEach(c => { const d = isoDate(c.fecha); const lun = new Date(d); lun.setDate(d.getDate() - ((d.getDay() + 6) % 7)); (porSemana[toISO(lun)] = porSemana[toISO(lun)] || []).push(c); });
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">¿Qué clases no venís?</h2><span class="small muted">Marcá todas las que vas a faltar (próximas 8 semanas). Las que avisás con 24 horas o más te quedan para recuperar.</span></div>
     <div style="display:grid;gap:12px;max-height:52vh;overflow:auto">${Object.keys(porSemana).sort().map(k => { const d = isoDate(k);
-      return `<div style="display:grid;gap:6px"><span class="flabel">Semana del ${d.getDate()}/${d.getMonth() + 1}</span>${porSemana[k].map(c => { const dd = isoDate(c.fecha); const con = inicioDe(c.fecha, c.hora).getTime() - Date.now() >= DIA_MS;
+      return `<div style="display:grid;gap:6px"><span class="flabel">Semana del ${d.getDate()}/${d.getMonth() + 1}</span>${porSemana[k].map(c => { const dd = isoDate(c.fecha); const con = conRecuperoSi(c.fecha, c.hora);
         return `<label class="row" style="grid-template-columns:auto 1fr;background:rgba(255,255,255,.6);border:1px solid var(--line-2);border-radius:14px;padding:10px 12px;gap:10px"><input type="checkbox" class="chkVar" data-f="${c.fecha}" data-h="${c.hora}" style="width:20px;height:20px"><span class="main"><span class="name">${DIAS_LARGO[dd.getDay()]} ${dd.getDate()}/${dd.getMonth() + 1} · ${c.hora}</span><span class="meta">${con ? "Te queda para recuperar" : '<span class="due">Menos de 24 h: no se recupera</span>'}</span></span></label>`; }).join("")}</div>`; }).join("") || '<div class="empty">No tenés clases para marcar.</div>'}</div>
     <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="variasOk">Avisar</button></span></div>`);
@@ -570,8 +573,9 @@ async function confirmarVarias(b) {
 async function avisarLista(b, sel) {
   if (P.ocupado) return; P.ocupado = true; b.disabled = true; b.textContent = "Avisando…";
   const ok = []; let rec = 0, fallo = 0;
-  for (const c of sel) { try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); if (x && x.code === "ya") ok.push(c); else fallo++; } }
-  P.ocupado = false; if (ok.length) avisarAlInstante();
+  // Si se corta la señal, no seguimos probando una por una (tardaría minutos): las que faltan se avisan después.
+  try { for (const c of sel) { if (fallo && ["lento", "unavailable", "sin-conexion"].includes(P.ultErr)) { fallo++; continue; } try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); P.ultErr = x && x.code; if (x && x.code === "ya") ok.push(c); else fallo++; } } }
+  finally { P.ocupado = false; P.ultErr = null; } if (ok.length) avisarAlInstante();
   const lista = ok.map(c => `${fechaLarga(c.f).toLowerCase()} a las ${c.h}`).join(", ");
   const msg = `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Te aviso que no voy a poder ir: ${lista}. Lo cargué en la app.`;
   const url = P.info.telGabriel && ok.length ? waURL(P.info.telGabriel, msg) : "";
@@ -627,7 +631,7 @@ function viajePrev() {
   const el = $("#vjPrev"), btn = $("#vjBtn"); if (!el || !btn) return;
   const d = $("#vjD").value, h = P.vjModo === "uno" ? d : $("#vjH").value;
   if (d && h && h < d) { el.innerHTML = '<span class="small due">La fecha "hasta" tiene que ser igual o posterior a "desde".</span>'; btn.disabled = true; btn.textContent = "Avisar"; return; }
-  const cl = clasesViaje(); const con = cl.filter(c => inicioDe(c.fecha, c.hora).getTime() - Date.now() >= DIA_MS).length; const sin = cl.length - con;
+  const cl = clasesViaje(); const con = cl.filter(c => conRecuperoSi(c.fecha, c.hora)).length; const sin = cl.length - con;
   btn.disabled = !cl.length; btn.textContent = cl.length ? `Avisar ${cl.length} clase${cl.length === 1 ? "" : "s"}` : "Avisar";
   el.innerHTML = cl.length ? `<div class="list" style="max-height:38vh;overflow:auto">${cl.map(c => { const dd = isoDate(c.fecha); return `<div class="row"><span class="name">${DIAS_LARGO[dd.getDay()]} ${dd.getDate()}/${dd.getMonth() + 1} · ${c.hora}</span><span class="small muted">${clubTxt(c.club)}</span></div>`; }).join("")}</div>
     <p class="small" style="margin:0">${con ? `<b>${con}</b> te ${con === 1 ? "queda" : "quedan"} para recuperar, en las 2 semanas siguientes a cada clase.` : ""}${sin ? ` <span class="due">${sin} con menos de 24 h: no se recupera${sin > 1 ? "n" : ""}.</span>` : ""}</p>`

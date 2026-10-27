@@ -155,7 +155,7 @@ service cloud.firestore {
     // Pruebas e invitados que Gabriel suma a un turno (ocupan lugar).
     // Primer ingreso de cada alumno a la app (y si activó las notificaciones).
     match /ingresos/{uid} {
-      allow read: if esStaff();
+      allow read: if esStaff() || (esAlumno() && request.auth.uid == uid);
       allow create: if esAlumno() && request.auth.uid == uid && request.resource.data.alumnoId == miAlumno()
         && request.resource.data.notificado == false
         && request.resource.data.keys().hasOnly(['alumnoId', 'nombre', 'primera', 'ultimo', 'notif', 'notificado']);
