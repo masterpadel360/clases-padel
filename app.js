@@ -896,7 +896,66 @@ async function marcar(a,hora,estado){
   if(await guardarAsist() && delta) await setRec(a,delta,S.asFecha);
   if(delta>0) toast(`${a.nombre}: +1 clase a recuperar`);
 }
-function vAsist(){
+/* ---------- Asistencia: tres partes. Por día (tomar asistencia), Lluvia (registro de suspendidas) y Faltas (quién no fue). ---------- */
+const RG={mes:null,club:"",q:"",key:"",cargando:false,as:[],av:[],err:false};
+function asistTabs(){ const v=S.asVista||"dia";
+  return `<div class="seg" role="group" aria-label="Asistencia" style="margin:4px 0 10px">${[["dia","Por día"],["lluvia","🌧 Lluvia"],["faltas","Faltas"]].map(([k,l])=>`<button type="button" class="seg-b" data-act="asVista" data-v="${k}" aria-pressed="${v===k}">${l}</button>`).join("")}</div>`; }
+function vAsist(){ const v=S.asVista||"dia"; if(v==="dia") return asistTabs()+vAsistDia(); return asistTabs()+vRegistro(v); }
+function rgRango(){ const [y,m]=RG.mes.split("-").map(Number); return [`${RG.mes}-01`,`${RG.mes}-${pad(new Date(y,m,0).getDate())}`]; }
+async function rgCargar(forzar){ if(!S.db) return; if(!RG.mes) RG.mes=mesKey(now); const key=RG.mes; if(!forzar&&RG.key===key) return; RG.key=key; RG.cargando=true; RG.err=false; const [d1,d2]=rgRango();
+  try{ const [a,v]=await Promise.all([S.db.collection("asistencia").where("fecha",">=",d1).where("fecha","<=",d2).get(), S.db.collection("avisos").where("fecha",">=",d1).where("fecha","<=",d2).get()]);
+    if(RG.key!==key) return; RG.as=a.docs.map(x=>x.data()); RG.av=v.docs.map(x=>({id:x.id,...x.data()})); }
+  catch(e){ console.error(e); RG.err=true; RG.key=""; }
+  RG.cargando=false; if(S.tab==="asist"&&$("#overlay").hidden) render(); }
+const rgClubOk=c=>S.modo==="profe"?c==="JUMP":(!RG.club||RG.club===c);
+const rgNom=id=>(S.alumnos.find(a=>a.id===id)||{}).nombre||"Alumno";
+const rgClubN=c=>c==="ESPACIO"?"Espacio":"Jump";
+const rgFecha=f=>{ const d=isoDate(f); return `${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`; };
+const rgBusca=()=>true;
+const rgDataN=ids=>esc(ids.map(id=>catNorm(rgNom(id))).join("|"));
+function rgFiltrar(){ const q=catNorm(RG.q); document.querySelectorAll("[data-rgn]").forEach(r=>{ r.style.display=q&&!r.dataset.rgn.includes(q)?"none":""; }); }
+// Semana (lunes) de una fecha, para ver si a alguien le llovió dos semanas seguidas.
+const rgSemana=f=>{ const d=isoDate(f); d.setDate(d.getDate()-((d.getDay()+6)%7)); return toISO(d); };
+function rgLluvias(){ const out=[]; RG.as.forEach(doc=>{ if(!rgClubOk(doc.club)) return; const mk=doc.marcas||{}, q=doc.quien||{}; const porHora={};
+    Object.keys(mk).forEach(k=>{ if(mk[k]!=="lluvia") return; const [id,h]=k.split("|"); (porHora[h]=porHora[h]||{fecha:doc.fecha,club:doc.club,hora:h,al:[],por:new Set()}).al.push(id); if(q[k]) porHora[h].por.add(q[k]); });
+    Object.values(porHora).forEach(t=>out.push(t)); });
+  return out.sort((x,y)=>(y.fecha+y.hora).localeCompare(x.fecha+x.hora)); }
+function rgFaltas(){ const out={}; const add=(id,fecha,hora,club,tipo,por)=>{ const k=`${id}|${fecha}|${hora}`; if(!out[k]||tipo==="falto") out[k]={id,fecha,hora,club,tipo,por}; };
+  const llovio=(id,f,h,c)=>{ const d=RG.as.find(x=>x.fecha===f&&x.club===c); return !!d&&(d.marcas||{})[`${id}|${h}`]==="lluvia"; };
+  RG.av.forEach(v=>{ if(v.tipo!=="ausencia"||!rgClubOk(v.club)||v.fecha>hoyISO||llovio(v.alumnoId,v.fecha,v.hora,v.club)) return; const vuelve=RG.av.some(x=>x.tipo==="recupera"&&x.alumnoId===v.alumnoId&&x.fecha===v.fecha&&x.hora===v.hora); if(vuelve) return;
+    add(v.alumnoId,v.fecha,v.hora,v.club,v.conRecupero?"aviso":"tarde","la app"); });
+  RG.as.forEach(doc=>{ if(!rgClubOk(doc.club)) return; const mk=doc.marcas||{}, q=doc.quien||{};
+    Object.keys(mk).forEach(k=>{ const e=mk[k]; if(e!=="falto"&&e!=="recupera") return; const [id,h]=k.split("|");
+      if(e==="recupera"&&out[`${id}|${doc.fecha}|${h}`]) return; add(id,doc.fecha,h,doc.club,e==="falto"?"falto":"aviso",q[k]||""); }); });
+  return Object.values(out).sort((x,y)=>(y.fecha+y.hora).localeCompare(x.fecha+x.hora)); }
+function rgHeader(txt){ const [y,m]=RG.mes.split("-").map(Number);
+  return `<section class="sec" style="margin-top:0">
+    <div class="sec-head"><button class="icon-btn" data-act="rgMes" data-d="-1" aria-label="Mes anterior">‹</button><h2 class="disp" style="font-size:22px;text-transform:capitalize">${mesLbl(RG.mes)}</h2><button class="icon-btn" data-act="rgMes" data-d="1" aria-label="Mes siguiente" ${RG.mes>=mesKey(now)?"disabled":""}>›</button></div>
+    ${S.modo==="profe"?"":`<div class="seg" style="margin:0">${[["","Los dos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button type="button" class="seg-b" data-act="rgClub" data-v="${v}" aria-pressed="${RG.club===v}">${l}</button>`).join("")}</div>`}
+    <input class="search" id="rgQ" type="search" placeholder="Buscar un alumno" value="${esc(RG.q)}" autocomplete="off">
+    <p class="small muted" style="margin:0">${txt}</p></section>`; }
+function vRegistro(v){
+  if(!RG.mes) RG.mes=mesKey(now); rgCargar(); if(RG.q) setTimeout(rgFiltrar,0);
+  if(RG.cargando&&!RG.as.length) return rgHeader("")+`<div class="empty">Cargando…</div>`;
+  if(RG.err) return rgHeader("")+`<div class="empty">No se pudo cargar. <button class="linkish" data-act="rgRe">Reintentar</button></div>`;
+  if(v==="lluvia"){
+    const ts=rgLluvias(); const lista=ts.map(t=>({...t,al:t.al.filter(id=>rgBusca(rgNom(id)))})).filter(t=>t.al.length);
+    const nAl=ts.reduce((s,t)=>s+t.al.length,0); const dias=new Set(ts.map(t=>t.fecha)).size;
+    // A quién le llovió dos semanas seguidas (según la regla: ahí se descuenta).
+    const sem={}; ts.forEach(t=>t.al.forEach(id=>{ (sem[id]=sem[id]||new Set()).add(rgSemana(t.fecha)); }));
+    const seguidas=Object.keys(sem).filter(id=>{ const ws=[...sem[id]].sort(); return ws.some((w,i)=>i&&Math.round((isoDate(w)-isoDate(ws[i-1]))/864e5)===7); }).filter(id=>rgBusca(rgNom(id)));
+    const resumen=ts.length?`<b>${dias}</b> día${dias===1?"":"s"} con lluvia · <b>${ts.length}</b> clase${ts.length===1?"":"s"} suspendida${ts.length===1?"":"s"} · ${nAl} alumno${nAl===1?"":"s"} a recuperar.`:"Este mes no se suspendió ninguna clase por lluvia.";
+    return rgHeader(resumen+" Se cargan solas cuando tocás <b>🌧 Lluvia</b> en un turno o suspendés desde la Agenda.")+
+      (seguidas.length?`<section class="sec"><div class="notice" style="margin:0"><b>Les llovió dos semanas seguidas:</b> ${seguidas.map(id=>esc(rgNom(id))).join(", ")}. Según tu regla, a estos se les descuenta.</div></section>`:"")+
+      (lista.length?`<section class="sec"><div class="list">${lista.map(t=>`<div class="row" data-rgn="${rgDataN(t.al)}"><div style="display:grid;gap:4px;min-width:0;grid-column:1/-1"><span class="main"><span class="name">🌧 ${rgFecha(t.fecha)} · ${t.hora}</span><span class="meta"><span class="tag ${t.club}">${rgClubN(t.club)}</span><span class="tag lluvia">Suspendida · recuperan</span>${t.por.size?`<span class="small muted">Marcó ${esc([...t.por].join(" y "))}</span>`:""}</span></span><span class="small">${t.al.map(id=>esc(rgNom(id))).join(" · ")}</span></div></div>`).join("")}</div></section>`:"");
+  }
+  const fs=rgFaltas().filter(x=>rgBusca(rgNom(x.id))); const cnt=t=>fs.filter(x=>x.tipo===t).length;
+  const TXT={falto:["No avisó · perdió la clase","due"],tarde:["Avisó tarde · perdió la clase","due"],aviso:["Avisó · recupera","rec"]};
+  const resumen=fs.length?`<b class="due">${cnt("falto")+cnt("tarde")}</b> perdieron la clase (no avisaron o avisaron con menos de 24 h) · <b>${cnt("aviso")}</b> avisaron y recuperan.`:"Este mes no faltó nadie.";
+  return rgHeader(resumen+" Las faltas por lluvia están en <b>🌧 Lluvia</b>.")+
+    (fs.length?`<section class="sec"><div class="list">${fs.map(x=>{ const [t,c]=TXT[x.tipo]; return `<div class="row" data-rgn="${rgDataN([x.id])}"><span class="main"><span class="name">${esc(rgNom(x.id))}</span><span class="meta"><span class="small">${rgFecha(x.fecha)} · ${x.hora}</span><span class="tag ${x.club}">${rgClubN(x.club)}</span><span class="tag ${c==="due"?"no":"rec"}">${t}</span>${x.por?`<span class="small muted">${x.por==="la app"?"Avisó por la app":"Marcó "+esc(x.por)}</span>`:""}</span></span></div>`; }).join("")}</div></section>`:"");
+}
+function vAsistDia(){
   if(window.escucharExtras) window.escucharExtras();
   const f=isoDate(S.asFecha); const dow=f.getDay(); const esHoy=S.asFecha===hoyISO;
   // Turnos con alguien (fijos, recuperaciones o pruebas). Los vacíos de la grilla quedan abajo, para sumar a alguien que viene a recuperar.
@@ -1022,7 +1081,8 @@ async function lluviaTurno(club,fecha,hora,auto=false){
   recs.forEach(a=>{ const k=`${a.id}|${hora}`; if(quitar){ if(mk[k]==="lluvia"){ delete mk[k]; cambios.push([a,-1]); } } else if(mk[k]!=="lluvia"){ mk[k]="lluvia"; cambios.push([a,1]); } });
   if(S.asKey===`${fecha}_${club}`){ S.asMarcas=mk; if(!(await guardarAsist())) return; }
   else { const FV=firebase.firestore.FieldValue, dm={}; Object.keys(mk).forEach(k=>{ if(mk[k]!==mk0[k]) dm[k]=mk[k]; }); Object.keys(mk0).forEach(k=>{ if(!(k in mk)) dm[k]=FV.delete(); });
-    if(Object.keys(dm).length&&!(await safe(()=>ref.set({fecha,club,marcas:dm},{merge:true})))) return; }
+    const yo=S.esOwner?"Gabriel":"Esteban", dq={}; Object.keys(dm).forEach(k=>dq[k]=mk[k]==="lluvia"?yo:FV.delete());
+    if(Object.keys(dm).length&&!(await safe(()=>ref.set({fecha,club,marcas:dm,quien:dq},{merge:true})))) return; }
   for(const [a,d] of cambios) await setRec(a,d,fecha);
   if(!auto){ const FV=firebase.firestore.FieldValue; await safe(()=>suspRef().set({t:{[suspKey(club,fecha,hora)]:quitar?FV.delete():"lluvia"}},{merge:true})); }
   if(quitar) { try{ const lr=S.db.doc(`lluvias/${fecha}_${club}_${hhmmDe(hora)}`); const ld=await lr.get(); if(ld.exists&&!ld.data().notificado) await lr.delete(); }catch(e){} }
@@ -1472,6 +1532,10 @@ document.addEventListener("click",async e=>{
     case "hSet": { S.horasFecha=b.dataset.f; render(); scrollTo(0,0); break; }
     case "hAuto": await setHoras(b.dataset.f||S.horasFecha, Number(b.dataset.n)); break;
     case "asClub": S.asClub=b.dataset.c; render(); break;
+    case "asVista": S.asVista=b.dataset.v; if(S.asVista!=="dia") rgCargar(true); render(); scrollTo(0,0); break;
+    case "rgMes": { const [y,m]=RG.mes.split("-").map(Number); const d=new Date(y,m-1+Number(b.dataset.d),1); const k=mesKey(d); if(k>mesKey(now)) break; RG.mes=k; RG.as=[]; RG.av=[]; rgCargar(true); render(); break; }
+    case "rgClub": RG.club=b.dataset.v; render(); break;
+    case "rgRe": rgCargar(true); render(); break;
     case "asDia": { const d=isoDate(S.asFecha); d.setDate(d.getDate()+Number(b.dataset.d)); S.asFecha=toISO(d); render(); break; }
     case "asHoy": S.asFecha=hoyISO; render(); break;
     case "marca": if(A) await marcar(A,b.dataset.hora,b.dataset.e); break;
@@ -1514,7 +1578,7 @@ document.addEventListener("click",async e=>{
     default: if(window.accionExtra) await window.accionExtra(act,b,A); break;
   }
 });
-let tBusca=0; document.addEventListener("input",e=>{ if(!window.MODO_STAFF) return; if(e.target.id==="q"){ S.q=e.target.value; clearTimeout(tBusca); tBusca=setTimeout(render,180); } if(e.target.id==="recQ"){ openRecAdd(e.target.value); } });
+let tBusca=0; document.addEventListener("input",e=>{ if(!window.MODO_STAFF) return; if(e.target.id==="q"){ S.q=e.target.value; clearTimeout(tBusca); tBusca=setTimeout(render,180); } if(e.target.id==="recQ"){ openRecAdd(e.target.value); } if(e.target.id==="rgQ"){ RG.q=e.target.value; rgFiltrar(); } });
 document.addEventListener("submit",async e=>{
   if(!window.MODO_STAFF) return;
   e.preventDefault(); const f=e.target;
