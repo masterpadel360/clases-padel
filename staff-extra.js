@@ -223,6 +223,9 @@ window.accionExtra = async (act, b, A) => {
     case "accRapido": if (A) { b.disabled = true; b.textContent = "Creando…";
       try { ACC_HECHO[A.id] = await accesoRapido(A); } catch (x) { console.error(x); toast(x && x.code && String(x.code).startsWith("auth/") ? errorAuth(x) : "No se pudo crear. Probá de nuevo."); b.disabled = false; b.textContent = "Crear acceso"; break; }
       const row = document.getElementById("acc-" + A.id); if (row) row.outerHTML = filaAcceso(A); } break;
+    case "resetPrueba": if (A) await abrirResetPrueba(A); break;
+    case "resetOk": if (A) await hacerResetPrueba(A, b); break;
+    case "resetN": RP.n = Math.max(0, RP.n + Number(b.dataset.d)); pintarResetPrueba(); break;
     case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
     case "profeCrear": openAcceso(null, "profe"); break;
     case "accClave": await claveNuevaPara(b.dataset.uid, A); break;
@@ -276,4 +279,57 @@ async function claveNuevaPara(uid, a) {
       <div class="msg"><div class="bubble">${esc(txt)}</div><div class="msg-actions">${url ? `<a class="cta wa" href="${url}" target="_blank" rel="noopener">Mandar por WhatsApp <i>→</i></a>` : `<span class="small due">Falta el teléfono</span>`}<button class="mini" data-act="copy" data-text="${esc(txt)}">Copiar</button></div></div>
       <div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`);
   } catch (x) { console.error(x); toast((x && x.msg) || "No se pudo. Probá de nuevo."); }
+}
+
+
+/* ---------- Borrar pruebas: deja a un alumno como si nunca hubiera usado la app (avisos, reservas, pagos de prueba) ---------- */
+const RP = { a: null, av: [], ree: [], sol: [], comp: [], n: 0 };
+async function abrirResetPrueba(a) {
+  openSheet(`<div class="empty">Buscando lo que hizo ${esc(a.nombre)} en la app…</div>`);
+  try {
+    const q = c => fdb.collection(c).where("alumnoId", "==", a.id).get().then(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+    const [av, ree, sol, comp] = await Promise.all([q("avisos"), q("reemplazos"), q("solicitudes"), q("comprobantes")]);
+    RP.a = a; RP.av = av.sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora)); RP.ree = ree; RP.sol = sol; RP.comp = comp;
+    // Clases para recuperar: lo de ahora, sacándole lo que sumaron o restaron los avisos de prueba.
+    const par = v => av.some(x => x.tipo !== v.tipo && x.fecha === v.fecha && x.hora === v.hora);
+    let d = 0; av.forEach(v => { if (par(v)) return; if (v.tipo === "ausencia" && v.conRecupero) d--; if (v.tipo === "recupera") d++; });
+    RP.n = Math.max(0, recN(a) + d);
+  } catch (e) { console.error(e); openSheet(`<div class="empty">No se pudo cargar. Revisá la conexión y probá de nuevo.</div><button class="btn sec2" data-act="close">Cerrar</button>`); return; }
+  pintarResetPrueba();
+}
+function pintarResetPrueba() {
+  const a = RP.a; const items = [];
+  RP.av.forEach(v => items.push(v.tipo === "ausencia" ? `Avisó que no va el <b>${fechaCorta(v.fecha)} ${v.hora}</b>` : `Reservó recuperar el <b>${fechaCorta(v.fecha)} ${v.hora}</b>`));
+  RP.ree.forEach(r => items.push(`Mandó a ${esc(r.quien || "otra persona")} el ${fechaCorta(r.fecha)} ${r.hora}`));
+  RP.sol.forEach(r => items.push(`Pidió sumar un día (${DIAS_LARGO[r.dia] || ""} ${r.hora || ""})`));
+  RP.comp.forEach(c => items.push(`Comprobante de pago de ${mesLbl(c.mes)}${c.aplicado ? " (lo marcó pagado: se vuelve a sin pagar)" : ""}`));
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Borrar pruebas</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Queda como si nunca hubiera usado la app. Su usuario y contraseña siguen iguales, y la asistencia que tomaron ustedes no se toca.</span></div>
+    ${items.length ? `<div class="field"><span class="flabel">Se borra (${items.length})</span><div style="display:grid;gap:6px;font-size:14px">${items.map(x => `<span>• ${x}</span>`).join("")}</div></div>` : `<div class="empty">No hay nada de la app para borrar.</div>`}
+    <div class="field"><span class="flabel">Clases para recuperar al terminar</span><div style="display:flex;align-items:center;gap:14px"><button type="button" class="mini" data-act="resetN" data-id="${a.id}" data-d="-1">−</button><b class="num" style="font-size:22px">${RP.n}</b><button type="button" class="mini" data-act="resetN" data-id="${a.id}" data-d="1">+</button></div><span class="small muted">Ahora tiene ${recN(a)}. Dejá las que de verdad le quedan (las faltas reales que venía arrastrando).</span></div>
+    <div class="btns"><span></span><span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button type="button" class="btn pri" data-act="resetOk" data-id="${a.id}">Borrar y dejar en cero</button></span></div>`);
+}
+async function hacerResetPrueba(a, b) {
+  if (!confirm(`¿Borrar todo lo que se probó con ${a.nombre}? No se puede deshacer.`)) return;
+  b.disabled = true; b.textContent = "Borrando…";
+  try {
+    const FV = firebase.firestore.FieldValue; const ops = [];
+    // Lugares: se devuelven los que ocupaban los avisos de prueba (solo clases que todavía no pasaron).
+    const cup = {}; RP.av.forEach(v => { if (v.fecha < hoyISO || !v.club || !v.hhmm) return; const k = `${v.club}_${v.fecha}_${v.hhmm}`; cup[k] = cup[k] || { aus: 0, rec: 0 }; cup[k][v.tipo === "ausencia" ? "aus" : "rec"]++; });
+    for (const k of Object.keys(cup)) { const r = fdb.doc("cupos/" + k); const d = await r.get(); if (!d.exists) continue; const c = d.data();
+      ops.push(bt => bt.set(r, { aus: Math.max(0, (c.aus || 0) - cup[k].aus), rec: Math.max(0, (c.rec || 0) - cup[k].rec) }, { merge: true })); }
+    RP.av.forEach(v => ops.push(bt => bt.delete(fdb.doc("avisos/" + v.id))));
+    RP.ree.forEach(r => ops.push(bt => bt.delete(fdb.doc("reemplazos/" + r.id))));
+    RP.sol.forEach(r => ops.push(bt => bt.delete(fdb.doc("solicitudes/" + r.id))));
+    RP.comp.forEach(c => { ops.push(bt => bt.delete(fdb.doc("comprobantes/" + c.id))); ops.push(bt => bt.delete(fdb.doc("fotosPago/" + c.id))); });
+    // Clases para recuperar: se guarda el número elegido, respetando los vencimientos que ya tenía.
+    const m = {}; recBuckets(a, []).forEach(x => m[x.vence] = x.n); let sum = Object.values(m).reduce((s, n) => s + n, 0);
+    if (RP.n > sum) { const k = venceDe(hoyISO); m[k] = (m[k] || 0) + RP.n - sum; }
+    else if (RP.n < sum) { let r = sum - RP.n; for (const k of Object.keys(m).sort()) { const q = Math.min(r, m[k]); m[k] -= q; r -= q; if (!m[k]) delete m[k]; if (!r) break; } }
+    const recVence = {}; Object.keys(a.recVence || {}).forEach(k => recVence[k] = 0); Object.assign(recVence, m);
+    const upd = { recuperar: RP.n, recVence, ultimoAviso: FV.delete() };
+    RP.comp.filter(c => c.aplicado && a.pagos && a.pagos[c.mes] && a.pagos[c.mes].comprobante).forEach(c => { upd["pagos." + c.mes] = FV.delete(); });
+    ops.push(bt => bt.update(fdb.doc("alumnos/" + a.id), upd));
+    for (let i = 0; i < ops.length; i += 400) { const bt = fdb.batch(); ops.slice(i, i + 400).forEach(f => f(bt)); await bt.commit(); }
+    closeSheet(); toast(`${a.nombre} quedó en cero`);
+  } catch (e) { console.error(e); b.disabled = false; b.textContent = "Borrar y dejar en cero"; toast("No se pudo borrar. Probá de nuevo."); }
 }

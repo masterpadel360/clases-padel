@@ -1361,6 +1361,7 @@ function formAlumno(a={},leadId=""){
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
     ${a.id?accesoHTML(a):""}
     ${a.id?avisosFichaHTML(a):""}
+    ${a.id&&S.esOwner&&S.modo!=="profe"?`<button type="button" class="linkish" data-act="resetPrueba" data-id="${a.id}" style="justify-self:start;font-size:13px">🧹 Borrar pruebas de la app (dejar en cero)</button>`:""}
     ${a.id?`<div class="field"><span class="flabel">Historial de asistencia</span><div id="histA" class="small muted">Cargando…</div></div>`:""}
     ${a.id?`<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="aAct" ${a.activo===false?"":"checked"}> Activo (sacalo si dejó o está en pausa)</label>`:""}
     <div class="btns">${a.id?`<button type="button" class="btn del" data-act="delA">Borrar</button>`:"<span></span>"}<span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
