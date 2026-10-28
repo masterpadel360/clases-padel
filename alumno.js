@@ -565,7 +565,7 @@ function avisadasHTML(wa) {
   if (!av.length) return "";
   return `<section class="sec"><div class="sec-head"><h3>Avisaste que no venís</h3><span class="small muted">${av.length}</span></div>
     <div class="list">${av.map(v => { const d = isoDate(v.fecha);
-      const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const lugar = libresDe(v.club, v.fecha, v.hora) > 0; const tiene = (P.a.recuperar || 0) >= 1;
+      const a24 = inicioDe(v.fecha, v.hora).getTime() - Date.now() >= DIA_MS; const cu = P.cupos[cupoId(v.club, v.fecha, v.hora)] || {}; const lugar = libresDe(v.club, v.fecha, v.hora) > 0 || (cu.rec || 0) < (cu.aus || 0); /* su lugar sigue libre si nadie reservó en su lugar */ const tiene = (P.a.recuperar || 0) >= 1;
       const puede = v.conRecupero && a24 && lugar && tiene && !recCancelada(v);
       const nota = !v.conRecupero || recCancelada(v) ? "" : !a24 ? "Faltan menos de 24 h: ya no se puede cambiar" : !lugar ? "Tu lugar ya lo tomó otra persona: hablá con Gabriel" : !tiene ? "Ya usaste esa clase para recuperar" : "";
       return `<div class="row"><span class="main"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} · ${v.hora}</span><span class="meta">${v.conRecupero ? '<span style="color:var(--sun);font-weight:700">Te queda para recuperar</span>' : (recCancelada(v) ? '<span class="due">Cancelaste la recuperación</span>' : '<span class="due">Avisaste tarde: no se recupera</span>')}</span>${nota ? `<span class="small muted">${nota}</span>` : ""}</span>${puede ? `<button class="mini" data-pa="vuelvo" data-f="${v.fecha}" data-h="${v.hora}" data-c="${v.club}">Al final voy</button>` : ""}</div>`; }).join("")}</div>
