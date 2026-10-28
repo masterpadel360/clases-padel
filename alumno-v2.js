@@ -61,7 +61,7 @@
         ${prox.vuelve || (P.reemp || {})[prox.fecha + "|" + prox.hora] ? `<div class="v2-donde" style="opacity:.8">${prox.vuelve ? "Confirmaste que venís" : "Va otra persona en tu lugar"}</div>` : `<div class="v2-slide" data-f="${prox.fecha}" data-h="${prox.hora}" data-t="${prox.tipo}"><div class="v2-relleno"></div><div class="v2-slide-tx">Deslizá si no podés ir</div>
           <div class="v2-perilla" role="button" tabindex="0" aria-label="Avisar que no voy">${flecha}</div></div>`}
       </div></section>
-      <p class="v2-nota">Si no podés venir, avisá con 24 h de anticipación y la clase queda para recuperar.</p>`;
+      <p class="v2-nota">Si no podés venir, avisá con 24 h o más: te queda para recuperar en las 2 semanas siguientes. Con menos de 24 h se pierde.</p>`;
   }
 
   function tusClases(a, cl, marcas, proxKey) {
@@ -178,7 +178,9 @@
         out.push(`<div class="v2-recordar suave"><span class="ico" style="font-size:20px">${ll ? "🌧" : "📢"}</span><span class="tx"><b>${ll ? "Se suspendió tu clase" : "No hay clase"} ${f === hoyISO ? "de hoy" : `el ${DC[d.getDay()].toLowerCase()} ${d.getDate()}`} ${h}</b><small>${ll ? "Por lluvia. " : ""}Te queda para recuperar en otro horario.</small></span></div>`); }); }
     { const px = aumentoProx(a); if (px && (tab === "inicio" || tab === "pagos")) out.push(`<div class="v2-recordar suave v2-aum">${icoP}<span class="tx"><b>Desde ${MESN[Number(px.desde.slice(5, 7)) - 1]} la clase pasa a ${money(px.precio).replace(/\$\s+/, "$")}</b><small>Hasta entonces seguís pagando ${money(px.antes).replace(/\$\s+/, "$")} por clase.</small></span></div>`); }
     if (rec) out.push(`<button class="v2-recordar" data-pa="${tab === "inicio" ? "irRec" : "v2irRec"}">${ico}<span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>`);
-    return out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "";
+    // La regla, siempre a la vista en todas las pantallas.
+    const regla = `<div class="v2-regla" role="note"><span class="v2-regla-i" aria-hidden="true">!</span><span><b>Avisá con 24 h o más</b> y la clase te queda para recuperar: tenés <b>2 semanas</b> para recuperarla. <b class="rojo">Con menos de 24 h, la clase se pierde.</b></span></div>`;
+    return regla + (out.length ? `<div class="v2-avisos">${out.join("")}</div>` : "");
   }
 
 
@@ -327,7 +329,7 @@
     return `<div class="v2">${cabecera(a, estPago(a, mes))}${avisosArriba(a, "ausencias")}
       <section class="v2-sec"><div class="v2-head"><h2>No puedo ir</h2><span class="k">Próximas 3 semanas</span></div>
         ${prox.length ? `<div class="v2-fichas">${prox.map(fichaClase).join("")}</div>` : `<div class="v2-vacio">No tenés clases en las próximas 3 semanas.</div>`}
-        <p class="v2-sub">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 h o más</b>, te queda para recuperar en las 2 semanas siguientes.</p>
+        <p class="v2-sub">Tocá <b>No voy</b> en la clase. Si avisás con <b>24 h o más</b>, te queda para recuperar en las 2 semanas siguientes. Con menos de 24 h, la clase se pierde.</p>
       </section>
       <section class="v2-programar">
         <svg class="v2-cancha" viewBox="0 0 200 120" aria-hidden="true"><g><rect x="4" y="4" width="192" height="112"/><line x1="100" y1="0" x2="100" y2="120" stroke-width="4"/><line x1="36" y1="4" x2="36" y2="116"/><line x1="164" y1="4" x2="164" y2="116"/><line x1="36" y1="60" x2="164" y2="60"/></g></svg>
