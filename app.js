@@ -977,7 +977,7 @@ function vAsistDia(){
   ${slots.length?slots.map(t=>asistTurnoHTML(t,extras)).join(""):`<div class="empty" style="margin-top:16px">No hay nadie anotado en ${S.asClub==="ESPACIO"?"Espacio":"Jump"} este día.</div>`}
   ${vacios.length?`<section class="sec"><div class="sec-head"><h3>Turnos vacíos</h3></div><p class="small muted" style="margin:0">Sin alumnos fijos ni recuperaciones. Si viene alguien a recuperar, tocá el horario.</p><div style="display:flex;gap:8px;flex-wrap:wrap">${vacios.map(t=>`<button class="mini" data-act="asRecAdd" data-hora="${t.hora}">${t.hora} · 4 libres</button>`).join("")}</div></section>`:""}
   ${S.modo!=="profe"&&S.downloads?`<button class="mini" data-act="asCSV" style="margin-top:16px">Descargar asistencia de ${mesSolo(S.asFecha.slice(0,7))} (CSV)</button>`:""}
-  <p class="small muted" style="margin:18px 0 0"><b style="color:var(--ink)">✓ Vinieron todos</b> marca presentes a los que faltan marcar; después tocá <b style="color:var(--ink)">✗</b> al que no vino. <b style="color:var(--ink)">Faltó</b> sin avisar: pierde la clase (si querés dársela igual, sumásela desde su ficha). Los que avisaron por la app aparecen abajo y no hace falta marcarlos.</p>`;
+  <p class="small muted" style="margin:18px 0 90px">Tocá el <b style="color:var(--ink)">nombre</b> si vino (se pone verde) o la <b style="color:var(--ink)">✗</b> si faltó (se pone rojo). <b style="color:var(--ink)">Vinieron todos</b> marca presentes a los que quedan. Cuando el turno queda todo marcado se cierra solo. <b style="color:var(--ink)">Faltó</b> sin avisar: pierde la clase (si querés dársela igual, sumásela desde su ficha). Los que avisaron por la app aparecen abajo y no hace falta marcarlos.</p>`;
 }
 // Un turno en Asistencia: primero los que hay que marcar, después los que vienen a recuperar, los de prueba y al final los que avisaron que no vienen.
 function asistEstado(t){ const f=S.asFecha, h=t.hora; t={...t,al:t.al.filter(a=>vaEn(a,t,f))};
@@ -994,19 +994,37 @@ function asistPendHTML(slots){ if(S.asFecha>hoyISO) return `<div class="as-pend 
   const n=ya.reduce((s,t)=>s+asistEstado(t).pend,0);
   return n?`<div class="as-pend">Te falta${n===1?"":"n"} marcar <b>${n}</b> ${n===1?"alumno":"alumnos"}</div>`:(ya.length?`<div class="as-pend ok">✓ Asistencia al día</div>`:""); }
 function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t); t={...t,al:t.al.filter(a=>vaEn(a,t,f))}; const mk=a=>S.asMarcas[`${a.id}|${h}`];
-  const dos=(a,eOk,eNo,actOk,actNo)=>{ const e=mk(a); return `<span class="as-bt"><button class="as-b ok" data-act="${actOk}" data-id="${a.id}" data-hora="${h}" data-e="vino" aria-pressed="${e===eOk}" aria-label="Vino">✓<small>Vino</small></button><button class="as-b no" data-act="${actNo}" data-id="${a.id}" data-hora="${h}" data-e="falto" aria-pressed="${e===eNo}" aria-label="Faltó">✗<small>Faltó</small></button></span>`; };
-  const filaFija=a=>{ const e=mk(a); return `<div class="row as-row as-l ${e==="vino"?"is-ok":e==="falto"?"is-debe":""}" data-k="${a.id}"><span class="name">${esc(a.nombre)}${e==="lluvia"?' <span class="tag lluvia">⛔ Suspendida</span>':""}${e==="recupera"?' <span class="tag rec">Recupera</span>':""}${tagAviso(a.id,f,h)}</span>${e==="lluvia"?"":dos(a,"vino","falto","marca","marca")}</div>`; };
-  const filaRec=(a,app)=>{ const e=mk(a); const rp=(S.reemp||{})[`${a.id}|${f}|${h}`];
-    return `<div class="row as-row as-l as-rec" data-k="r-${a.id}"><span class="name">${rp?`${esc(rp.quien)} <span class="muted" style="font-weight:500">(por ${esc(a.nombre)})</span>`:esc(a.nombre)} <span class="tag rec">↺ Viene a recuperar</span>${app?"":' <span class="tag">Lo sumaste vos</span>'}</span>${e==="lluvia"?"":app?dos(a,"recuperando","falto",e==="recuperando"?"asRecQuitar":"asRecApp","asRecNo"):`<span class="as-bt"><button class="as-b ok" data-act="asRecQuitar" data-id="${a.id}" data-hora="${h}" aria-pressed="true" aria-label="Vino (tocá para sacarlo)">✓<small>Vino</small></button></span>`}</div>`; };
-  const filaPrueba=x=>`<div class="row as-row as-l as-prueba" data-k="p-${x.id}"><span class="name">${esc(x.nombre||"Sin nombre")} <span class="tag JUMP">${x.tipo==="invitado"?"Invitado":"Clase de prueba"}</span></span></div>`;
-  const filaAviso=a=>{ const v=avisoApp(a.id,f,h,"ausencia"); const abierto=(S.asAbrir||new Set()).has(`${a.id}|${h}`);
-    return `<div class="row as-row as-l as-aviso" data-k="a-${a.id}"><span class="name">${esc(a.nombre)} <span class="tag ${v.conRecupero?"rec":"no"}">🚫 No viene · ${v.conRecupero?"avisó, recupera":"avisó tarde"}</span></span>${abierto?dos(a,"vino","falto","marca","marca"):`<button class="linkish as-cambiar" data-act="asAbrir" data-id="${a.id}" data-hora="${h}">Vino igual</button>`}</div>`; };
+  const okKey=`${f}|${t.club}|${h}`; const abierto=(S.asOpen||new Set()).has(okKey);
+  // Cada alumno: una fila. Tocás el nombre = Vino. ✗ = Faltó. La fila se pinta según lo que marcaste.
+  const fila=(a,nombre,e,eOk,eNo,actOk,actNo,extra)=>{ const st=e===eOk?"ok":e===eNo?"no":e==="lluvia"?"ll":"";
+    const lbl=st==="ok"?(eOk==="recuperando"?"✓ Vino a recuperar":"✓ Vino"):st==="no"?"✗ Faltó · pierde la clase":st==="ll"?"🌧 Suspendida":"Sin marcar";
+    return `<div class="as2-row st-${st||"0"}" data-k="${a.id}"><button type="button" class="as2-main" ${st==="ll"?"disabled":`data-act="${actOk}" data-id="${a.id}" data-hora="${h}" data-e="${eOk==="recuperando"?"recuperando":"vino"}"`}><span class="as2-dot">${st==="ok"?"✓":st==="no"?"✗":st==="ll"?"🌧":""}</span><span class="as2-txt"><b>${nombre}</b><small>${lbl}${extra||""}</small></span></button>${st==="ll"?"":`<button type="button" class="as2-x" data-act="${actNo}" data-id="${a.id}" data-hora="${h}" data-e="falto" aria-pressed="${st==="no"}" aria-label="Faltó">✗</button>`}</div>`; };
+  const filaFija=a=>{ const e=mk(a); const av=tagAviso(a.id,f,h).replace(/<[^>]+>/g,"").trim(); return fila(a,esc(a.nombre),e,"vino","falto","marca","marca",e==="recupera"?" · recupera":av?` · ${esc(av)}`:""); };
+  const filaRec=(a,app)=>{ const e=mk(a); const rp=(S.reemp||{})[`${a.id}|${f}|${h}`]; const nom=rp?`${esc(rp.quien)} <span style="font-weight:500">(por ${esc(a.nombre)})</span>`:esc(a.nombre);
+    if(!app) return `<div class="as2-row st-ok as2-r"><button type="button" class="as2-main" data-act="asRecQuitar" data-id="${a.id}" data-hora="${h}"><span class="as2-dot">✓</span><span class="as2-txt"><b>${nom}</b><small>↺ Vino a recuperar · lo sumaste vos (tocá para sacarlo)</small></span></button></div>`;
+    return fila(a,nom,e,"recuperando","falto",e==="recuperando"?"asRecQuitar":"asRecApp","asRecNo"," · ↺ viene a recuperar").replace('class="as2-row','class="as2-row as2-r'); };
+  const filaPrueba=x=>`<div class="as2-row st-p"><span class="as2-main"><span class="as2-dot">★</span><span class="as2-txt"><b>${esc(x.nombre||"Sin nombre")}</b><small>${x.tipo==="invitado"?"Invitado":"Clase de prueba"}</small></span></span></div>`;
+  const filaAviso=a=>{ const v=avisoApp(a.id,f,h,"ausencia"); const ab=(S.asAbrir||new Set()).has(`${a.id}|${h}`);
+    if(ab) return fila(a,esc(a.nombre),mk(a),"vino","falto","marca","marca"," · había avisado");
+    return `<div class="as2-row st-av"><span class="as2-main"><span class="as2-dot">–</span><span class="as2-txt"><b>${esc(a.nombre)}</b><small>Avisó que no viene · ${v.conRecupero?"recupera":"avisó tarde, la pierde"}</small></span></span><button type="button" class="as2-mini" data-act="asAbrir" data-id="${a.id}" data-hora="${h}">Vino igual</button></div>`; };
+  const todasLluvia=t.al.length&&t.al.every(a=>mk(a)==="lluvia");
+  const marcados=[...E.marcar,...E.recs]; const vinieron=marcados.filter(a=>["vino","recuperando"].includes(mk(a))).length+E.manual.length;
+  const faltaron=marcados.filter(a=>mk(a)==="falto").length; const total=marcados.length+E.manual.length;
+  const pasado=f<hoyISO||(f===hoyISO&&h<=`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}`);
+  const lista=!!(total||E.prueba.length||E.avisaron.length);
+  const tomada=pasado&&lista&&!E.pend&&total>0&&!todasLluvia;
+  const cerrado=(tomada||todasLluvia)&&!abierto;
+  const estado=todasLluvia?`<span class="as2-st ll">🌧 Suspendida</span>`:tomada?`<span class="as2-st ok">✓ Tomada</span>`:E.pend&&pasado?`<span class="as2-st no">Falta${E.pend===1?"":"n"} marcar ${E.pend}</span>`:total?`<span class="as2-st">${total-E.pend}/${total} marcados</span>`:"";
+  const head=`<div class="as2-head"><div class="as2-h"><b class="num">${h}</b>${t.nivel?`<span class="as2-cat">${esc(capCat(t.nivel))}</span>`:""}</div>${estado}</div>`;
+  if(cerrado){ const res=todasLluvia?`${t.al.length} alumno${t.al.length===1?"":"s"} recuperan`:[`<b class="free">${vinieron}</b> vinieron`,faltaron?`<b class="due">${faltaron}</b> faltó${faltaron===1?"":"aron"}`:"",E.avisaron.length?`${E.avisaron.length} avisó que no`:""].filter(Boolean).join(" · ");
+    const nombres=todasLluvia?t.al.map(a=>esc(a.nombre.split(" ")[0])).join(", "):marcados.filter(a=>mk(a)==="falto").map(a=>`<span class="due">✗ ${esc(a.nombre)}</span>`).join(" · ");
+    return `<section class="as2 cerrado ${todasLluvia?"ll":"ok"}">${head}<p class="as2-res num">${res}</p>${nombres?`<p class="as2-res">${nombres}</p>`:""}<button type="button" class="as2-link" data-act="asOpen" data-k="${okKey}">Ver / corregir</button></section>`; }
   const nrec=E.recs.length+E.manual.length;
-  const res=[`<b>${E.vienen}</b> vienen`, E.avisaron.length?`${E.avisaron.length} avisó que no`:"", nrec?`${nrec} recupera${nrec===1?"":"n"}`:"", E.libres?`<span class="free">${E.libres} libre${E.libres===1?"":"s"}</span>`:"completo"].filter(Boolean).join(" · ");
-  return `<section class="sec as-turno"><div class="sec-head"><h3 class="num">${h}${t.nivel?" · "+esc(t.nivel):""}</h3><span style="display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end"><button class="linkish" data-act="asLluvia" data-hora="${h}">${t.al.length&&t.al.every(a=>S.asMarcas[`${a.id}|${h}`]==="lluvia")?"Quitar lluvia":"🌧 Lluvia"}</button><button class="linkish" data-act="asRecAdd" data-hora="${h}">+ Viene a recuperar</button></span></div>
-    <p class="small as-res num">${res}</p>
-    ${E.pend?`<button class="as-todos" data-act="asTodos" data-hora="${h}" data-club="${t.club}">✓ Vinieron todos <small>(${E.pend})</small></button>`:""}
-    <div class="list">${E.marcar.map(filaFija).join("")}${E.recs.map(a=>filaRec(a,true)).join("")}${E.manual.map(a=>filaRec(a,false)).join("")}${E.prueba.map(filaPrueba).join("")}${E.avisaron.map(filaAviso).join("")}${!t.al.length&&!nrec&&!E.prueba.length?'<div class="empty">Sin alumnos en este turno.</div>':""}</div></section>`; }
+  const res=[`${E.vienen} vienen`, E.avisaron.length?`${E.avisaron.length} avisó que no`:"", nrec?`${nrec} recupera${nrec===1?"":"n"}`:"", E.libres?`<span class="free">${E.libres} libre${E.libres===1?"":"s"}</span>`:"completo"].filter(Boolean).join(" · ");
+  return `<section class="as2">${head}<p class="as2-res num">${res}</p>
+    ${E.pend&&!todasLluvia?`<button type="button" class="as2-todos" data-act="asTodos" data-hora="${h}" data-club="${t.club}">✓ Vinieron todos (${E.pend})</button>`:""}
+    <div class="as2-list">${E.marcar.map(filaFija).join("")}${E.recs.map(a=>filaRec(a,true)).join("")}${E.manual.map(a=>filaRec(a,false)).join("")}${E.prueba.map(filaPrueba).join("")}${E.avisaron.map(filaAviso).join("")}${!t.al.length&&!nrec&&!E.prueba.length?'<div class="empty">Sin alumnos en este turno.</div>':""}</div>
+    <div class="as2-acts"><button type="button" class="as2-mini" data-act="asLluvia" data-hora="${h}">${todasLluvia?"Quitar lluvia":"🌧 Lluvia"}</button><button type="button" class="as2-mini" data-act="asRecAdd" data-hora="${h}">+ Viene a recuperar</button>${abierto?`<button type="button" class="as2-mini" data-act="asOpen" data-k="${okKey}">Cerrar</button>`:""}</div></section>`; }
 
 /* ---------- Suspender clases: por lluvia, o porque ese día no hay clases (uno o varios días) ----------
    Cada alumno de los turnos elegidos suma una clase para recuperar (2 semanas desde esa clase), le llega una notificación,
@@ -1544,6 +1562,7 @@ document.addEventListener("click",async e=>{
       E.marcar.forEach(a=>{ const k=`${a.id}|${h}`; if(!S.asMarcas[k]){ S.asMarcas[k]="vino"; n++; } });
       E.recs.forEach(a=>{ const k=`${a.id}|${h}`; if(!S.asMarcas[k]){ S.asMarcas[k]="recuperando"; n++; } });
       render(); if(n&&await guardarAsist()) toast(`${n} presente${n===1?"":"s"} a las ${h}. Si alguno faltó, tocá ✗.`); break; }
+    case "asOpen": { S.asOpen=S.asOpen||new Set(); const k=b.dataset.k; if(S.asOpen.has(k)) S.asOpen.delete(k); else S.asOpen.add(k); render(); break; }
     case "asAbrir": { S.asAbrir=S.asAbrir||new Set(); S.asAbrir.add(`${b.dataset.id}|${b.dataset.hora}`); render(); break; }
     case "asRecNo": if(A){ const k=`${A.id}|${b.dataset.hora}`; if(S.asMarcas[k]==="falto") delete S.asMarcas[k]; else S.asMarcas[k]="falto"; render(); if(await guardarAsist()&&S.asMarcas[k]){ toast(`${A.nombre} no vino a recuperar: pierde esa clase`); avisarDueno(`${nomProfe()}: ${A.nombre} no vino a recuperar`,`${diaTxt(S.asFecha)} ${b.dataset.hora} · ${S.asClub==="ESPACIO"?"Espacio":"Jump"}`); } } break;
     case "asLluvia": await lluviaTurno(S.asClub,S.asFecha,b.dataset.hora); break;

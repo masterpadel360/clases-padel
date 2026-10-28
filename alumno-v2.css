@@ -813,3 +813,42 @@ html.v2.v2-staff:has(#staffApp.w-home) body{background:linear-gradient(180deg,#0
 .v2-regla b{color:var(--s-lima,#cfe04a)}
 .v2-regla b.rojo{color:#ff9b8a}
 .v2-regla-i{flex:none;width:22px;height:22px;border-radius:50%;background:var(--s-lima,#cfe04a);color:var(--s-olive,#1c2619);display:grid;place-items:center;font-weight:900;font-size:14px;margin-top:1px}
+
+/* ---------- Asistencia v2: una fila por alumno, se pinta según lo marcado ---------- */
+#staffApp .as2{margin:14px 0 0;padding:14px;border-radius:18px;background:#fff;border:1px solid #e3e5dc;display:grid;gap:10px}
+#staffApp .as2.cerrado.ok{background:#f1f8ee;border-color:#b9dbb0}
+#staffApp .as2.cerrado.ll{background:#eaf0f8;border-color:#b7c9e4}
+#staffApp .as2-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#staffApp .as2-h{display:flex;align-items:baseline;gap:8px;min-width:0}
+#staffApp .as2-h b{font-size:24px;font-weight:800;letter-spacing:-.01em;color:#1d231a}
+#staffApp .as2-cat{font-size:13px;font-weight:700;color:#5d6657;background:#eef0e8;border-radius:99px;padding:3px 10px}
+#staffApp .as2-st{font-size:13px;font-weight:800;border-radius:99px;padding:5px 11px;background:#eef0e8;color:#465041;white-space:nowrap}
+#staffApp .as2-st.ok{background:#2e7d32;color:#fff}
+#staffApp .as2-st.no{background:#c62828;color:#fff}
+#staffApp .as2-st.ll{background:#2c5aa0;color:#fff}
+#staffApp .as2-res{margin:-4px 0 0;font-size:14px;color:#5d6657}
+#staffApp .as2-todos{min-height:44px;border-radius:12px;border:1.5px solid #2e7d32;background:#fff;color:#2e7d32;font-weight:800;font-size:15px}
+#staffApp .as2-list{display:grid;gap:6px}
+#staffApp .as2-row{display:flex;align-items:stretch;gap:6px;border-radius:14px;background:#f6f7f2;border:1.5px solid #e3e5dc;overflow:hidden}
+#staffApp .as2-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:11px 12px;background:none;border:0;text-align:left;color:inherit;font:inherit}
+#staffApp .as2-dot{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid #b8bdae;display:grid;place-items:center;font-size:16px;font-weight:900;background:#fff;color:#fff}
+#staffApp .as2-txt{display:grid;gap:2px;min-width:0}
+#staffApp .as2-txt b{font-size:16px;font-weight:700;color:#1d231a;line-height:1.25}
+#staffApp .as2-txt small{font-size:12.5px;color:#7a8273;font-weight:600}
+#staffApp .as2-x{flex:none;width:52px;border:0;border-left:1.5px solid #e3e5dc;background:transparent;color:#a3a99a;font-size:20px;font-weight:900}
+#staffApp .as2-row.st-ok{background:#e3f1df;border-color:#2e7d32}
+#staffApp .as2-row.st-ok .as2-dot{background:#2e7d32;border-color:#2e7d32}
+#staffApp .as2-row.st-ok small{color:#1f6b24}
+#staffApp .as2-row.st-no{background:#fbe4e1;border-color:#c62828}
+#staffApp .as2-row.st-no .as2-dot{background:#c62828;border-color:#c62828}
+#staffApp .as2-row.st-no small{color:#a51f1f}
+#staffApp .as2-row.st-no .as2-x{background:#c62828;color:#fff;border-color:#c62828}
+#staffApp .as2-row.st-ll{background:#e2eaf6;border-color:#9fb6da}
+#staffApp .as2-row.st-ll .as2-dot{background:#fff;border-color:#9fb6da;font-size:14px}
+#staffApp .as2-row.as2-r:not(.st-ok):not(.st-no) .as2-dot{border-color:#b86e00}
+#staffApp .as2-row.st-av{opacity:.75;align-items:center;padding-right:8px}
+#staffApp .as2-row.st-av .as2-dot,#staffApp .as2-row.st-p .as2-dot{color:#7a8273;font-size:14px}
+#staffApp .as2-mini{min-height:38px;padding:0 12px;border-radius:10px;border:1px solid #d6d9ce;background:#fff;color:#2b3327;font-weight:700;font-size:13.5px}
+#staffApp .as2-acts{display:flex;flex-wrap:wrap;gap:8px}
+#staffApp .as2-link{justify-self:start;background:none;border:0;padding:0;color:#2e5d27;font-weight:700;font-size:14px;text-decoration:underline}
+@media (prefers-color-scheme:dark){html:not(.v2) #staffApp .as2{background:#1f241c}}
