@@ -278,6 +278,11 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
   // 0) Pedidos para sumar un día
   (S.solic||[]).filter(x=>x.estado==="pendiente").forEach(x=>{ const a=S.alumnos.find(y=>y.id===x.alumnoId); if(!a) return;
     item("#13834f",`<b>${esc(nombreCorto(a.nombre))}</b> quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> · ${clubN(x.club)}`,`<button class="mini go" data-act="solVer" data-id="${x.id}">Ver</button>`); });
+  // 1b) Alumnos nuevos: primera clase hoy, y después preguntarle qué le pareció
+  activos().filter(esNuevo).forEach(a=>{ const pc=primeraClase(a); if(!pc) return; const hs=(a.horarios||[]).filter(h=>Number(h.dia)===isoDate(pc).getDay()).map(h=>`${h.hora} · ${clubN(clubH(a,h))}`).join(", ");
+    if(pc===hoyISO) item("#13834f",`<b>${esc(a.nombre)}</b> tiene hoy su <b>primera clase</b> (${hs})`,"");
+    else if(pc<hoyISO&&!a.charlaOk&&pc>=toISO(new Date(now.getFullYear(),now.getMonth(),now.getDate()-10))){ const url=waURL(a.tel,`Hola ${nombreCorto(a.nombre)}! ¿Qué te pareció la clase? 🎾`);
+      item("#13834f",`Preguntale a <b>${esc(a.nombre)}</b> qué le pareció la primera clase (${fmtCorto(pc)})`,`<span style="display:flex;gap:6px">${url?`<a class="mini" href="${url}" target="_blank" rel="noopener">WhatsApp</a>`:""}<button class="mini" data-act="charlaOk" data-id="${a.id}">Listo</button></span>`); } });
   // 2) Avisos de alumnos sin ver
   const nAv=S.avisos.filter(v=>!v.visto&&!S.vistos[v.id]).length;
   if(nAv) item("var(--k-amb)",`<b>${nAv} aviso${nAv===1?"":"s"}</b> de alumnos sin ver`,`<a class="mini" href="#secAvisos">Ver</a>`);
@@ -438,7 +443,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta">${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
+    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · hasta ${fechaDM(nuevoHasta(a))}</span>`:""}${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13))?"Vencido":"Debe"}</button>`}</div></div>`;
 }
@@ -475,7 +480,13 @@ function vAlumnos(){
   </section>`;
 }
 
-function esNuevo(a){ if(a.codigo||!a.alta) return false; const d=new Date(now); d.setDate(d.getDate()-21); return a.alta>=toISO(d); }
+// Alumno nuevo: desde que arranca hasta el último día del mes siguiente (arranca el 21/10 → nuevo hasta el 30/11).
+const inicioDe=a=>a.inicio||(a.codigo?"":a.alta)||"";
+function nuevoHasta(a){ const i=inicioDe(a); if(!i) return ""; const [y,m]=i.split("-").map(Number); return toISO(new Date(y,m+1,0)); }
+function esNuevo(a){ const h=nuevoHasta(a); return !!h&&hoyISO<=h; }
+// Primer día que le toca clase (desde que arranca), para preguntarle qué le pareció.
+function primeraClase(a){ const i=inicioDe(a); if(!i) return ""; const d=isoDate(i);
+  for(let k=0;k<35;k++){ const f=toISO(d); if((a.horarios||[]).some(h=>Number(h.dia)===d.getDay()&&!(h.desde&&h.desde>f))) return f; d.setDate(d.getDate()+1); } return ""; }
 function slotHTML(t,fecha){
   const aj=fecha?ajusteTurno(t,fecha):{aus:new Set(),rec:[]}; const libres=CUPO-t.al.length+aj.aus.size-aj.rec.length;
   return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}${t.al.length?`<button class="linkish" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" style="justify-self:start;font-size:12px;text-align:left">${t.nivel?esc(t.nivel):"+ Categoría"} ✎</button>`:(aj.rec.length?"":`<span class="small muted">Vacío</span>`)}<span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
@@ -808,7 +819,7 @@ function pendientesHoy(){
   const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`; const noche=hhmm>="21:30";
   const p=[];
   if(hoy){
-    hoy.ts.forEach(t=>t.al.filter(esNuevo).forEach(a=>p.push(`<b style="color:var(--sun)">Nuevo</b>: ${esc(a.nombre)} viene a las <b>${t.hora}</b>${a.categoria?` (${esc(a.categoria)})`:""}`)));
+    hoy.ts.forEach(t=>t.al.filter(a=>primeraClase(a)===hoyISO).forEach(a=>p.push(`<b style="color:var(--sun)">Primera clase</b>: ${esc(a.nombre)} viene a las <b>${t.hora}</b>${a.categoria?` (${esc(a.categoria)})`:""}`)));
     hoy.sinAsist.forEach(t=>p.push(`<b>${t.hora}</b> · ${t.n} alumno${t.n>1?"s":""} sin marcar · <button class="linkish" data-act="irAsist" data-f="${hoyISO}">Marcar</button>`));
     hoy.proximos.forEach(t=>p.push(`<span class="muted"><b>${t.hora}</b> · todavía no empezó, marcala cuando termine</span>`));
     if(hoy.sinHoras) p.push(`No cargaste las horas de hoy · <button class="linkish" data-act="hAuto" data-f="${hoyISO}" data-n="${hoy.ts.length}">Cargar ${hoy.ts.length}</button>`);
@@ -999,7 +1010,8 @@ function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t);
   const fila=(a,nombre,e,eOk,eNo,actOk,actNo,extra)=>{ const st=e===eOk?"ok":e===eNo?"no":e==="lluvia"?"ll":"";
     const lbl=st==="ok"?(eOk==="recuperando"?"✓ Vino a recuperar":"✓ Vino"):st==="no"?"✗ Faltó · pierde la clase":st==="ll"?"🌧 Suspendida":"Sin marcar";
     return `<div class="as2-row st-${st||"0"}" data-k="${a.id}"><button type="button" class="as2-main" ${st==="ll"?"disabled":`data-act="${actOk}" data-id="${a.id}" data-hora="${h}" data-e="${eOk==="recuperando"?"recuperando":"vino"}"`}><span class="as2-dot">${st==="ok"?"✓":st==="no"?"✗":st==="ll"?"🌧":""}</span><span class="as2-txt"><b>${nombre}</b><small>${lbl}${extra||""}</small></span></button>${st==="ll"?"":`<button type="button" class="as2-x" data-act="${actNo}" data-id="${a.id}" data-hora="${h}" data-e="falto" aria-pressed="${st==="no"}" aria-label="Faltó">✗</button>`}</div>`; };
-  const filaFija=a=>{ const e=mk(a); const av=tagAviso(a.id,f,h).replace(/<[^>]+>/g,"").trim(); return fila(a,esc(a.nombre),e,"vino","falto","marca","marca",e==="recupera"?" · recupera":av?` · ${esc(av)}`:""); };
+  const nv=a=>primeraClase(a)===f?' <span class="as2-nv">1ª clase</span>':esNuevo(a)?' <span class="as2-nv">Nuevo</span>':"";
+  const filaFija=a=>{ const e=mk(a); const av=tagAviso(a.id,f,h).replace(/<[^>]+>/g,"").trim(); return fila(a,esc(a.nombre)+nv(a),e,"vino","falto","marca","marca",e==="recupera"?" · recupera":av?` · ${esc(av)}`:""); };
   const filaRec=(a,app)=>{ const e=mk(a); const rp=(S.reemp||{})[`${a.id}|${f}|${h}`]; const nom=rp?`${esc(rp.quien)} <span style="font-weight:500">(por ${esc(a.nombre)})</span>`:esc(a.nombre);
     if(!app) return `<div class="as2-row st-ok as2-r"><button type="button" class="as2-main" data-act="asRecQuitar" data-id="${a.id}" data-hora="${h}"><span class="as2-dot">✓</span><span class="as2-txt"><b>${nom}</b><small>↺ Vino a recuperar · lo sumaste vos (tocá para sacarlo)</small></span></button></div>`;
     return fila(a,nom,e,"recuperando","falto",e==="recuperando"?"asRecQuitar":"asRecApp","asRecNo"," · ↺ viene a recuperar").replace('class="as2-row','class="as2-row as2-r'); };
@@ -1551,6 +1563,7 @@ document.addEventListener("click",async e=>{
     case "hSet": { S.horasFecha=b.dataset.f; render(); scrollTo(0,0); break; }
     case "hAuto": await setHoras(b.dataset.f||S.horasFecha, Number(b.dataset.n)); break;
     case "asClub": S.asClub=b.dataset.c; render(); break;
+    case "charlaOk": if(A&&await safe(()=>colA().doc(A.id).update({charlaOk:true}))){ A.charlaOk=true; render(); } break;
     case "asVista": S.asVista=b.dataset.v; if(S.asVista!=="dia") rgCargar(true); render(); scrollTo(0,0); break;
     case "rgMes": { const [y,m]=RG.mes.split("-").map(Number); const d=new Date(y,m-1+Number(b.dataset.d),1); const k=mesKey(d); if(k>mesKey(now)) break; RG.mes=k; RG.as=[]; RG.av=[]; rgCargar(true); render(); break; }
     case "rgClub": RG.club=b.dataset.v; render(); break;

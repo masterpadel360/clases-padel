@@ -852,3 +852,4 @@ html.v2.v2-staff:has(#staffApp.w-home) body{background:linear-gradient(180deg,#0
 #staffApp .as2-acts{display:flex;flex-wrap:wrap;gap:8px}
 #staffApp .as2-link{justify-self:start;background:none;border:0;padding:0;color:#2e5d27;font-weight:700;font-size:14px;text-decoration:underline}
 @media (prefers-color-scheme:dark){html:not(.v2) #staffApp .as2{background:#1f241c}}
+#staffApp .as2-nv{display:inline-block;margin-left:6px;font-size:11px;font-weight:800;color:#fff;background:#13834f;border-radius:99px;padding:2px 8px;vertical-align:2px}
