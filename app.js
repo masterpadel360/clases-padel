@@ -43,7 +43,7 @@ function pago(a,m=S.mes){ return a.pagos && a.pagos[m] && a.pagos[m].pagado; }
 const _ocu = {}; function ocurrencias(dia,m){ const k=dia+"|"+m; if(_ocu[k]!==undefined) return _ocu[k]; return (_ocu[k]=ocurrencias0(dia,m)); }
 function ocurrencias0(dia,m){ const [y,mm]=m.split("-").map(Number); let n=0; const last=new Date(y,mm,0).getDate(); for(let d=1;d<=last;d++) if(new Date(y,mm-1,d).getDay()===dia) n++; return n; }
 function diasDe(a){ return [...new Set((a.horarios||[]).map(h=>h.dia))]; }
-function clasesDesde(a,f){ const d0=isoDate(f); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); const ds=diasDe(a); let n=0; for(let d=d0.getDate();d<=last;d++) if(ds.includes(new Date(d0.getFullYear(),d0.getMonth(),d).getDay())) n++; return n; }
+function clasesDesde(a,f){ const d0=isoDate(f); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); const ds=(a.horarios||[]).map(h=>Number(h.dia)); let n=0; for(let d=d0.getDate();d<=last;d++){ const wd=new Date(d0.getFullYear(),d0.getMonth(),d).getDay(); n+=ds.filter(x=>x===wd).length; } return n; }
 const mesSig=m=>mesKey(new Date(Number(m.slice(0,4)),Number(m.slice(5,7)),1));
 // Primer mes de un alumno nuevo: cuántas clases le quedan desde que empieza y qué paga cada mes.
 function planPrimerMes(a,ini,promo,modo,dur=1){ const m=ini.slice(0,7), sig=mesSig(m); const quedan=clasesDesde(a,ini); const p=promo||a.precioClase||0; const dd=isoDate(ini); const fd=`${dd.getDate()}/${dd.getMonth()+1}`; const cl=n=>`${n} clase${n===1?"":"s"}`;
@@ -55,8 +55,8 @@ function planPrimerMes(a,ini,promo,modo,dur=1){ const m=ini.slice(0,7), sig=mesS
   if(a.precioClase) lin.push(`Desde ${mesSolo(k)}: ${money(a.precioClase)} por clase${promo?" (precio normal)":""}`);
   return {m,sig,quedan,p,pagos,txt:lin.join(" · ")}; }
 // Cada horario puede tener "desde" (un día que se sumó después): ese día cuenta solo desde esa fecha.
-function clasesMes(a,m=S.mes){ const v={}; (a.horarios||[]).forEach(h=>{ const ds=h.desde||""; if(!(h.dia in v)||ds<v[h.dia]) v[h.dia]=ds; });
-  return Object.entries(v).reduce((s,[dia,ds])=>{ dia=Number(dia); if(!ds||ds.slice(0,7)<m) return s+ocurrencias(dia,m); if(ds.slice(0,7)>m) return s; const d0=isoDate(ds); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); let n=0; for(let d=d0.getDate();d<=last;d++) if(new Date(d0.getFullYear(),d0.getMonth(),d).getDay()===dia) n++; return s+n; },0); }
+function clasesMes(a,m=S.mes){ /* cada horario cuenta como una clase aparte, aunque sean dos horas el mismo día */
+  return (a.horarios||[]).reduce((s,h)=>{ const dia=Number(h.dia), ds=h.desde||""; if(!ds||ds.slice(0,7)<m) return s+ocurrencias(dia,m); if(ds.slice(0,7)>m) return s; const d0=isoDate(ds); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); let n=0; for(let d=d0.getDate();d<=last;d++) if(new Date(d0.getFullYear(),d0.getMonth(),d).getDay()===dia) n++; return s+n; },0); }
 // ¿Este alumno va a este turno en esta fecha? (ya arrancó y, si el día lo sumó después, ya empezó ese día)
 function vaEn(a,t,f){ if(a.inicio&&a.inicio>f) return false; const h=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); return !(h&&h.desde&&h.desde>f); }
 // Aumentos: cada alumno guarda [{desde:"YYYY-MM", precio, antes, monto, aplicado}]. Los futuros quedan programados y se aplican solos al llegar el mes.
@@ -74,7 +74,7 @@ function precioEn(a,m=S.mes){ const L=aumentosDe(a), act=mesKey(now);
 function ultimoAumento(a){ return aumentosDe(a).filter(x=>x.desde<=mesKey(now)).pop()||null; }
 function aumentoProx(a){ return aumentosDe(a).find(x=>!x.aplicado&&x.desde>mesKey(now))||null; }
 function cuotaMes(a,m=S.mes){ const p=precioEn(a,m); return p>0 ? clasesMes(a,m)*p : (a.cuota||0); }
-function extraDias(a,m=S.mes){ return diasDe(a).filter(d=>ocurrencias(d,m)===5); }
+function extraDias(a,m=S.mes){ return (a.horarios||[]).map(h=>Number(h.dia)).filter(d=>ocurrencias(d,m)===5); }
 function ajusteDe(a,m=S.mes){ const p=a.pagos&&a.pagos[m]; return p&&typeof p.ajuste==="number"?p.ajuste:null; }
 function montoMes(a,m=S.mes){ const aj=ajusteDe(a,m); return aj!==null?aj:cuotaMes(a,m); }
 function cobradoDe(a,m=S.mes){ const p=a.pagos[m]; const aj=ajusteDe(a,m); return aj!==null?aj:(p.monto||cuotaMes(a,m)); }
