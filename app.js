@@ -153,6 +153,28 @@ function turnosGrilla(club){
 }
 function slotsDe(dia){ return turnosGrilla(S.club).filter(t=>t.dia===dia).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
 const catNorm = c => String(c||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^iniciales$/,"inicial");
+/* Categorías para elegir tocando (sin escribir, así no hay errores de tipeo). Se guardan en minúscula. */
+const CATS_AL=["Inicial","Octava","Séptima","Sexta","Quinta","Cuarta"];
+function catPicker(id,cur){
+  const n=catNorm(cur); const opts=CATS_AL.map(c=>[c.toLowerCase(),c]); let val=String(cur||"").trim();
+  const hit=opts.find(([v])=>catNorm(v)===n); if(hit) val=hit[0]; else if(n) opts.push([val,val]);
+  return `<input type="hidden" id="${id}" value="${esc(val)}"><div class="cat-pick" data-for="${id}" style="display:flex;gap:6px;flex-wrap:wrap">${opts.map(([v,l])=>`<button type="button" class="chip" data-act="catPick" data-v="${esc(v)}" aria-pressed="${!!n&&catNorm(v)===n}" style="text-transform:none;letter-spacing:0;font-size:14px;padding:9px 14px">${esc(l)}</button>`).join("")}</div>`;
+}
+function elegirCat(b){ const box=b.closest(".cat-pick"); const inp=box&&document.getElementById(box.dataset.for); if(!inp) return;
+  const on=b.getAttribute("aria-pressed")!=="true"; box.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed","false"));
+  b.setAttribute("aria-pressed",String(on)); inp.value=on?b.dataset.v:""; }
+/* Esteban (vista de profe): cambia la categoría de un alumno de Jump tocando su nombre en la agenda. */
+function openCatAlumno(a){
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Categoría</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Tocá la categoría en la que está ahora. El alumno no la ve.</span></div>
+    <div class="field">${catPicker("cAl",a.categoria)}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="catAlOk" data-id="${a.id}">Guardar</button></div>`);
+}
+async function guardarCatAlumno(a){
+  if(S.modo==="profe"&&!clubsDe(a).has("JUMP")){ toast("Solo podés cambiar alumnos de Jump"); return; }
+  const val=($("#cAl").value||"").trim();
+  const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
+  if(ok){ closeSheet(); toast(val?`${a.nombre}: ${capCat(val)}`:`${a.nombre}: sin categoría`); }
+}
 function catsDe(a){ const set=new Set(); String(a.categoria||"").split(",").map(catNorm).filter(Boolean).forEach(c=>set.add(c)); (a.horarios||[]).forEach(h=>h.nivel&&set.add(catNorm(h.nivel))); return set; }
 function ordenSemana(t){ const hoyD=now.getDay()||7; return (((t.dia||7)-hoyD+7)%7)*10000+Number(String(t.hora).replace(":","")); }
 function opcionesRecupera(a,max=3){
@@ -1244,8 +1266,8 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aClub">Club principal</label><select id="aClub">${["JUMP","ESPACIO"].map(c=>`<option ${(a.club||S.club||"JUMP")===c?"selected":""}>${c}</option>`).join("")}</select></div>
       <div class="field"><label for="aTel">Teléfono</label><input id="aTel" inputmode="tel" value="${esc(a.tel)}"></div>
     </div>
+    <div class="field"><span class="flabel">Categoría</span>${catPicker("aCat",a.categoria)}</div>
     <div class="two">
-      <div class="field"><label for="aCat">Categoría</label><input id="aCat" list="cats" value="${esc(a.categoria)}" placeholder="octava, séptima…"><datalist id="cats"><option>inicial</option><option>niños</option><option>octava</option><option>séptima</option><option>sexta</option></datalist></div>
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
@@ -1331,7 +1353,7 @@ function alumnosDelTurno(club,dia,hora){ return S.alumnos.filter(a=>a.activo!==f
 function openTurnoCat(club,dia,hora){
   const al=alumnosDelTurno(club,dia,hora); const act=(al.flatMap(a=>(a.horarios||[]).filter(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club).map(h=>h.nivel||""))).find(Boolean)||"";
   openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Categoría del turno</h2><span class="small muted">${DIAS_LARGO[dia]} ${hora} · ${club} · ${al.length} alumno${al.length===1?"":"s"}. Solo pueden venir a recuperar acá los de esta categoría.</span></div>
-    <div class="field"><input id="tCat" list="cats2" value="${esc(act)}" placeholder="octava, séptima…" style="font-size:16px"><datalist id="cats2"><option>inicial</option><option>niños</option><option>octava</option><option>séptima</option><option>sexta</option></datalist></div>
+    <div class="field">${catPicker("tCat",act)}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="turnoCatOk" data-club="${club}" data-dia="${dia}" data-hora="${hora}">Guardar</button></div>`);
 }
 async function guardarTurnoCat(b){
@@ -1415,7 +1437,9 @@ document.addEventListener("click",async e=>{
     case "libClub": LIB.club=b.dataset.v; openLibres(); break;
     case "pagoNuevo": openPagoProfe(); break;
     case "verComp": if(A) verComprobante(A); break;
-    case "turnoCat": openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
+    case "catPick": elegirCat(b); break;
+    case "catAlOk": if(A) await guardarCatAlumno(A); break;
+    case "turnoCat": if(S.modo==="profe"&&b.dataset.club!=="JUMP") break; openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
     case "turnoCatOk": guardarTurnoCat(b); break;
     case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false,true)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
     case "asCSV": exportAsist(); break;
@@ -1470,7 +1494,7 @@ document.addEventListener("click",async e=>{
     case "recTurno": closeSheet(); await lluviaTurno(b.dataset.club,b.dataset.f||hoyISO,b.dataset.hora); break;
     case "lluvia": openLluvia(b.dataset.club,Number(b.dataset.dia),b.dataset.hora,b.dataset.f||hoyISO); break;
     case "stepRec": { const el=$("#aRec"); el.textContent=Math.max(0,Number(el.textContent)+Number(b.dataset.d)); break; }
-    case "editA": if(A&&S.modo!=="profe"){ formAlumno(A); cargarHist(A); } break;
+    case "editA": if(A&&S.modo!=="profe"){ formAlumno(A); cargarHist(A); } else if(A&&clubsDe(A).has("JUMP")) openCatAlumno(A); break;
     case "close": closeSheet(); break;
     case "hadd": { const r=[...document.querySelectorAll("#hList .hrow .hc")].pop(); $("#hList").insertAdjacentHTML("beforeend",hRow(undefined,r?r.value:undefined)); break; }
     case "hdel": b.parentElement.remove(); break;
