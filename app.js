@@ -62,7 +62,7 @@ function vaEn(a,t,f){ if(a.inicio&&a.inicio>f) return false; const h=(a.horarios
 // Aumentos: cada alumno guarda [{desde:"YYYY-MM", precio, antes, monto, aplicado}]. Los futuros quedan programados y se aplican solos al llegar el mes.
 function aumentosDe(a){ return (a.aumentos||[]).filter(x=>x&&x.desde).slice().sort((x,y)=>x.desde.localeCompare(y.desde)); }
 // Datos del primer mes que se cargaron al darlo de alta (para poder cambiar la fecha de arranque después).
-function planGuardado(a){ if(!a||!a.inicio) return null; const act=mesKey(now); const m0=a.inicio.slice(0,7);
+function planGuardado(a){ if(!a||!a.inicio||!a.promo||a.inicioManual) return null; /* solo alumnos dados de alta con la app; la fecha cargada a mano nunca genera cuotas */ const act=mesKey(now); const m0=a.inicio.slice(0,7);
   const pr=a.promo||{}; const p0=(a.pagos||{})[m0]||{};
   const modo=pr.modo||(p0.pagado&&!p0.monto&&String(p0.nota||"").startsWith("Empieza el")?"sig":"este");
   const meses=Object.keys(planPrimerMes(a,a.inicio,pr.precioClase||0,modo,pr.meses||1).pagos); if(meses.every(m=>m<act&&(a.pagos||{})[m]&&(a.pagos[m].pagado&&a.pagos[m].monto))) return null;
@@ -423,7 +423,7 @@ function vDinero(){
     ${otros.map(x=>`<div class="pl-row"><span>${esc(x.nota||"Gasto")} <small class="muted">${fmtCorto(x.fecha)}</small></span><span style="display:flex;gap:10px;align-items:center"><b class="num">${money(x.monto)}</b><button class="mini" style="padding:3px 9px" data-act="gastoDel" data-id="${x.id}" aria-label="Borrar gasto">×</button></span></div>`).join("")}
     <button class="pl-row add" data-act="gastoNuevo"><span>+ Anotar otro gasto</span><b></b></button>
   </div></section>
-  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button></section>`;
+  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button><button class="linkish" data-act="inicios">Cuándo empezó cada alumno ›</button></section>`;
 }
 function openGasto(){ openSheet(`<div style="display:grid;gap:14px"><div style="display:grid;gap:4px"><span class="flabel">Plata</span><h2 class="disp">Otro gasto</h2></div>
   <div class="two"><div class="field"><label for="gMonto">Monto</label><input id="gMonto" type="number" inputmode="numeric" min="0" step="500"></div><div class="field"><label for="gFecha">Fecha</label><input id="gFecha" type="date" value="${hoyISO}"></div></div>
@@ -476,12 +476,19 @@ function vAlumnos(){
     ${resumen}
     ${S.esOwner&&S.modo!=="profe"&&!fp?`<button type="button" class="mini aum-btn" data-act="aumento">📈 Cargar aumento de cuota</button>`:""}
     ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:fp?"":(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}
+    ${S.alumnos.length&&S.modo!=="profe"?`<button class="linkish" data-act="inicios" style="justify-self:start">Cuándo empezó cada alumno y sus aumentos ›</button>`:""}
     ${S.alumnos.length&&S.downloads?`<button class="linkish" data-act="csv" style="justify-self:start">Descargar lista (CSV)</button>`:""}
   </section>`;
 }
 
 // Alumno nuevo: si arranca del 1 al 14, hasta fin de ese mes; si arranca del 15 en adelante, hasta fin del mes siguiente.
-const arranqueDe=a=>a.inicio||(a.codigo?"":a.alta)||"";
+const arranqueDe=a=>a.antiguo?"":(a.inicio||(a.codigo?"":a.alta)||"");
+// Cuándo empezó, en texto: "29/10/2026 (hace 3 meses)", "Hace años" o "Sin dato".
+function desdeTxt(a,corto){ if(a.antiguo) return "Hace años"; const i=arranqueDe(a); if(!i) return "Sin dato"; const [y,m,d]=i.split("-").map(Number);
+  const n=(now.getFullYear()-y)*12+now.getMonth()+1-m; const hace=n<=0?"este mes":n===1?"hace 1 mes":n<24?`hace ${n} meses`:`hace ${Math.floor(n/12)} años`;
+  return corto?`${pad(d)}/${pad(m)}/${String(y).slice(2)}`:`${pad(d)}/${pad(m)}/${y} (${hace})`; }
+// Historial de aumentos en texto: "mar 2026: $8.000 → $9.000".
+function aumHistTxt(a){ return aumentosDe(a).map(x=>`${mesCorto(x.desde)}${x.antes?`: ${money(x.antes)} → ${money(x.precio)}`:x.precio?`: ${money(x.precio)}`:""}${!x.aplicado&&x.desde>mesKey(now)?" (programado)":""}`); }
 function nuevoHasta(a){ const i=arranqueDe(a); if(!i) return ""; const [y,m,d]=i.split("-").map(Number); return toISO(new Date(y,d<=14?m:m+1,0)); }
 function esNuevo(a){ const h=nuevoHasta(a); return !!h&&hoyISO<=h; }
 // Primer día que le toca clase (desde que arranca), para preguntarle qué le pareció.
@@ -1223,8 +1230,20 @@ function openAumento(){ const act=mesKey(now); if(!AUM.desde) AUM.desde=mesSig(a
     <div class="aum-sel"><span class="small"><b>${n}</b> de ${al.length} alumnos</span><span class="aum-q"><button type="button" class="linkish" data-act="aumQ" data-v="todos">Todos</button><button type="button" class="linkish" data-act="aumQ" data-v="nadie">Ninguno</button><button type="button" class="linkish" data-act="aumQ" data-v="JUMP">Jump</button><button type="button" class="linkish" data-act="aumQ" data-v="ESPACIO">Espacio</button></span></div>
     ${meses.length?`<div class="aum-sel" style="margin-top:-4px"><span class="small muted">Último aumento:</span><span class="aum-q">${meses.map(m=>`<button type="button" class="linkish" data-act="aumQ" data-v="u:${m}">${mesCorto(m)}</button>`).join("")}<button type="button" class="linkish" data-act="aumQ" data-v="u:">Sin dato</button></span></div>`:""}
     <div class="aum-list">${al.map(a=>{ const pl=aumPlan(a,AUM.desde,AUM.monto||0); const on=AUM.sel.has(a.id); const px=aumentoProx(a);
-      return `<label class="aum-row ${on?"on":""}"><input type="checkbox" data-act="aumT" data-id="${a.id}" ${on?"checked":""}><span class="aum-n"><b>${esc(a.nombre)}</b><small>Últ. aumento: ${ult(a)}${px&&px.desde!==AUM.desde?` · programado ${mesCorto(px.desde)}`:""}</small></span><span class="aum-p num">${tipo==="registro"?money(pl.precio):`${money(pl.antes)} → <b>${money(pl.precio)}</b>`}</span></label>`; }).join("")}</div>
+      return `<label class="aum-row ${on?"on":""}"><input type="checkbox" data-act="aumT" data-id="${a.id}" ${on?"checked":""}><span class="aum-n"><b>${esc(a.nombre)}</b><small>Empezó: ${desdeTxt(a,true)} · Últ. aumento: ${ult(a)}${px&&px.desde!==AUM.desde?` · programado ${mesCorto(px.desde)}`:""}</small></span><span class="aum-p num">${tipo==="registro"?money(pl.precio):`${money(pl.antes)} → <b>${money(pl.precio)}</b>`}</span></label>`; }).join("")}</div>
     <div class="btns" style="margin-top:12px"><button class="btn sec2" data-act="close">Cancelar</button><button class="btn pri" data-act="aumOk" ${n&&AUM.monto>0&&AUM.desde?"":"disabled"}>${tipo==="registro"?"Registrar":"Aplicar"} a ${n}</button></div>`,()=>openAumento()); }
+/* Cuándo empezó cada alumno: se carga una vez y queda fija (los aumentos no la cambian). Los que están hace mucho: "Hace años". */
+function openInicios(){ const al=S.alumnos.filter(a=>a.activo!==false).sort((x,y)=>{ const sx=!x.antiguo&&!arranqueDe(x), sy=!y.antiguo&&!arranqueDe(y); return (sy-sx)||(x.nombre||"").localeCompare(y.nombre||""); });
+  const sin=al.filter(a=>!a.antiguo&&!arranqueDe(a)).length;
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Cuándo empezó cada uno</h2>
+    <span class="small muted">${sin?`<b style="color:var(--warn)">${sin} sin fecha.</b> `:"Todos tienen fecha. "}Elegí la fecha o tocá <b>Hace años</b> si no sabés. Se guarda sola y queda fija aunque les aumentes.</span></div>
+    <div class="aum-list">${al.map(a=>{ const ini=a.antiguo?"":arranqueDe(a); const h=aumHistTxt(a);
+      return `<div class="aum-row on" style="display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center"><span class="aum-n"><b>${esc(a.nombre)}</b><small>${esc(desdeTxt(a))}${h.length?` · Aumentos: ${esc(h.join(" · "))}`:" · Sin aumentos"}</small></span>
+        <span style="display:flex;gap:6px;align-items:center"><input type="date" class="iniL" data-id="${a.id}" value="${ini}" style="width:140px;min-height:40px"><button type="button" class="seg-b" data-act="iniAntL" data-id="${a.id}" aria-pressed="${!!a.antiguo}" style="padding:8px 10px">Hace años</button></span></div>`; }).join("")}</div>
+    <div class="btns" style="margin-top:12px"><span></span><button class="btn pri" data-act="close">Listo</button></div>`); }
+document.addEventListener("change",async e=>{ const t=e.target; if(!t||!t.classList||!t.classList.contains("iniL")||!window.MODO_STAFF) return;
+  const A=S.alumnos.find(x=>x.id===t.dataset.id); if(!A||!t.value) return;
+  if(await safe(()=>colA().doc(A.id).update({inicio:t.value,antiguo:false,...(A.promo?{}:{inicioManual:true})}),`${A.nombre}: empezó el ${t.value.split("-").reverse().join("/")}`)){ A.inicio=t.value; A.antiguo=false; openInicios(); } });
 async function guardarAumento(b){ const act=mesKey(now); const al=S.alumnos.filter(a=>AUM.sel.has(a.id)&&a.activo!==false&&a.precioClase>0); if(!al.length||!(AUM.monto>0)) return;
   b.disabled=true; b.textContent="Guardando…";
   const ok=await safe(async()=>{ for(let i=0;i<al.length;i+=400){ const bt=S.db.batch();
@@ -1348,6 +1367,10 @@ async function exportAsist(){
   const csv="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");
   try{ await S.downloads.save({filename:`asistencia-${m}.csv`,data:csv}); }catch(e){}
 }
+function iniCampo(a){ const ini=a.antiguo?"":arranqueDe(a);
+  return `<div class="field"><label for="aIni2">Empezó el</label><div style="display:flex;gap:8px;align-items:center"><input id="aIni2" type="date" value="${ini}" data-orig="${ini}" data-ant="${a.antiguo?1:0}" style="flex:1">
+    <button type="button" class="seg-b" data-act="iniAnt" aria-pressed="${!!a.antiguo}" style="flex:0 0 auto;padding:10px 12px">Hace años</button></div>
+    <span class="small muted" id="aIniTx">${a.antiguo?"Alumno de hace años (sin fecha exacta). ":ini?desdeTxt(a).replace(/^.*\(/,"Empezó ").replace(")",". "):"Cargá cuándo empezó. "}Queda fija aunque le aumentes.</span></div>`; }
 function formAlumno(a={},leadId=""){
   openSheet(`<form id="fA" data-id="${a.id||""}" data-lead="${leadId}" style="display:grid;gap:14px">
     <div class="btns"><h2 class="disp">${a.id?esc(a.nombre):"Nuevo alumno"}</h2>${a.id&&a.activo!==false?`<button type="button" class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes">${WA_ICON}</button>`:""}</div>
@@ -1361,15 +1384,16 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
-    ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&pagoReal((a.pagos||{})[mesKey(now)])){ const ini=arranqueDe(a);
+    ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&(pagoReal((a.pagos||{})[mesKey(now)])||a.antiguo||!esNuevo(a))){ /* alumno que ya venía: la fecha no toca las cuotas */
         // Ya pagó el mes: la fecha de arranque igual se ve y se puede corregir (sirve para los aumentos y para marcarlo como nuevo).
-        return `<div class="field"><label for="aIni2">Empezó el</label><input id="aIni2" type="date" value="${ini}" data-orig="${ini}"><span class="small muted">${ini?`Hace ${(()=>{ const [y,m]=ini.split("-").map(Number); const n=(now.getFullYear()-y)*12+now.getMonth()+1-m; return n<=0?"menos de un mes":n===1?"1 mes":n+" meses"; })()}. `:"Cargá cuándo empezó. "}Sirve para saber cuándo le toca el aumento y para marcarlo como nuevo.</span></div>`; }
+        return iniCampo(a); }
       return `<div class="field promo"><span class="flabel">${a.id?"Fecha de arranque":"Primer mes"}</span>
       <div class="two"><div class="field"><label for="aIni">Empieza el</label><input id="aIni" type="date" value="${pm?pm.ini:(a.id?arranqueDe(a):hoyISO)}" data-orig="${pm?pm.ini:(a.id?arranqueDe(a):hoyISO)}"></div>
       <div class="field"><label for="aPromo">Precio promo por clase (opcional)</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Sin promo" value="${pm&&pm.promo?pm.promo:""}"></div></div>
       <div class="field" id="aDurBox" hidden style="margin:0"><label>¿Cuántas cuotas dura la promo?</label><div class="seg" style="grid-template-columns:repeat(3,1fr);margin:0">${[1,2,3].map(n=>`<button type="button" class="seg-b" data-act="pmDur" data-n="${n}" aria-pressed="${n===((pm&&pm.dur)||1)}">${n===1?"1 mes":n+" meses"}</button>`).join("")}</div></div>
       <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="${!pm||pm.modo!=="sig"}">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="${!!pm&&pm.modo==="sig"}">Las suma al mes siguiente</button></div>
       <span class="small" id="aPromoCalc" style="line-height:1.5"></span>${a.id?'<span class="small muted">Si cambiás la fecha, la cuota del primer mes se recalcula sola (los meses que ya pagó no se tocan).</span>':""}</div>`; })()}
+    ${a.id&&aumentosDe(a).length?`<div class="field"><span class="flabel">Aumentos</span><span class="small">${aumHistTxt(a).map(esc).join("<br>")}</span></div>`:""}
     <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
     <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec" data-orig="${recN(a)||0}">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
     <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
@@ -1517,6 +1541,9 @@ document.addEventListener("click",async e=>{
     case "gastoDel": if(confirm("¿Borrar este gasto?")) await guardarGastos((S.gastosG||[]).filter(x=>x.id!==b.dataset.id),"Gasto borrado"); break;
     case "verDeben": S.fPago="debe"; S.tab="alumnos"; render(); scrollTo(0,0); break;
     case "aumento": AUM.sel=null; openAumento(); break;
+    case "iniAnt": { const i=$("#aIni2"); if(!i) break; const on=i.dataset.ant!=="1"; i.dataset.ant=on?"1":"0"; b.setAttribute("aria-pressed",on); if(on) i.value=""; $("#aIniTx").textContent=on?"Alumno de hace años (sin fecha exacta). Queda fija aunque le aumentes.":"Elegí la fecha en que empezó. Queda fija aunque le aumentes."; break; }
+    case "inicios": openInicios(); break;
+    case "iniAntL": if(A){ const on=!A.antiguo; if(await safe(()=>colA().doc(A.id).update(on?{antiguo:true}:{antiguo:false}),on?`${A.nombre}: hace años`:"Listo")){ A.antiguo=on; openInicios(); } } break;
     case "aumM": AUM.monto=Number(b.dataset.v); openAumento(); break;
     case "aumQ": { const v=b.dataset.v; const al=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0);
       AUM.sel=new Set(v==="todos"?al.map(a=>a.id):v==="nadie"?[]:v.startsWith("u:")?al.filter(a=>((ultimoAumento(a)||{}).desde||"")===v.slice(2)).map(a=>a.id):al.filter(a=>enClub(a,v)).map(a=>a.id)); openAumento(); break; }
@@ -1634,7 +1661,7 @@ document.addEventListener("submit",async e=>{
         const nuevo=planPrimerMes(data,ini,pv,modo,dur).pagos, pagos={...(prevA.pagos||{})};
         Object.keys(nuevo).forEach(m=>{ if(!pagoReal(pagos[m])) pagos[m]=nuevo[m]; });
         data.pagos=pagos; data.inicio=ini; data.promo=pv?{precioClase:pv,meses:dur,modo,hasta:Object.keys(nuevo).sort().pop()}:{modo}; } }
-    { const i2=$("#aIni2"); if(id&&i2&&i2.value&&i2.value!==i2.dataset.orig) data.inicio=i2.value; }
+    { const i2=$("#aIni2"); if(id&&i2){ const ant=i2.dataset.ant==="1"; if(ant&&!prevA.antiguo) data.antiguo=true; else if(!ant&&i2.value&&(i2.value!==i2.dataset.orig||prevA.antiguo)){ data.inicio=i2.value; data.antiguo=false; if(!prevA.promo) data.inicioManual=true; } } }
     if(id){ data.activo=$("#aAct").checked; if(await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(id),data); pendA.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); },"Guardado")) closeSheet(); }
     else { data.activo=true; data.tipo="Grupal"; data.pagos={}; data.alta=hoyISO;
       { const ini=($("#aIni")||{}).value||hoyISO; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este";
