@@ -342,7 +342,18 @@ CÓMO SE USA LA APP
 - Pestaña Ausencias: tus faltas y avisos. Pestaña Pagos: tus cuotas y comprobantes.
 - Mi cuenta (el círculo con tu inicial, arriba): cambiar usuario y activar notificaciones.
 - Las notificaciones te avisan el día de tu clase y si hay cambios. En iPhone primero hay que agregar la app a la pantalla de inicio (Compartir → Agregar a inicio).
-- Si una cuenta maneja a más de un alumno de la familia, se elige cuál ver en la barra de arriba.`;
+- Si una cuenta maneja a más de un alumno de la familia, se elige cuál ver en la barra de arriba.
+
+BOTONES (llevan al alumno directo a la pantalla)
+- Cuando le sirva al alumno ir a una parte de la app, poné un botón al final de tu respuesta con este formato exacto: [[accion|Texto corto]]
+- Acciones que existen:
+  [[recuperar|Ir a Recuperá]] → la sección para reservar una recuperación
+  [[reservar:FECHA,HORA,CLUB|Reservar lunes 2/11 19:00]] → reserva ese horario (usá el código "reservar:..." que figura al lado de cada horario libre en su información; la app le pide confirmar)
+  [[pagar|Pagar la cuota]] → abre el pago
+  [[pagos|Ver mis pagos]] · [[ausencias|Ver mis ausencias]] · [[inicio|Ir al inicio]]
+  [[cuenta|Mi cuenta]] → cambiar usuario o activar notificaciones
+  [[gabriel|Escribirle a Gabriel]] → WhatsApp de Gabriel
+- Como mucho 3 botones por respuesta. No inventes otras acciones ni códigos.`;
 
 async function asistente(body, env) {
   if (!env.ANTHROPIC_API_KEY) return { error: "El asistente todavía no está activado. Escribile a Gabriel." };

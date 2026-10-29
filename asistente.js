@@ -12,7 +12,48 @@
   const club = c => c === "ESPACIO" ? "Espacio La 10" : "Jump";
   const fechaTx = f => { const d = new Date(`${f}T12:00:00-03:00`); return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth() + 1}`; };
   const escH = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const formato = s => escH(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+  // La IA puede poner botones así: [[accion|Texto del botón]]. Solo se muestran las acciones que existen.
+  const PANT_STAFF = { owner: ["inicio", "alumnos", "asist", "semana", "dinero"], profe: ["horas", "agenda", "asist", "recuperar", "plata"] };
+  function accionOk(acc) {
+    const i0 = acc.indexOf(":"), k = i0 < 0 ? acc : acc.slice(0, i0), v = i0 < 0 ? "" : acc.slice(i0 + 1);
+    if (modo() === "staff") {
+      const A = () => (S.alumnos || []).find(a => a.id === v);
+      if (k === "ficha" || k === "mensaje") return !!A() && (S.modo !== "profe" || intentar(() => clubsDe(A()).has("JUMP"), false));
+      if (k === "comprobante") return S.modo !== "profe" && !!A();
+      if (k === "pantalla") return (PANT_STAFF[S.modo === "profe" ? "profe" : "owner"]).includes(v);
+      return false;
+    }
+    if (["recuperar", "pagar", "ausencias", "pagos", "inicio", "cuenta", "gabriel"].includes(k)) return k !== "gabriel" || !!waGabriel();
+    if (k === "reservar") { const [f, h, c] = v.split(","); return intentar(() => opcionesRec().some(o => o.fecha === f && o.hora === h && o.club === c), false); }
+    return false;
+  }
+  const formato = s => escH(s)
+    .replace(/\[\[([a-z]+(?::[^|\]]*)?)\|([^\]]{1,60})\]\]/g, (m, acc, tx) => accionOk(acc) ? `<button type="button" class="ia-ir" data-ia="ir" data-acc="${acc}">${tx} <span aria-hidden="true">›</span></button>` : "")
+    .replace(/\[\[[^\]]*\]\]/g, "")
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+
+  // Toca el mismo botón que existe en la app (así hace exactamente lo mismo que si lo tocaras a mano).
+  function tocar(attrs) { const b = document.createElement("button"); b.hidden = true; Object.entries(attrs).forEach(([k, v]) => b.setAttribute(k, v)); document.body.appendChild(b); b.click(); b.remove(); }
+  function ir(acc) {
+    if (!accionOk(acc)) return;
+    const i0 = acc.indexOf(":"), k = i0 < 0 ? acc : acc.slice(0, i0), v = i0 < 0 ? "" : acc.slice(i0 + 1); cerrar();
+    if (modo() === "staff") {
+      if (k === "ficha") tocar({ "data-act": "editA", "data-id": v });
+      else if (k === "mensaje") tocar({ "data-act": "msg", "data-id": v });
+      else if (k === "comprobante") tocar({ "data-act": "verComp", "data-id": v });
+      else if (k === "pantalla") tocar({ "data-act": "tab", "data-t": v });
+      return;
+    }
+    if (k === "gabriel") { window.open(waGabriel(), "_blank"); return; }
+    if (k === "cuenta") { tocar({ "data-pa": "cuenta" }); return; }
+    if (k === "ausencias" || k === "pagos") { tocar({ "data-pa": "ptab", "data-t": k }); return; }
+    tocar({ "data-pa": "ptab", "data-t": "inicio" });
+    setTimeout(() => {
+      if (k === "recuperar") { const el = document.getElementById("secRec"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      else if (k === "pagar") { const b = document.querySelector('#pView [data-pa="pagar"]'); if (b) b.click(); else tocar({ "data-pa": "ptab", "data-t": "pagos" }); }
+      else if (k === "reservar") { const [f, h, c] = v.split(","); tocar({ "data-pa": "reservar", "data-f": f, "data-h": h, "data-c": c }); }
+    }, 80);
+  }
   const intentar = (f, d = "") => { try { return f(); } catch (e) { return d; } };
 
   let abierto = false, enviando = false, msgs = [], idAl = null, activoAlumnos = false;
@@ -55,7 +96,7 @@
     const bk = intentar(() => recAl(), []); const n = bk.reduce((s, x) => s + x.n, 0);
     L.push(n ? `Clases para recuperar: ${n} (${bk.map(x => `${x.n} hasta el ${fechaTx(x.vence)}`).join(", ")})` : "Clases para recuperar: ninguna");
     if (n) {
-      const ops = intentar(() => opcionesRec(), []).slice(0, 8).map(o => `${fechaTx(o.fecha)} ${o.hora} en ${club(o.club)} (${o.libres} ${o.libres === 1 ? "lugar" : "lugares"})`);
+      const ops = intentar(() => opcionesRec(), []).slice(0, 8).map(o => `${fechaTx(o.fecha)} ${o.hora} en ${club(o.club)} (${o.libres} ${o.libres === 1 ? "lugar" : "lugares"}) · botón: reservar:${o.fecha},${o.hora},${o.club}`);
       L.push(ops.length ? `Horarios libres para recuperar (se reservan en Inicio → Recuperá):\n- ${ops.join("\n- ")}` : "Horarios libres para recuperar: ninguno por ahora");
     }
 
@@ -84,7 +125,7 @@
     const als = (S.alumnos || []).filter(a => a.activo !== false && intentar(() => [...clubsDe(a)].some(ok), true));
     L.push(`\nALUMNOS ACTIVOS (${als.length}):`);
     als.sort((x, y) => String(x.nombre).localeCompare(String(y.nombre))).forEach(a => {
-      const p = [a.nombre || "?"];
+      const p = [`${a.nombre || "?"} (id: ${a.id})`];
       p.push((a.horarios || []).filter(h => ok(intentar(() => clubH(a, h), a.club))).map(h => `${DIAS[h.dia].slice(0, 3)} ${h.hora} ${club(intentar(() => clubH(a, h), a.club))}`).join(", ") || "sin horario fijo");
       if (a.categoria) p.push(`categoría ${a.categoria}`);
       const rec = intentar(() => recVenceTxt(a), ""); if (rec) p.push(`para recuperar: ${rec}`);
@@ -136,7 +177,7 @@
           <button type="submit" class="ia-env" aria-label="Enviar"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></form>
       </div>`;
     document.body.appendChild(p);
-    p.addEventListener("click", e => { const t = e.target.closest("[data-ia]"); if (!t) return; if (t.dataset.ia === "cerrar") cerrar(); if (t.dataset.ia === "sug") preguntar(t.textContent); });
+    p.addEventListener("click", e => { const t = e.target.closest("[data-ia]"); if (!t) return; if (t.dataset.ia === "cerrar") cerrar(); if (t.dataset.ia === "sug") preguntar(t.textContent); if (t.dataset.ia === "ir") ir(t.dataset.acc); });
     const tx = p.querySelector("#iaTxt");
     tx.addEventListener("input", () => { tx.style.height = "auto"; tx.style.height = Math.min(tx.scrollHeight, 110) + "px"; });
     tx.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); p.querySelector("#iaForm").requestSubmit(); } });
@@ -215,6 +256,8 @@
 .ia-m.bot{align-self:flex-start;background:#f4f5ef;border-bottom-left-radius:5px}
 .ia-m.yo{align-self:flex-end;background:var(--s-olive,#1c2619);color:var(--s-cream,#efe9da);border-bottom-right-radius:5px}
 .ia-m.err{background:transparent;border:1px dashed var(--s-falta,#d0402f);color:var(--s-rojo,#7b2620)}
+.ia-ir{display:inline-flex;align-items:center;gap:4px;margin:6px 6px 0 0;border:0;border-radius:999px;padding:8px 14px;background:var(--s-olive,#1c2619);color:var(--s-lima,#cfe04a);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer}
+.ia-ir:active{transform:scale(.97)}
 .ia-sugs{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .ia-sug{border:1px solid var(--s-brass,#a9875a);background:transparent;color:inherit;border-radius:999px;padding:8px 12px;font:inherit;font-size:.8rem;cursor:pointer;text-align:left}
 .ia-sug:active{background:var(--s-lima,#cfe04a);border-color:var(--s-lima,#cfe04a)}
