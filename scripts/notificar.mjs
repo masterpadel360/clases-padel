@@ -3,7 +3,7 @@
 //    y cuando un alumno paga subiendo el comprobante (el mes queda pagado).
 // 2) Ordena las clases para recuperar por vencimiento y borra las vencidas.
 // 3) Al alumno: recordatorio el día antes y 3 horas antes, avisos de lugar para recuperar y de vencimiento,
-//    y del pago del mes (se paga del 1 al 13: avisos el 1, el 10, el 13 y el 14 si quedó vencido).
+//    y del pago del mes (se paga del 1 al 14: avisos el 1, el 11, el 14 y el 15 si quedó vencido).
 // 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
 import admin from "firebase-admin";
 import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm, clubH, esFijo } from "./logica.mjs";
@@ -241,13 +241,13 @@ if (alumnosConApp.length) {
       }
     }
 
-    // Pago del mes: se paga del 1 al 13. Avisos el 1, el 10 y el 13; el 14 avisa que está vencido (de 10 a 20 h).
+    // Pago del mes: se paga del 1 al 14. Avisos el 1, el 11 y el 14; el 15 avisa que está vencido (de 10 a 20 h).
     {
       const mesAct = hoy.slice(0, 7); const dia = Number(hoy.slice(8)); const MESN = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][Number(hoy.slice(5, 7)) - 1];
-      const PAGO = { 1: { title: `Ya podés pagar ${MESN} 💳`, body: `${nombre}, tenés del 1 al 13 para pagar la cuota. Entrá a la app, tocá Pagar y subí el comprobante.` },
-        10: { title: `Te quedan 3 días para pagar ${MESN}`, body: `${nombre}, el pago vence el 13. Tocá Pagar en la app y subí el comprobante.` },
-        13: { title: `Hoy vence el pago de ${MESN} ⏳`, body: `${nombre}, hoy es el último día para pagar. Tocá Pagar en la app y subí el comprobante.` },
-        14: { title: `Tu pago de ${MESN} está vencido`, body: `${nombre}, venció el 13. Pagalo cuanto antes desde la app: tocá Pagar y subí el comprobante.` } }[dia];
+      const PAGO = { 1: { title: `Ya podés pagar ${MESN} 💳`, body: `${nombre}, tenés del 1 al 14 para pagar la cuota. Entrá a la app, tocá Pagar y subí el comprobante.` },
+        11: { title: `Te quedan 3 días para pagar ${MESN}`, body: `${nombre}, el pago vence el 14. Tocá Pagar en la app y subí el comprobante.` },
+        14: { title: `Hoy vence el pago de ${MESN} ⏳`, body: `${nombre}, hoy es el último día para pagar. Tocá Pagar en la app y subí el comprobante.` },
+        15: { title: `Tu pago de ${MESN} está vencido`, body: `${nombre}, venció el 14. Pagalo cuanto antes desde la app: tocá Pagar y subí el comprobante.` } }[dia];
       const tieneCuota = (a.horarios || []).length || ((a.pagos || {})[mesAct] || {}).monto;
       if (PAGO && mesAct >= "2026-11" && tieneCuota && horaAR >= 10 && horaAR < 20 && !((a.pagos || {})[mesAct] || {}).pagado) {
         const idP = `pago_${a.id}_${mesAct}_${dia}`;

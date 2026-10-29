@@ -291,7 +291,7 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
   if(fl.length) item("var(--k-no)",`<b>${esc(nP)}</b> no cargó ${fl.length===1?`el ${fmtCorto(fl[0].fecha)}`:`${fl.length} días`} (${textoFaltan(fl[0])})`,`<button class="mini" data-act="tab" data-t="admin">Ver</button>`);
   // 4) Cobros
   const d=now.getDate(); if(S.mes===mAct&&d>=10){ const deb=activos().filter(a=>montoMes(a)>0&&!pago(a)&&!(a.inicio&&a.inicio.slice(0,7)>mAct));
-    if(deb.length) item(d>13&&mAct>="2026-11"?"var(--k-no)":"var(--k-amb)",`<b>${deb.length} ${deb.length===1?"alumno debe":"alumnos deben"}</b> ${mAct<"2026-11"?` ${mesSolo(mAct)}`:d>13?" la cuota (vencida)":" la cuota · vence el 13"}`,`<button class="mini" data-act="verDeben">Cobrar</button>`); }
+    if(deb.length) item(d>14&&mAct>="2026-11"?"var(--k-no)":"var(--k-amb)",`<b>${deb.length} ${deb.length===1?"alumno debe":"alumnos deben"}</b> ${mAct<"2026-11"?` ${mesSolo(mAct)}`:d>14?" la cuota (vencida)":" la cuota · vence el 14"}`,`<button class="mini" data-act="verDeben">Cobrar</button>`); }
   // 5) Recuperaciones que vencen en los próximos 4 días
   const lim=toISO(new Date(now.getFullYear(),now.getMonth(),now.getDate()+4)); const pv=activos().filter(a=>recBuckets(a).some(b=>b.vence<=lim));
   if(pv.length) item("var(--k-amb)",`<b>${pv.length} alumno${pv.length===1?"":"s"}</b> con clases a recuperar que vencen esta semana`,`<button class="mini" data-act="tab" data-t="recuperar">Ofrecer</button>`);
@@ -462,7 +462,7 @@ function vAlumnos(){
   const nAlu=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)).length, nEnt=nAlu-sinEntrar.length;
   const sinAcc=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&!a.usuario).length;
   const appRes=S.esOwner&&S.modo!=="profe"?`<div class="app-res">📱 App: <b class="num">${nEnt}</b> de ${nAlu} entraron${sinAcc?` · <button class="linkish" data-act="accMasivo">Mandar accesos (${sinAcc} sin usuario)</button>`:""}${sinEntrar.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="app"?"":"app"}">${fp==="app"?"Ver todos":`Ver quién falta (${sinEntrar.length})`}</button>`:" 🎉"}${sinNotif.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="notif"?"":"notif"}">${fp==="notif"?"Ver todos":`${sinNotif.length} sin notificaciones`}</button>`:""}</div>`:"";
-  const venc=S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13));
+  const venc=S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>14));
   const resumen=fp==="debe"?(deben.length?`<div class="fp-res debe"><b>${deben.length}</b> ${deben.length===1?"alumno debe":"alumnos deben"} · faltan cobrar <b class="num">${money(deben.reduce((t,a)=>t+montoMes(a),0))}</b>${venc?" · <b>vencido</b>":""}<span class="small">Tocá el ícono de WhatsApp de cada uno para mandarle el recordatorio.</span></div>`:`<div class="fp-res ok">🎉 Todos pagaron ${mesSolo(S.mes)}.</div>`)
     :fp==="pago"?`<div class="fp-res ok"><b>${pagaron.length}</b> ${pagaron.length===1?"pagó":"pagaron"} · cobrado <b class="num">${money(pagaron.reduce((t,a)=>t+cobradoDe(a),0))}</b></div>`:"";
   return `

@@ -284,8 +284,17 @@ async function cuenta(ruta, body, env) {
  * Necesita el secreto ANTHROPIC_API_KEY en el Worker (la clave de console.anthropic.com).
  * Solo responde a alumnos logueados, con un límite de mensajes por día para cuidar el gasto.
  * La IA no toca nada de la app: solo explica y responde con los datos del propio alumno.
- * Para cambiar lo que sabe el asistente, editá el texto REGLAS de acá abajo.
+ * Lo que sabe el asistente (las reglas) se lee del archivo asistente-reglas.txt de GitHub,
+ * así se puede cambiar sin volver a pegar este código. Si GitHub no responde, usa el texto REGLAS de acá abajo.
  */
+const REGLAS_URL = "https://raw.githubusercontent.com/masterpadel360/clases-padel/main/asistente-reglas.txt";
+async function reglasActuales() {
+  try {
+    const r = await fetch(REGLAS_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) { const t = (await r.text()).trim(); if (t.length > 200) return t; }
+  } catch (e) { console.log("reglas", e && e.message); }
+  return REGLAS;
+}
 const IA_MODELO = "claude-haiku-5-5";
 const IA_LIMITE_DIA = 30; // mensajes por alumno por día
 
@@ -308,6 +317,7 @@ REGLAS DE LAS CLASES
 - Las clases son de lunes a viernes, en dos clubes: Jump y Espacio La 10.
 - Si no podés ir a una clase, avisás desde la app con 24 horas o más de anticipación y te queda para recuperar. Tenés 2 semanas para recuperarla; si no, se pierde.
 - Si avisás con menos de 24 horas, o no avisás, la clase se pierde.
+- Para saber si un alumno llega a avisar a tiempo, usá SIEMPRE las horas que faltan que vienen calculadas en su información ("faltan X h"). Nunca restes fechas ni horas vos.
 - Una recuperación reservada funciona igual que una clase fija: si avisás con 24 h o más que no vas, la podés volver a recuperar; con menos de 24 h se pierde.
 - La recuperación la usa el mismo alumno: no se puede mandar a otra persona en tu lugar.
 - Recuperás solo en el club donde entrenás (si entrenás en los dos, en cualquiera de los dos), en los horarios que te muestra la app, que son los que se ajustan a tu nivel.
@@ -320,7 +330,7 @@ LLUVIA
 - El mes se paga completo porque se te guarda el lugar. Solo en casos extremos (si la lluvia impide dar clase dos semanas seguidas) se descuentan clases.
 
 PAGOS
-- Desde noviembre 2026 se paga por la app, del 1 al 13 de cada mes. Después del 13 la cuota queda vencida.
+- Desde noviembre 2026 se paga por la app, del 1 al 14 de cada mes. Después del 14 la cuota queda vencida.
 - Cómo pagar: transferís al alias, en la app tocás "Pagar ahora", subís la foto o captura del comprobante y tocás Pagar. El mes queda pagado en verde.
 - La cuota es el precio por clase por la cantidad de clases del mes. Si alguien empieza a mitad de mes, paga solo las clases que le quedan.
 
@@ -358,7 +368,9 @@ async function asistente(body, env) {
     body: JSON.stringify({ fields: { fecha: { stringValue: hoy }, n: { integerValue: String(n + 1) }, alumnoId: { stringValue: String(perfil.alumnoId || "") } } }),
   });
 
-  const system = `${REGLAS}\n\nFECHA Y HORA ACTUAL: ${new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16).replace("T", " ")} (hora de Argentina).\n\nINFORMACIÓN DEL ALUMNO QUE TE ESCRIBE (sacada de la app; usala para responder):\n${datos || "(no llegó información)"}`;
+  const ar = new Date(Date.now() - 3 * 3600e3);
+  const ahora = `${DIAS[ar.getUTCDay()]} ${ar.getUTCDate()}/${ar.getUTCMonth() + 1}/${ar.getUTCFullYear()}, ${String(ar.getUTCHours()).padStart(2, "0")}:${String(ar.getUTCMinutes()).padStart(2, "0")}`;
+  const system = `${await reglasActuales()}\n\nFECHA Y HORA ACTUAL: ${ahora} (hora de Argentina).\n\nINFORMACIÓN DEL ALUMNO QUE TE ESCRIBE (sacada de la app; usala para responder):\n${datos || "(no llegó información)"}`;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },

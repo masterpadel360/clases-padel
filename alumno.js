@@ -160,8 +160,8 @@ function mesesPago() {
   return [...set].sort().reverse();
 }
 
-// Se paga del 1 al 13 de cada mes. Desde el 14 queda vencido.
-const DIA_PAGO = 13; const PAGO_DESDE = "2026-11"; // la regla arranca en noviembre 2026
+// Se paga del 1 al 14 de cada mes. Desde el 15 queda vencido.
+const DIA_PAGO = 14; const PAGO_DESDE = "2026-11"; // la regla arranca en noviembre 2026
 const conPlazo = m => m >= PAGO_DESDE;
 const pagoVence = m => `${DIA_PAGO}/${Number(m.slice(5, 7))}`;
 function mesVencido(m) { if (!conPlazo(m)) return false; const act = mesKey(now); return m < act || (m === act && now.getDate() > DIA_PAGO); }

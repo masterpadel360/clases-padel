@@ -377,7 +377,7 @@
             <div class="v2-ficha-acc"><button class="v2-mini rojo" data-pa="pagar" data-m="${m}">Pagar</button></div></div>`; }).join("")}</div></section>` : ""}
       <section class="v2-sec"><div class="v2-head"><h2>Cómo pagar</h2></div>
         <div class="v2-pasos"><div><b>1</b><span>Transferí el total al alias${P.info.alias ? ` <b>${esc(P.info.alias)}</b>` : ""}.</span></div><div><b>2</b><span>Tocá <b>Pagar ahora</b> y subí la captura del comprobante.</span></div><div><b>3</b><span>Listo: el mes queda <b class="fuitx">pagado</b> y a Gabriel le llega el aviso.</span></div></div>
-        <p class="v2-sub">Se paga del 1 al 13 de cada mes.${wa ? ` ¿Dudas? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Tengo una consulta sobre el pago de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
+        <p class="v2-sub">Se paga del 1 al 14 de cada mes.${wa ? ` ¿Dudas? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Tengo una consulta sobre el pago de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
       </section>
     </div>`;
   };

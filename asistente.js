@@ -22,6 +22,8 @@
   function contexto() {
     const a = P.a; if (!a) return "";
     const L = [];
+    const ah = new Date(Date.now() - 3 * 3600e3);
+    L.push(`AHORA ES: ${DIAS[ah.getUTCDay()]} ${ah.getUTCDate()}/${ah.getUTCMonth() + 1} a las ${String(ah.getUTCHours()).padStart(2, "0")}:${String(ah.getUTCMinutes()).padStart(2, "0")} (hora de Argentina). Las horas que faltan para cada clase ya están calculadas abajo: usalas tal cual, no las calcules vos.`);
     L.push(`Nombre: ${a.nombre || ""}`);
     L.push(`Club(es): ${intentar(() => [...clubsDe(a)].map(club).join(" y "), "")}`);
     const hs = (a.horarios || []).map(h => `${DIAS[h.dia]} ${h.hora} en ${club(intentar(() => clubH(a, h), a.club))}`);
@@ -32,6 +34,11 @@
       let e = c.tipo === "recupera" ? "recuperación reservada" : "clase fija";
       if (c.susp) e += " · SUSPENDIDA"; else if (c.aus) e += c.aus.conRecupero ? " · avisó que no va (le queda para recuperar)" : " · avisó tarde que no va (no recupera)";
       if (c.vuelve) e += " · confirmó que va";
+      // La cuenta de horas la hace la app (la IA se equivoca restando fechas).
+      if (!c.susp && !c.aus && !c.vuelve) {
+        const hs = Math.floor((inicioDe(c.fecha, c.hora).getTime() - Date.now()) / 3600e3);
+        e += hs >= 24 ? ` · faltan ${hs} h: si avisa ahora que no va, LA PUEDE RECUPERAR` : ` · faltan menos de 24 h (${Math.max(hs, 0)} h): si avisa ahora que no va, LA PIERDE`;
+      }
       return `${fechaTx(c.fecha)} ${c.hora} en ${club(c.club)} (${e})`;
     });
     L.push(prox.length ? `Próximas clases:\n- ${prox.join("\n- ")}` : "Próximas clases: ninguna en las próximas 3 semanas");
