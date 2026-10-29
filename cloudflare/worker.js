@@ -287,16 +287,18 @@ async function cuenta(ruta, body, env) {
  * Lo que sabe el asistente (las reglas) se lee del archivo asistente-reglas.txt de GitHub,
  * así se puede cambiar sin volver a pegar este código. Si GitHub no responde, usa el texto REGLAS de acá abajo.
  */
-const REGLAS_URL = "https://raw.githubusercontent.com/masterpadel360/clases-padel/main/asistente-reglas.txt";
-async function reglasActuales() {
+const REGLAS_BASE = "https://raw.githubusercontent.com/masterpadel360/clases-padel/main/";
+async function reglasDe(archivo, porDefecto) {
   try {
-    const r = await fetch(REGLAS_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+    const r = await fetch(REGLAS_BASE + archivo, { cf: { cacheTtl: 300, cacheEverything: true } });
     if (r.ok) { const t = (await r.text()).trim(); if (t.length > 200) return t; }
   } catch (e) { console.log("reglas", e && e.message); }
-  return REGLAS;
+  return porDefecto;
 }
+const REGLAS_STAFF = `Sos el asistente del panel de "Clases de Pádel" para Gabriel (dueño) y Esteban (profe en Jump). Respondé en español de Argentina, con voseo, corto y práctico, usando solo los datos que vienen abajo (alumnos, asistencia de las últimas 5 semanas, avisos). No inventes datos ni cambies nada. A Esteban no le hables de pagos ni de Espacio La 10. También podés redactar mensajes de WhatsApp para alumnos o ayudar con cualquier otra consulta.`;
 const IA_MODELO = "claude-haiku-5-5";
 const IA_LIMITE_DIA = 30; // mensajes por alumno por día
+const IA_LIMITE_STAFF = 150; // mensajes por día para Gabriel y Esteban
 
 const REGLAS = `Sos el asistente de "Clases de Pádel", la app de los alumnos de Gabriel (profe de pádel en Córdoba, Argentina).
 Ayudás a los alumnos con dudas sobre sus clases, faltas, recuperaciones, pagos y cómo usar la app.
@@ -348,7 +350,10 @@ async function asistente(body, env) {
   if (!yo) return { error: "Tu sesión venció. Salí y volvé a entrar." };
   const sa = JSON.parse(env.FIREBASE_SA); const token = await accessToken(sa); const fs = firestore(sa.project_id, token);
   const perfil = await fs.get(`usuarios/${yo.localId}`);
-  if (!perfil || perfil.rol !== "alumno") return { error: "El asistente es para alumnos." };
+  const dueno = (yo.email || "").toLowerCase() === DUENO && yo.emailVerified;
+  const rol = dueno ? "dueño" : perfil && perfil.rol;
+  if (!["alumno", "profe", "dueño"].includes(rol)) return { error: "Tu usuario no tiene acceso al asistente." };
+  const staff = rol !== "alumno"; const limite = staff ? IA_LIMITE_STAFF : IA_LIMITE_DIA;
 
   // Los mensajes de la charla (los últimos 12) y lo que la app sabe del alumno.
   const msgs = (Array.isArray(body.mensajes) ? body.mensajes : []).slice(-12)
@@ -356,28 +361,29 @@ async function asistente(body, env) {
     .filter(m => m.content);
   while (msgs.length && msgs[0].role !== "user") msgs.shift();
   if (!msgs.length || msgs[msgs.length - 1].role !== "user") return { error: "Escribí tu pregunta." };
-  const datos = String(body.contexto || "").slice(0, 6000);
+  const datos = String(body.contexto || "").slice(0, staff ? 90000 : 6000);
 
   // Límite por día (hora de Argentina).
   const hoy = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
   const uso = await fs.get(`iaUso/${yo.localId}`);
   const n = uso && uso.fecha === hoy ? Number(uso.n) || 0 : 0;
-  if (n >= IA_LIMITE_DIA) return { error: "Llegaste al límite de preguntas de hoy. Mañana podés seguir, o escribile a Gabriel." };
+  if (n >= limite) return { error: "Llegaste al límite de preguntas de hoy. Mañana podés seguir, o escribile a Gabriel." };
   await fetch(`https://firestore.googleapis.com/v1/projects/${sa.project_id}/databases/(default)/documents/iaUso/${yo.localId}`, {
     method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ fields: { fecha: { stringValue: hoy }, n: { integerValue: String(n + 1) }, alumnoId: { stringValue: String(perfil.alumnoId || "") } } }),
+    body: JSON.stringify({ fields: { fecha: { stringValue: hoy }, n: { integerValue: String(n + 1) }, alumnoId: { stringValue: String((perfil && perfil.alumnoId) || rol) } } }),
   });
 
   const ar = new Date(Date.now() - 3 * 3600e3);
   const ahora = `${DIAS[ar.getUTCDay()]} ${ar.getUTCDate()}/${ar.getUTCMonth() + 1}/${ar.getUTCFullYear()}, ${String(ar.getUTCHours()).padStart(2, "0")}:${String(ar.getUTCMinutes()).padStart(2, "0")}`;
-  const system = `${await reglasActuales()}\n\nFECHA Y HORA ACTUAL: ${ahora} (hora de Argentina).\n\nINFORMACIÓN DEL ALUMNO QUE TE ESCRIBE (sacada de la app; usala para responder):\n${datos || "(no llegó información)"}`;
+  const reglas = staff ? await reglasDe("asistente-staff.txt", REGLAS_STAFF) : await reglasDe("asistente-reglas.txt", REGLAS);
+  const system = `${reglas}\n\nFECHA Y HORA ACTUAL: ${ahora} (hora de Argentina).\n\n${staff ? "DATOS DEL PANEL (sacados de la app; usalos para responder)" : "INFORMACIÓN DEL ALUMNO QUE TE ESCRIBE (sacada de la app; usala para responder)"}:\n${datos || "(no llegó información)"}`;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-    body: JSON.stringify({ model: IA_MODELO, max_tokens: 600, system, messages: msgs }),
+    body: JSON.stringify({ model: IA_MODELO, max_tokens: staff ? 1200 : 600, system, messages: msgs }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { console.log("Anthropic", r.status, JSON.stringify(j)); return { error: "El asistente no pudo responder. Probá de nuevo en un rato." }; }
   const texto = (j.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
-  return { ok: true, respuesta: texto || "Perdón, no te entendí. ¿Me lo decís de otra forma?", quedan: IA_LIMITE_DIA - n - 1 };
+  return { ok: true, respuesta: texto || "Perdón, no te entendí. ¿Me lo decís de otra forma?", quedan: limite - n - 1 };
 }
