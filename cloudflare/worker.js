@@ -38,6 +38,10 @@ export default {
     if (req.method !== "POST") return new Response("", { status: 405, headers: cors });
     if (!env.FIREBASE_SA) return new Response("Falta el secreto FIREBASE_SA", { status: 500, headers: cors });
     const ruta = new URL(req.url).pathname;
+    if (ruta === "/ia") {
+      let r; try { r = await asistente(await req.json(), env); } catch (e) { console.log("ia", e && e.stack || e); r = { error: "El asistente no pudo responder. Probá de nuevo en un rato." }; }
+      return new Response(JSON.stringify(r), { status: r.error ? 400 : 200, headers: { ...cors, "Content-Type": "application/json" } });
+    }
     if (ruta === "/cuenta/usuario" || ruta === "/cuenta/clave") {
       let r; try { r = await cuenta(ruta, await req.json(), env); } catch (e) { console.log("cuenta", e && e.stack || e); r = { error: "No se pudo. Probá de nuevo." }; }
       return new Response(JSON.stringify(r), { status: r.error ? 400 : 200, headers: { ...cors, "Content-Type": "application/json" } });
@@ -274,4 +278,94 @@ async function cuenta(ruta, body, env) {
   const r = await adminActualizar(sa.project_id, token, { localId: uid, password: clave });
   if (r !== "ok") return { error: "No se pudo cambiar la contraseña. Probá de nuevo." };
   return { ok: true, usuario: perfil.usuario };
+}
+
+/* ---------- Asistente con IA para los alumnos (botón flotante de la app) ----------
+ * Necesita el secreto ANTHROPIC_API_KEY en el Worker (la clave de console.anthropic.com).
+ * Solo responde a alumnos logueados, con un límite de mensajes por día para cuidar el gasto.
+ * La IA no toca nada de la app: solo explica y responde con los datos del propio alumno.
+ * Para cambiar lo que sabe el asistente, editá el texto REGLAS de acá abajo.
+ */
+const IA_MODELO = "claude-haiku-5-5";
+const IA_LIMITE_DIA = 30; // mensajes por alumno por día
+
+const REGLAS = `Sos el asistente de "Clases de Pádel", la app de los alumnos de Gabriel (profe de pádel en Córdoba, Argentina).
+Ayudás a los alumnos con dudas sobre sus clases, faltas, recuperaciones, pagos y cómo usar la app.
+
+CÓMO HABLÁS
+- Español de Argentina, con voseo, cálido y cercano pero breve: 1 a 4 oraciones. Nada de listas largas.
+- Usá **negrita** solo para lo más importante (una fecha, un monto, un botón).
+- Respondés solo sobre las clases de pádel y la app. Si te preguntan otra cosa, decí amablemente que solo podés ayudar con las clases.
+
+LO QUE NO HACÉS
+- No inventás nada. Si un dato no está en la información del alumno o en estas reglas, decí que no lo sabés y que le escriba a Gabriel con el botón "Hablar con Gabriel".
+- No hacés cambios: no podés reservar, cancelar ni pagar. Explicás cómo hacerlo en la app.
+- No prometés excepciones, descuentos ni favores. Esas cosas las decide Gabriel.
+- Nunca hablás del nivel o categoría del alumno ni de otros alumnos. Si preguntan, decí que los horarios que le muestra la app son "los que se ajustan a tu nivel".
+- Si el alumno está enojado, tiene un problema con un pago o algo que no podés resolver, sugerí hablar con Gabriel.
+
+REGLAS DE LAS CLASES
+- Las clases son de lunes a viernes, en dos clubes: Jump y Espacio La 10.
+- Si no podés ir a una clase, avisás desde la app con 24 horas o más de anticipación y te queda para recuperar. Tenés 2 semanas para recuperarla; si no, se pierde.
+- Si avisás con menos de 24 horas, o no avisás, la clase se pierde.
+- Una recuperación reservada funciona igual que una clase fija: si avisás con 24 h o más que no vas, la podés volver a recuperar; con menos de 24 h se pierde.
+- La recuperación la usa el mismo alumno: no se puede mandar a otra persona en tu lugar.
+- Recuperás solo en el club donde entrenás (si entrenás en los dos, en cualquiera de los dos), en los horarios que te muestra la app, que son los que se ajustan a tu nivel.
+- Las clases no se descuentan de la cuota: se recuperan.
+- Las clases que se venían debiendo de antes de noviembre 2026 se pueden recuperar durante todo noviembre.
+- Si entrenás 2 horas el mismo día, cuentan como 2 clases.
+
+LLUVIA
+- Si se suspende una clase por lluvia, te llega un aviso y te queda para recuperar.
+- El mes se paga completo porque se te guarda el lugar. Solo en casos extremos (si la lluvia impide dar clase dos semanas seguidas) se descuentan clases.
+
+PAGOS
+- Desde noviembre 2026 se paga por la app, del 1 al 13 de cada mes. Después del 13 la cuota queda vencida.
+- Cómo pagar: transferís al alias, en la app tocás "Pagar ahora", subís la foto o captura del comprobante y tocás Pagar. El mes queda pagado en verde.
+- La cuota es el precio por clase por la cantidad de clases del mes. Si alguien empieza a mitad de mes, paga solo las clases que le quedan.
+
+CÓMO SE USA LA APP
+- Inicio: tu próxima clase. Para avisar que no vas, deslizás "Deslizá si no podés ir" o tocás "No voy" en el detalle de la clase.
+- En Inicio, la sección "Recuperá" muestra los horarios libres para vos: tocás uno y queda reservado.
+- Pestaña Ausencias: tus faltas y avisos. Pestaña Pagos: tus cuotas y comprobantes.
+- Mi cuenta (el círculo con tu inicial, arriba): cambiar usuario y activar notificaciones.
+- Las notificaciones te avisan el día de tu clase y si hay cambios. En iPhone primero hay que agregar la app a la pantalla de inicio (Compartir → Agregar a inicio).
+- Si una cuenta maneja a más de un alumno de la familia, se elige cuál ver en la barra de arriba.`;
+
+async function asistente(body, env) {
+  if (!env.ANTHROPIC_API_KEY) return { error: "El asistente todavía no está activado. Escribile a Gabriel." };
+  const yo = body && body.idToken ? await quienEs(body.idToken) : null;
+  if (!yo) return { error: "Tu sesión venció. Salí y volvé a entrar." };
+  const sa = JSON.parse(env.FIREBASE_SA); const token = await accessToken(sa); const fs = firestore(sa.project_id, token);
+  const perfil = await fs.get(`usuarios/${yo.localId}`);
+  if (!perfil || perfil.rol !== "alumno") return { error: "El asistente es para alumnos." };
+
+  // Los mensajes de la charla (los últimos 12) y lo que la app sabe del alumno.
+  const msgs = (Array.isArray(body.mensajes) ? body.mensajes : []).slice(-12)
+    .map(m => ({ role: m && m.role === "assistant" ? "assistant" : "user", content: String((m && m.content) || "").slice(0, 1000).trim() }))
+    .filter(m => m.content);
+  while (msgs.length && msgs[0].role !== "user") msgs.shift();
+  if (!msgs.length || msgs[msgs.length - 1].role !== "user") return { error: "Escribí tu pregunta." };
+  const datos = String(body.contexto || "").slice(0, 6000);
+
+  // Límite por día (hora de Argentina).
+  const hoy = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  const uso = await fs.get(`iaUso/${yo.localId}`);
+  const n = uso && uso.fecha === hoy ? Number(uso.n) || 0 : 0;
+  if (n >= IA_LIMITE_DIA) return { error: "Llegaste al límite de preguntas de hoy. Mañana podés seguir, o escribile a Gabriel." };
+  await fetch(`https://firestore.googleapis.com/v1/projects/${sa.project_id}/databases/(default)/documents/iaUso/${yo.localId}`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { fecha: { stringValue: hoy }, n: { integerValue: String(n + 1) }, alumnoId: { stringValue: String(perfil.alumnoId || "") } } }),
+  });
+
+  const system = `${REGLAS}\n\nFECHA Y HORA ACTUAL: ${new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16).replace("T", " ")} (hora de Argentina).\n\nINFORMACIÓN DEL ALUMNO QUE TE ESCRIBE (sacada de la app; usala para responder):\n${datos || "(no llegó información)"}`;
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+    body: JSON.stringify({ model: IA_MODELO, max_tokens: 600, system, messages: msgs }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { console.log("Anthropic", r.status, JSON.stringify(j)); return { error: "El asistente no pudo responder. Probá de nuevo en un rato." }; }
+  const texto = (j.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
+  return { ok: true, respuesta: texto || "Perdón, no te entendí. ¿Me lo decís de otra forma?", quedan: IA_LIMITE_DIA - n - 1 };
 }

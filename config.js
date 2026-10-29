@@ -17,3 +17,7 @@ window.VAPID_KEY = "BOBTZZTz7eYd4liJmkF2obikioilgsLLk19fpGPgB-wA1eP80YVJwMKhfiKZ
 
 // Dirección del aviso al instante (Cloudflare Worker). Si está vacía, los avisos salen igual cada 10 minutos.
 window.AVISOS_URL = "https://avisos-clases.gabohuppi22.workers.dev";
+
+// Asistente con IA (botón flotante en la app del alumno). Ponelo en true cuando el Worker tenga el secreto ANTHROPIC_API_KEY.
+// Para probarlo antes vos solo: abrí la app con ?ia=1 al final del link.
+window.ASISTENTE = false;

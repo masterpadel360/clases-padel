@@ -443,7 +443,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(inicioDe(a))}</span>`:""}${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
+    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13))?"Vencido":"Debe"}</button>`}</div></div>`;
 }
@@ -481,11 +481,11 @@ function vAlumnos(){
 }
 
 // Alumno nuevo: si arranca del 1 al 14, hasta fin de ese mes; si arranca del 15 en adelante, hasta fin del mes siguiente.
-const inicioDe=a=>a.inicio||(a.codigo?"":a.alta)||"";
-function nuevoHasta(a){ const i=inicioDe(a); if(!i) return ""; const [y,m,d]=i.split("-").map(Number); return toISO(new Date(y,d<=14?m:m+1,0)); }
+const arranqueDe=a=>a.inicio||(a.codigo?"":a.alta)||"";
+function nuevoHasta(a){ const i=arranqueDe(a); if(!i) return ""; const [y,m,d]=i.split("-").map(Number); return toISO(new Date(y,d<=14?m:m+1,0)); }
 function esNuevo(a){ const h=nuevoHasta(a); return !!h&&hoyISO<=h; }
 // Primer día que le toca clase (desde que arranca), para preguntarle qué le pareció.
-function primeraClase(a){ const i=inicioDe(a); if(!i) return ""; const d=isoDate(i);
+function primeraClase(a){ const i=arranqueDe(a); if(!i) return ""; const d=isoDate(i);
   for(let k=0;k<35;k++){ const f=toISO(d); if((a.horarios||[]).some(h=>Number(h.dia)===d.getDay()&&!(h.desde&&h.desde>f))) return f; d.setDate(d.getDate()+1); } return ""; }
 function slotHTML(t,fecha){
   const aj=fecha?ajusteTurno(t,fecha):{aus:new Set(),rec:[]}; const libres=CUPO-t.al.length+aj.aus.size-aj.rec.length;
