@@ -20,4 +20,4 @@ window.AVISOS_URL = "https://avisos-clases.gabohuppi22.workers.dev";
 
 // Asistente con IA (botón flotante en la app del alumno). Ponelo en true cuando el Worker tenga el secreto ANTHROPIC_API_KEY.
 // Para probarlo antes vos solo: abrí la app con ?ia=1 al final del link.
-window.ASISTENTE = false;
+window.ASISTENTE = true;
