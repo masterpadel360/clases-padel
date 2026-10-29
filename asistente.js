@@ -20,6 +20,7 @@
       const A = () => (S.alumnos || []).find(a => a.id === v);
       if (k === "ficha" || k === "mensaje") return !!A() && (S.modo !== "profe" || intentar(() => clubsDe(A()).has("JUMP"), false));
       if (k === "comprobante") return S.modo !== "profe" && !!A();
+      if (k === "lluvia" || k === "suspender") { const [f, c = ""] = v.split(","); return /^\d{4}-\d{2}-\d{2}$/.test(f) && f >= hoyISO && ["", "JUMP", "ESPACIO"].includes(c) && (S.modo !== "profe" || c !== "ESPACIO"); }
       if (k === "pantalla") return (PANT_STAFF[S.modo === "profe" ? "profe" : "owner"]).includes(v);
       return false;
     }
@@ -42,6 +43,11 @@
       else if (k === "mensaje") tocar({ "data-act": "msg", "data-id": v });
       else if (k === "comprobante") tocar({ "data-act": "verComp", "data-id": v });
       else if (k === "pantalla") tocar({ "data-act": "tab", "data-t": v });
+      else if (k === "lluvia" || k === "suspender") {
+        // Abre "Suspender clases" con todos los turnos de ese día ya elegidos; Gabriel confirma con un toque.
+        const [f, c = ""] = v.split(",");
+        (async () => { try { await openLluvia(f, k === "lluvia" ? "lluvia" : "sin"); if (S.modo !== "profe" && LL.club !== c) { LL.club = c; llSelTodo(); pintarLluvia(); } } catch (e) { console.error(e); } })();
+      }
       return;
     }
     if (k === "gabriel") { window.open(waGabriel(), "_blank"); return; }

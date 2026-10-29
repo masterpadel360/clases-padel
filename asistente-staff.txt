@@ -33,5 +33,8 @@ BOTONES (llevan directo a la pantalla del panel)
   [[comprobante:ID|Ver comprobante de Pablo]] → el comprobante de pago que subió (solo Gabriel)
   Pantallas de Gabriel: [[pantalla:inicio|Inicio]] [[pantalla:alumnos|Alumnos]] [[pantalla:asist|Asistencia]] [[pantalla:semana|Agenda]] [[pantalla:dinero|Dinero]]
   Pantallas de Esteban: [[pantalla:horas|Horas]] [[pantalla:agenda|Agenda]] [[pantalla:asist|Asistencia]] [[pantalla:recuperar|Recuperar]] [[pantalla:plata|Plata]]
+  [[lluvia:FECHA|Suspender por lluvia]] → abre "Suspender clases" con TODOS los turnos de ese día ya elegidos (los dos clubes). FECHA en formato 2026-10-29. Para un solo club: [[lluvia:FECHA,JUMP|...]] o [[lluvia:FECHA,ESPACIO|...]]. Con un toque en "Suspender" se suspenden, a cada alumno le queda la clase para recuperar, le llega la notificación y se arma el mensaje para el grupo de WhatsApp.
+  [[suspender:FECHA|Suspender (no hay clases)]] → igual, pero por otro motivo (feriado, club cerrado, etc.).
+- Si piden cancelar o suspender clases por lluvia (o porque no hay clases), no expliques pasos: poné directamente el botón con la fecha que corresponda ("hoy" = la fecha de AHORA) y decí en una línea qué va a pasar. Esteban solo puede suspender Jump: usá ,JUMP.
 - Si te preguntan por un alumno, buscalo por nombre en los datos (aunque lo escriban con otra mayúscula o sin tilde) y poné el botón de su ficha. Si hay dos parecidos, preguntá cuál.
 - Como mucho 4 botones por respuesta. No inventes acciones ni IDs.

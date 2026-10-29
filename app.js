@@ -1090,7 +1090,7 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
   render(); openSheet(`<div style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">${ll?"🌧":"⛔"}</div><h2 class="disp" style="margin:0">Clases suspendidas</h2>
     <p class="small" style="margin:0">${ts.length-fallaron.length} turno${ts.length-fallaron.length===1?"":"s"} · ${tot} alumnos con clase para recuperar. La notificación les llega en unos minutos.</p>
     ${fallaron.length?`<p class="small" style="margin:0;color:var(--warn);font-weight:700">No se pudieron suspender: ${esc(fallaron.map(x=>`${fechaTxtLL(x.fecha)} ${x.hora}`).join(", "))}. Revisá la conexión y volvé a suspenderlos.</p>`:""}
-    <div class="msg" style="text-align:left;width:100%"><span class="small muted">Mensaje para el grupo de WhatsApp:</span><div class="bubble">${esc(msg)}</div><button class="mini" data-act="copy" data-text="${esc(msg)}">Copiar mensaje</button></div>
+    <div class="msg" style="text-align:left;width:100%"><span class="small muted">Mensaje para el grupo de WhatsApp:</span><div class="bubble">${esc(msg)}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="mini" data-act="copy" data-text="${esc(msg)}">Copiar mensaje</button><a class="mini go" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Mandar al grupo por WhatsApp →</a></div></div>
     <button class="btn pri" data-act="close" style="width:100%">Listo</button></div>`); }
 
 // Suspender un turno por lluvia (o deshacerlo): queda marcado en la asistencia y cada alumno suma (o resta) una clase para recuperar.
