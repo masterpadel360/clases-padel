@@ -423,7 +423,7 @@ function vDinero(){
     ${otros.map(x=>`<div class="pl-row"><span>${esc(x.nota||"Gasto")} <small class="muted">${fmtCorto(x.fecha)}</small></span><span style="display:flex;gap:10px;align-items:center"><b class="num">${money(x.monto)}</b><button class="mini" style="padding:3px 9px" data-act="gastoDel" data-id="${x.id}" aria-label="Borrar gasto">×</button></span></div>`).join("")}
     <button class="pl-row add" data-act="gastoNuevo"><span>+ Anotar otro gasto</span><b></b></button>
   </div></section>
-  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button><button class="linkish" data-act="inicios">Cuándo empezó cada alumno ›</button></section>`;
+  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button></section>`;
 }
 function openGasto(){ openSheet(`<div style="display:grid;gap:14px"><div style="display:grid;gap:4px"><span class="flabel">Plata</span><h2 class="disp">Otro gasto</h2></div>
   <div class="two"><div class="field"><label for="gMonto">Monto</label><input id="gMonto" type="number" inputmode="numeric" min="0" step="500"></div><div class="field"><label for="gFecha">Fecha</label><input id="gFecha" type="date" value="${hoyISO}"></div></div>
@@ -476,7 +476,6 @@ function vAlumnos(){
     ${resumen}
     ${S.esOwner&&S.modo!=="profe"&&!fp?`<button type="button" class="mini aum-btn" data-act="aumento">📈 Cargar aumento de cuota</button>`:""}
     ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:fp?"":(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}
-    ${S.alumnos.length&&S.modo!=="profe"?`<button class="linkish" data-act="inicios" style="justify-self:start">Cuándo empezó cada alumno y sus aumentos ›</button>`:""}
     ${S.alumnos.length&&S.downloads?`<button class="linkish" data-act="csv" style="justify-self:start">Descargar lista (CSV)</button>`:""}
   </section>`;
 }
