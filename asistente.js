@@ -148,6 +148,46 @@
       L.push(`- ${fechaTx(v.fecha)} ${club(v.club)}: vinieron ${vinieron}${partes.length ? "; " + partes.join("; ") : ""}`);
     });
     if (!as.length) L.push("- (no hay asistencia marcada en estas semanas)");
+    // Lugares libres (próximas 2 semanas) y asistencia sin marcar (últimas 2 semanas), calculados igual que el panel.
+    let susp = {}; try { const d = await S.db.doc("publico/suspendidas").get(); susp = (d.exists && d.data().t) || {}; } catch (e) {}
+    const marcasDe = {}; as.forEach(v => { marcasDe[`${v.fecha}_${v.club}`] = v.marcas || {}; });
+    const pad2 = n => String(n).padStart(2, "0"); const DC = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+    const fTx = f => { const d = new Date(`${f}T12:00:00-03:00`); return `${DC[d.getUTCDay()]} ${d.getUTCDate()}/${d.getUTCMonth() + 1}`; };
+    const grilla = intentar(() => turnosGrilla("").filter(t => ok(t.club)), []);
+    function estadoTurno(t, f) {
+      const fijos = t.al.filter(a => intentar(() => vaEn(a, t, f), true));
+      const aus = fijos.filter(a => intentar(() => avisoApp(a.id, f, t.hora, "ausencia") && !vuelveApp(a.id, f, t.hora), false));
+      const recs = (S.avisos || []).filter(v => v.tipo === "recupera" && v.club === t.club && v.fecha === f && v.hora === t.hora && !intentar(() => vuelveApp(v.alumnoId, f, t.hora), false))
+        .map(v => (S.alumnos || []).find(x => x.id === v.alumnoId)).filter(Boolean);
+      const vienen = fijos.filter(a => !aus.includes(a)).concat(recs);
+      const cats = [...new Set(vienen.concat(fijos).map(a => String(a.categoria || "").trim().toLowerCase()).filter(Boolean))];
+      return { fijos, aus, recs, vienen, nivel: t.nivel ? String(t.nivel).toLowerCase() : cats.join("/"), susp: !!susp[`${t.club}|${f}|${t.hora}`] };
+    }
+    const dia0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    L.push(`\nLUGARES LIBRES PARA RECUPERAR O SUMAR GENTE (próximas 2 semanas; grupos de hasta ${CUPO}; ya descuenta a los que avisaron que no van y suma a los que reservaron recuperar). Un turno vacío sirve para cualquier nivel; uno con gente, solo para su nivel:`);
+    let nLib = 0;
+    for (let i = 0; i < 15; i++) {
+      const d = new Date(dia0); d.setDate(d.getDate() + i); const f = toISO(d); const dw = d.getDay(); if (dw === 0 || dw === 6) continue;
+      grilla.filter(t => t.dia === dw).sort((x, y) => x.hora.localeCompare(y.hora) || x.club.localeCompare(y.club)).forEach(t => {
+        if (new Date(`${f}T${t.hora}:00-03:00`).getTime() < Date.now()) return;
+        const e = estadoTurno(t, f); if (e.susp) { L.push(`- ${fTx(f)} ${t.hora} ${club(t.club)}: SUSPENDIDO`); return; }
+        const lib = CUPO - e.vienen.length; if (lib <= 0) return; nLib++;
+        L.push(`- ${fTx(f)} ${t.hora} ${club(t.club)} · ${e.vienen.length ? "nivel " + (e.nivel || "sin categoría") : "VACÍO (cualquier nivel)"} · ${lib} ${lib === 1 ? "lugar libre" : "lugares libres"}${e.vienen.length ? ` (vienen: ${e.vienen.map(a => a.nombre).join(", ")})` : ""}${e.aus.length ? ` (avisaron que no van: ${e.aus.map(a => a.nombre).join(", ")})` : ""}`);
+      });
+    }
+    if (!nLib) L.push("- (no hay lugares libres en las próximas 2 semanas)");
+    L.push("\nASISTENCIA SIN MARCAR (últimas 2 semanas hasta ahora: alumnos que tenían que venir y no tienen ni presente ni falta marcada; ya excluye a los que avisaron por la app y los turnos suspendidos):");
+    let nPend = 0; const ahoraHM = `${pad2(new Date().getHours())}:${pad2(new Date().getMinutes())}`;
+    for (let i = 14; i >= 0; i--) {
+      const d = new Date(dia0); d.setDate(d.getDate() - i); const f = toISO(d); const dw = d.getDay(); if (dw === 0 || dw === 6) continue;
+      grilla.filter(t => t.dia === dw && (i > 0 || t.hora <= ahoraHM)).sort((x, y) => x.hora.localeCompare(y.hora)).forEach(t => {
+        const e = estadoTurno(t, f); if (e.susp) return; const mk = marcasDe[`${f}_${t.club}`] || {};
+        if (Object.keys(mk).some(k => k.endsWith("|" + t.hora) && mk[k] === "lluvia")) return;
+        const falta = e.vienen.filter(a => !mk[`${a.id}|${t.hora}`]); if (!falta.length) return; nPend += falta.length;
+        L.push(`- ${fTx(f)} ${t.hora} ${club(t.club)}: falta marcar a ${falta.map(a => a.nombre).join(", ")}${Object.keys(mk).length ? "" : " (ese día no hay nada marcado en " + club(t.club) + ")"}`);
+      });
+    }
+    if (!nPend) L.push("- (todo marcado ✓)");
     // Avisos de los alumnos desde la app (faltas avisadas y recuperaciones reservadas).
     const av = (S.avisos || []).filter(v => ok(v.club)).sort((x, y) => (y.fecha + y.hora).localeCompare(x.fecha + x.hora)).slice(0, 200);
     L.push("\nAVISOS DESDE LA APP (faltas avisadas y recuperaciones reservadas, últimas semanas y próximas):");
