@@ -135,7 +135,8 @@
       p.push((a.horarios || []).filter(h => ok(intentar(() => clubH(a, h), a.club))).map(h => `${DIAS[h.dia].slice(0, 3)} ${h.hora} ${club(intentar(() => clubH(a, h), a.club))}`).join(", ") || "sin horario fijo");
       if (a.categoria) p.push(`categoría ${a.categoria}`);
       const rec = intentar(() => recVenceTxt(a), ""); if (rec) p.push(`para recuperar: ${rec}`);
-      if (intentar(() => esNuevo(a), false)) p.push(`NUEVO, arrancó el ${fechaTx(arranqueDe(a))}`);
+      { const ini = intentar(() => arranqueDe(a), ""); if (ini) p.push(`${intentar(() => esNuevo(a), false) ? "NUEVO, " : ""}empezó el ${fechaTx(ini)}/${ini.slice(0, 4)}`); else p.push("fecha de inicio sin cargar"); }
+      { const u = intentar(() => ultimoAumento(a), null), px = intentar(() => aumentoProx(a), null); if (u) p.push(`último aumento: ${u.desde}`); if (px) p.push(`próximo aumento desde ${px.desde}`); }
       if (!profe && mes >= "2026-11") {
         const pg = (a.pagos || {})[mes] || {}; const monto = intentar(() => montoMes(a, mes), 0);
         p.push(`cuota ${mesTx}: ${pg.pagado ? "PAGADA" : now.getDate() > 14 ? "VENCIDA" : "pendiente"}${monto ? " " + money(monto) : ""}`);
