@@ -391,10 +391,11 @@ async function asistente(body, env) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-    body: JSON.stringify({ model: IA_MODELO, max_tokens: staff ? 1200 : 600, system, messages: msgs }),
+    body: JSON.stringify({ model: IA_MODELO, max_tokens: staff ? 4000 : 2000, system, messages: msgs }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { console.log("Anthropic", r.status, JSON.stringify(j)); return { error: "El asistente no pudo responder. Probá de nuevo en un rato." }; }
-  const texto = (j.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
+  let texto = (j.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
+  if (j.stop_reason === "max_tokens") { console.log("IA cortada", JSON.stringify(j.usage || {})); texto += texto ? "…\n\n(La respuesta quedó larga y se cortó. Preguntame de nuevo más corto.)" : ""; }
   return { ok: true, respuesta: texto || "Perdón, no te entendí. ¿Me lo decís de otra forma?", quedan: limite - n - 1 };
 }
