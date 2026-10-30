@@ -1212,8 +1212,8 @@ function aumPlan(a,desde,monto){ const act=mesKey(now); const prev=aumentosDe(a)
   if(desde<act){ const precio=prev?prev.precio:(precioEn(a,desde)||a.precioClase||0); return {desde,monto,precio,antes:Math.max(0,precio-monto),aplicado:true,tipo:"registro"}; }
   const base=prev?prev.antes:(desde===act?(a.precioClase||0):precioEn(a,desde)); return {desde,monto,antes:base,precio:base+monto,aplicado:desde===act,tipo:desde===act?"ahora":"futuro"}; }
 function openAumento(){ const act=mesKey(now); if(!AUM.desde) AUM.desde=mesSig(act);
-  const al=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0).sort((x,y)=>(x.nombre||"").localeCompare(y.nombre||""));
-  if(!AUM.sel) AUM.sel=new Set(al.map(a=>a.id));
+  const al=S.alumnos.filter(a=>a.activo!==false&&a.precioClase>0&&(!AUM.solo||a.id===AUM.solo)).sort((x,y)=>(x.nombre||"").localeCompare(y.nombre||""));
+  if(!AUM.sel) AUM.sel=new Set(al.map(a=>a.id)); const solo=AUM.solo&&al[0];
   const ult=a=>{ const u=ultimoAumento(a); return u?mesCorto(u.desde):"—"; };
   const meses=[...new Set(al.map(a=>(ultimoAumento(a)||{}).desde||"").filter(Boolean))].sort();
   const tipo=AUM.desde<act?"registro":AUM.desde===act?"ahora":"futuro";
@@ -1221,16 +1221,16 @@ function openAumento(){ const act=mesKey(now); if(!AUM.desde) AUM.desde=mesSig(a
     :tipo==="ahora"?`El precio sube <b>${money(AUM.monto)}</b> la clase <b>desde este mes</b>. Las cuotas de ${mesSolo(act)} que todavía no pagaron se recalculan.`
     :`El precio sube <b>${money(AUM.monto)}</b> la clase <b>desde ${mesLbl(AUM.desde)}</b>. Hasta entonces pagan lo mismo. A los alumnos les aparece el aviso en la app desde hoy y les llega una notificación.`;
   const n=al.filter(a=>AUM.sel.has(a.id)).length;
-  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Cuotas</span><h2 class="disp">Aumento</h2></div>
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Cuotas</span><h2 class="disp">${solo?`Aumento a ${esc(nombreCorto(solo.nombre))}`:"Aumento"}</h2>${solo?`<span class="small muted">Elegí desde qué mes y cuánto sube. Si es un mes que ya pasó, queda anotado en su historial. Si es un mes que viene, le llega la notificación con el precio nuevo.</span>`:""}</div>
     <div class="two"><div class="field"><label for="aumDesde">Desde el mes</label><input id="aumDesde" type="month" value="${AUM.desde}"></div>
       <div class="field"><label for="aumMonto">Sube por clase</label><input id="aumMonto" type="number" inputmode="numeric" min="0" step="500" value="${AUM.monto||""}" placeholder="Ej: 2500"></div></div>
     <div class="seg" style="grid-template-columns:repeat(4,1fr);margin:0">${[1000,2000,2500,5000].map(v=>`<button type="button" class="seg-b" data-act="aumM" data-v="${v}" aria-pressed="${AUM.monto===v}">+${v/1000}k</button>`).join("")}</div>
     <p class="small aum-exp">${exp}</p>
-    <div class="aum-sel"><span class="small"><b>${n}</b> de ${al.length} alumnos</span><span class="aum-q"><button type="button" class="linkish" data-act="aumQ" data-v="todos">Todos</button><button type="button" class="linkish" data-act="aumQ" data-v="nadie">Ninguno</button><button type="button" class="linkish" data-act="aumQ" data-v="JUMP">Jump</button><button type="button" class="linkish" data-act="aumQ" data-v="ESPACIO">Espacio</button></span></div>
-    ${meses.length?`<div class="aum-sel" style="margin-top:-4px"><span class="small muted">Último aumento:</span><span class="aum-q">${meses.map(m=>`<button type="button" class="linkish" data-act="aumQ" data-v="u:${m}">${mesCorto(m)}</button>`).join("")}<button type="button" class="linkish" data-act="aumQ" data-v="u:">Sin dato</button></span></div>`:""}
+    ${solo?"":`<div class="aum-sel"><span class="small"><b>${n}</b> de ${al.length} alumnos</span><span class="aum-q"><button type="button" class="linkish" data-act="aumQ" data-v="todos">Todos</button><button type="button" class="linkish" data-act="aumQ" data-v="nadie">Ninguno</button><button type="button" class="linkish" data-act="aumQ" data-v="JUMP">Jump</button><button type="button" class="linkish" data-act="aumQ" data-v="ESPACIO">Espacio</button></span></div>
+    ${meses.length?`<div class="aum-sel" style="margin-top:-4px"><span class="small muted">Último aumento:</span><span class="aum-q">${meses.map(m=>`<button type="button" class="linkish" data-act="aumQ" data-v="u:${m}">${mesCorto(m)}</button>`).join("")}<button type="button" class="linkish" data-act="aumQ" data-v="u:">Sin dato</button></span></div>`:""}`}
     <div class="aum-list">${al.map(a=>{ const pl=aumPlan(a,AUM.desde,AUM.monto||0); const on=AUM.sel.has(a.id); const px=aumentoProx(a);
       return `<label class="aum-row ${on?"on":""}"><input type="checkbox" data-act="aumT" data-id="${a.id}" ${on?"checked":""}><span class="aum-n"><b>${esc(a.nombre)}</b><small>Empezó: ${desdeTxt(a,true)} · Últ. aumento: ${ult(a)}${px&&px.desde!==AUM.desde?` · programado ${mesCorto(px.desde)}`:""}</small></span><span class="aum-p num">${tipo==="registro"?money(pl.precio):`${money(pl.antes)} → <b>${money(pl.precio)}</b>`}</span></label>`; }).join("")}</div>
-    <div class="btns" style="margin-top:12px"><button class="btn sec2" data-act="close">Cancelar</button><button class="btn pri" data-act="aumOk" ${n&&AUM.monto>0&&AUM.desde?"":"disabled"}>${tipo==="registro"?"Registrar":"Aplicar"} a ${n}</button></div>`,()=>openAumento()); }
+    <div class="btns" style="margin-top:12px"><button class="btn sec2" data-act="${solo?"aumVolver":"close"}">${solo?"Volver":"Cancelar"}</button><button class="btn pri" data-act="aumOk" ${n&&AUM.monto>0&&AUM.desde?"":"disabled"}>${solo?(tipo==="registro"?"Registrar aumento":"Aplicar aumento"):`${tipo==="registro"?"Registrar":"Aplicar"} a ${n}`}</button></div>`,()=>openAumento()); }
 /* Cuándo empezó cada alumno: se carga una vez y queda fija (los aumentos no la cambian). Los que están hace mucho: "Hace años". */
 function openInicios(){ const al=S.alumnos.filter(a=>a.activo!==false).sort((x,y)=>{ const sx=!x.antiguo&&!arranqueDe(x), sy=!y.antiguo&&!arranqueDe(y); return (sy-sx)||(x.nombre||"").localeCompare(y.nombre||""); });
   const sin=al.filter(a=>!a.antiguo&&!arranqueDe(a)).length;
@@ -1249,7 +1249,7 @@ async function guardarAumento(b){ const act=mesKey(now); const al=S.alumnos.filt
     al.slice(i,i+400).forEach(a=>{ const pl=aumPlan(a,AUM.desde,AUM.monto); const {tipo,...e}=pl; const L=aumentosDe(a).filter(x=>x.desde!==AUM.desde); L.push(e); L.sort((x,y)=>x.desde.localeCompare(y.desde));
       const p={aumentos:L}; if(tipo==="ahora") p.precioClase=pl.precio; bt.update(colA().doc(a.id),p); });
     await bt.commit(); } },`Aumento ${AUM.desde<act?"registrado":"aplicado"} a ${al.length} alumno${al.length===1?"":"s"}`);
-  if(ok){ AUM.sel=null; closeSheet(); } else { b.disabled=false; b.textContent="Aplicar"; } }
+  if(ok){ const v=AUM.solo; AUM.sel=null; AUM.solo=null; closeSheet(); if(v) setTimeout(()=>{ const A=S.alumnos.find(x=>x.id===v); if(A){ formAlumno(A); cargarHist(A); } },400); } else { b.disabled=false; b.textContent="Aplicar"; } }
 document.addEventListener("change",async e=>{ const t=e.target; if(!t||!$("#llF")) return;
   if(t.id==="llF"&&t.value){ LL.desde=t.value; if(!LL.hasta||LL.hasta<LL.desde) LL.hasta=LL.desde; await llCargarYa(); llSelTodo(); pintarLluvia(); return; }
   if(t.id==="llH"&&t.value){ LL.hasta=t.value<LL.desde?LL.desde:t.value; await llCargarYa(); llSelTodo(); pintarLluvia(); return; }
@@ -1383,6 +1383,7 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
+    ${a.id&&a.precioClase>0?`<button type="button" class="linkish" data-act="aumUno" data-id="${a.id}" style="justify-self:start;margin-top:-4px">+ Registrar un aumento a ${esc(nombreCorto(a.nombre))} ›</button>`:""}
     ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&(pagoReal((a.pagos||{})[mesKey(now)])||a.antiguo||!esNuevo(a))){ /* alumno que ya venía: la fecha no toca las cuotas */
         // Ya pagó el mes: la fecha de arranque igual se ve y se puede corregir (sirve para los aumentos y para marcarlo como nuevo).
         return iniCampo(a); }
@@ -1539,7 +1540,9 @@ document.addEventListener("click",async e=>{
     case "gastoOk": { const monto=Number($("#gMonto").value)||0; if(!monto){ toast("Poné el monto"); break; } const mv={id:Date.now().toString(36),monto,fecha:$("#gFecha").value||hoyISO,nota:($("#gNota").value||"").trim()}; closeSheet(); await guardarGastos([...(S.gastosG||[]),mv],"Gasto anotado"); break; }
     case "gastoDel": if(confirm("¿Borrar este gasto?")) await guardarGastos((S.gastosG||[]).filter(x=>x.id!==b.dataset.id),"Gasto borrado"); break;
     case "verDeben": S.fPago="debe"; S.tab="alumnos"; render(); scrollTo(0,0); break;
-    case "aumento": AUM.sel=null; openAumento(); break;
+    case "aumento": AUM.sel=null; AUM.solo=null; openAumento(); break;
+    case "aumUno": if(A){ AUM.solo=A.id; AUM.sel=new Set([A.id]); AUM.desde=mesSig(mesKey(now)); openAumento(); } break;
+    case "aumVolver": { const v=AUM.solo; AUM.solo=null; AUM.sel=null; closeSheet(); const A2=S.alumnos.find(x=>x.id===v); if(A2){ formAlumno(A2); cargarHist(A2); } break; }
     case "iniAnt": { const i=$("#aIni2"); if(!i) break; const on=i.dataset.ant!=="1"; i.dataset.ant=on?"1":"0"; b.setAttribute("aria-pressed",on); if(on) i.value=""; $("#aIniTx").textContent=on?"Alumno de hace años (sin fecha exacta). Queda fija aunque le aumentes.":"Elegí la fecha en que empezó. Queda fija aunque le aumentes."; break; }
     case "inicios": openInicios(); break;
     case "iniAntL": if(A){ const on=!A.antiguo; if(await safe(()=>colA().doc(A.id).update(on?{antiguo:true}:{antiguo:false}),on?`${A.nombre}: hace años`:"Listo")){ A.antiguo=on; openInicios(); } } break;
