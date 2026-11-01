@@ -175,6 +175,20 @@ async function guardarCatAlumno(a){
   const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
   if(ok){ closeSheet(); toast(val?`${a.nombre}: ${capCat(val)}`:`${a.nombre}: sin categoría`); }
 }
+/* Alumnos sin categoría: aviso en "Para resolver" y lista para ponérsela tocando (se guarda al instante). */
+const sinCat=a=>!String(a.categoria||"").trim();
+function sinCatLista(){ return activos().filter(a=>sinCat(a)&&(S.modo!=="profe"||clubsDe(a).has("JUMP"))).sort((x,y)=>(x.nombre||"").localeCompare(y.nombre||"")); }
+function openSinCat(){ const l=sinCatLista();
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Categoría</span><h2 class="disp">Sin categoría${l.length?` · ${l.length}`:""}</h2><span class="small muted">${l.length?"Tocá la categoría de cada uno y se guarda sola. El alumno no la ve.":"🎉 Todos los alumnos tienen categoría."}</span></div>
+    ${l.length?`<div class="list">${l.map(a=>`<div class="row" style="grid-template-columns:1fr;gap:8px;padding:12px 14px"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${tagsClub(a)}<span>${esc(horarioTxt(a))}</span></span></span><div style="display:flex;gap:6px;flex-wrap:wrap">${CATS_AL.map(c=>`<button type="button" class="chip" data-act="sinCatOk" data-id="${a.id}" data-v="${c.toLowerCase()}" style="text-transform:none;letter-spacing:0;font-size:13px;padding:7px 12px">${c}</button>`).join("")}</div></div>`).join("")}</div>`:""}
+    <div style="display:flex;justify-content:flex-end"><button class="mini" data-act="close">Listo</button></div>`,openSinCat);
+}
+async function ponerSinCat(a,val){
+  if(S.modo==="profe"&&!clubsDe(a).has("JUMP")){ toast("Solo podés cambiar alumnos de Jump"); return; }
+  a.categoria=val; openSinCat();
+  const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
+  if(ok) toast(`${a.nombre}: ${capCat(val)}`); else { a.categoria=""; openSinCat(); }
+}
 function catsDe(a){ const set=new Set(); String(a.categoria||"").split(",").map(catNorm).filter(Boolean).forEach(c=>set.add(c)); (a.horarios||[]).forEach(h=>h.nivel&&set.add(catNorm(h.nivel))); return set; }
 function ordenSemana(t){ const hoyD=now.getDay()||7; return (((t.dia||7)-hoyD+7)%7)*10000+Number(String(t.hora).replace(":","")); }
 function opcionesRecupera(a,max=3){
@@ -278,6 +292,9 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
   // 0) Pedidos para sumar un día
   (S.solic||[]).filter(x=>x.estado==="pendiente").forEach(x=>{ const a=S.alumnos.find(y=>y.id===x.alumnoId); if(!a) return;
     item("#13834f",`<b>${esc(nombreCorto(a.nombre))}</b> quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> · ${clubN(x.club)}`,`<button class="mini go" data-act="solVer" data-id="${x.id}">Ver</button>`); });
+  // 1) Alumnos sin categoría (siempre que haya alguno)
+  const nSC=sinCatLista().length;
+  if(nSC) item("var(--k-amb)",`<b>${nSC} alumno${nSC===1?"":"s"} sin categoría</b>`,`<button class="mini go" data-act="sinCat">Poner</button>`);
   // 1b) Alumnos nuevos: primera clase hoy, y después preguntarle qué le pareció
   activos().filter(esNuevo).forEach(a=>{ const pc=primeraClase(a); if(!pc) return; const hs=(a.horarios||[]).filter(h=>Number(h.dia)===isoDate(pc).getDay()).map(h=>`${h.hora} · ${clubN(clubH(a,h))}`).join(", ");
     if(pc===hoyISO) item("#13834f",`<b>${esc(a.nombre)}</b> tiene hoy su <b>primera clase</b> (${hs})`,"");
@@ -443,7 +460,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
+    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${sinCat(a)&&a.activo!==false?`<span class="tag" style="background:var(--k-amb,#b86e00);color:#fff">Sin categoría</span>`:""}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13))?"Vencido":"Debe"}</button>`}</div></div>`;
 }
@@ -1561,6 +1578,8 @@ document.addEventListener("click",async e=>{
     case "verComp": if(A) verComprobante(A); break;
     case "catPick": elegirCat(b); break;
     case "catAlOk": if(A) await guardarCatAlumno(A); break;
+    case "sinCat": openSinCat(); break;
+    case "sinCatOk": if(A) await ponerSinCat(A,b.dataset.v); break;
     case "turnoCat": if(S.modo==="profe"&&b.dataset.club!=="JUMP") break; openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
     case "turnoCatOk": guardarTurnoCat(b); break;
     case "compRech": if(A){ const c=compDe(A); if(c&&await setPago(A,false,true)){ closeSheet(); toast(`${A.nombre}: pago rechazado, le aparece para volver a mandarlo`); } } break;
