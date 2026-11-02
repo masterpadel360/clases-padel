@@ -251,13 +251,14 @@ async function refrescarNotif(datos) {
 }
 function tarjetaNotif(quien) {
   const st = estadoNotif(); if (st === "off" || st === "activas") return "";
-  const para = quien === "alumno" ? "Te avisamos el día antes de cada clase, el mismo día y cuando se libera un lugar para recuperar." : quien === "profe" ? "Te llega un aviso cuando un alumno de Jump cancela o reserva, y un recordatorio si te falta cargar asistencia u horas." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
-  if (st === "instalar") return `<div class="msg notif-card" style="gap:8px"><div class="msg-k"><b>Activá las notificaciones</b></div>
+  const para = quien === "alumno" ? "Es muy importante: así te avisamos de tus clases, cuándo tenés que recuperar (y cuándo se libera un lugar) y cuándo vence la cuota." : quien === "profe" ? "Te llega un aviso cuando un alumno de Jump cancela o reserva, y un recordatorio si te falta cargar asistencia u horas." : "Te llega un aviso al instante cuando un alumno cancela o reserva.";
+  const tit = quien === "alumno" ? "⚠️ Importante: activá las notificaciones" : "Activá las notificaciones";
+  if (st === "instalar") return `<div class="msg notif-card" style="gap:8px"><div class="msg-k"><b>${tit}</b></div>
     <span class="small">${para} En iPhone primero hay que instalar la app:</span>
     <ol class="small" style="margin:0;padding-left:18px;line-height:1.6"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b> acá</li></ol></div>`;
   if (st === "nosoporta") return "";
   if (st === "bloqueadas") return `<div class="msg notif-card"><span class="small">Las notificaciones están bloqueadas. Activalas desde los ajustes del celu para esta app.</span></div>`;
-  return `<div class="msg notif-card" style="gap:10px"><div class="msg-k"><b>Activá las notificaciones</b></div><span class="small">${para}</span><button class="cta" ${quien === "alumno" ? 'data-pa="notif"' : 'data-act="notif"'} style="justify-self:start;padding:6px 6px 6px 14px;font-size:13px">Activar <i>🔔</i></button></div>`;
+  return `<div class="msg notif-card" style="gap:10px"><div class="msg-k"><b>${tit}</b></div><span class="small">${para}</span><button class="cta" ${quien === "alumno" ? 'data-pa="notif"' : 'data-act="notif"'} style="justify-self:start;padding:6px 6px 6px 14px;font-size:13px">Activar <i>🔔</i></button></div>`;
 }
 
 /* ---------- Cambios de cuenta (los hace el servidor de Cloudflare, que tiene permiso de administrador) ---------- */

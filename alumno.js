@@ -13,8 +13,8 @@ function pedirNotifAlEntrar() {
   const st = estadoNotif(); if (!["pedir", "instalar", "bloqueadas"].includes(st)) return;
   try { if (sessionStorage.getItem("notifPedida") === "1") return; sessionStorage.setItem("notifPedida", "1"); } catch (e) {}
   if (!$("#overlay").hidden) return;
-  const cab = `<div id="notifSheet" style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🔔</div><h2 class="disp" style="margin:0">Activá las notificaciones</h2>
-    <p class="small" style="margin:0">Así te avisamos <b>el día de tu clase</b> para que no te olvides, y te enterás si hay cambios.</p></div>`;
+  const cab = `<div id="notifSheet" style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🔔</div><h2 class="disp" style="margin:0">Importante: activá las notificaciones</h2>
+    <p class="small" style="margin:0">Así te avisamos <b>de tus clases</b>, <b>cuándo tenés que recuperar</b> y <b>cuándo vence la cuota</b>. Sin notificaciones te los perdés.</p></div>`;
   let cuerpo;
   if (st === "instalar") cuerpo = `<p class="small" style="margin:0"><b>En iPhone hay que instalar la app primero</b> (es gratis y tarda 10 segundos):</p>
     <ol class="small" style="margin:0;padding-left:18px;line-height:1.7;text-align:left"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b></li></ol>
