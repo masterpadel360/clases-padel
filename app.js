@@ -758,6 +758,23 @@ function gananciaHTML(){ const m=S.mes; escucharAsMes(m); const c=S.club; const 
       <p class="small muted" style="margin:0">${c==="ESPACIO"?"Las horas":`Las horas de ${esc(nP)} y las`} de cancha se suman solas a medida que avanza el mes.</p>
     </div></section>`; }
 
+/* ---------- Valor por hora de Esteban: cada cambio queda anotado (fecha, antes y después) ---------- */
+async function guardarValorHora(v,msg){
+  const antes=S.cfg.valorHora||0; const extra={};
+  if(v&&antes&&v!==antes){ extra.aumentosProfe=[...(S.cfg.aumentosProfe||[]),{fecha:hoyISO,antes,nuevo:v}]; if(v>antes) extra.ultimoAumento=hoyISO; }
+  return safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v,...extra}),msg);
+}
+const MESES_L=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const mesAnio=f=>`${MESES_L[Number(f.slice(5,7))-1]} ${f.slice(0,4)}`;
+function histValorHoraHTML(){
+  // El aumento de noviembre 2026 (de $15.000 a $18.000) se hizo antes de que la app lo anotara: se registra una sola vez.
+  if(S.esOwner&&!S.cfg.aumentosProfe&&Number(S.cfg.valorHora)===18000&&!histValorHoraHTML.hecho){ histValorHoraHTML.hecho=true;
+    S.db.doc("config/general").update({aumentosProfe:[{fecha:"2026-11-01",antes:15000,nuevo:18000}],ultimoAumento:"2026-11-01"}).catch(()=>{ histValorHoraHTML.hecho=false; }); }
+  const L=(S.cfg.aumentosProfe||[]).filter(x=>x&&x.fecha).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  if(!L.length) return S.cfg.ultimoAumento?`<span class="small muted">Último aumento: ${S.cfg.ultimoAumento.split("-").reverse().join("/")}</span>`:"";
+  const u=L.find(x=>x.nuevo>x.antes)||L[0];
+  return `<span class="small muted">Último aumento: <b>${mesAnio(u.fecha)}</b> · de ${money(u.antes)} a ${money(u.nuevo)}</span>${L.length>1?`<details class="small muted"><summary>Ver todos los cambios</summary>${L.map(x=>`<div>${x.fecha.split("-").reverse().join("/")}: ${money(x.antes)} → ${money(x.nuevo)}</div>`).join("")}</details>`:""}`;
+}
 /* ---------- Panel Esteban (en Gestión) ---------- */
 let aumPct=10;
 function panelEquipo(){
@@ -777,7 +794,7 @@ function panelEquipo(){
       ${S.equipo[0]?(()=>{ const ds=Object.keys(S.equipo[0].dias||{}).filter(k=>S.equipo[0].dias[k]).sort().reverse().slice(0,7);
         return ds.length?`<div><span class="flabel">Últimos días cargados</span><div class="hs-dias">${ds.map(k=>`<span><small>${diaTxt(k)}</small><b class="num">${fmtH(S.equipo[0].dias[k])} h</b></span>`).join("")}</div></div>`:""; })():""}
       ${S.equipo[0]?`${cuentaHTML(true)}<button class="linkish" data-act="modoProfe" style="justify-self:start">Ver y revisar las horas que cargó día por día</button>`:""}
-      <div class="field"><label for="vHora">Le pagás por hora</label><div style="display:flex;gap:8px"><input id="vHora" type="number" inputmode="numeric" min="0" step="500" value="${vh||""}" placeholder="Ej: 12000"><button class="mini go" data-act="valorSave">Guardar</button></div>${S.cfg.ultimoAumento?`<span class="small muted">Último aumento: ${S.cfg.ultimoAumento.split("-").reverse().join("/")}</span>`:""}</div>
+      <div class="field"><label for="vHora">Le pagás por hora</label><div style="display:flex;gap:8px"><input id="vHora" type="number" inputmode="numeric" min="0" step="500" value="${vh||""}" placeholder="Ej: 12000"><button class="mini go" data-act="valorSave">Guardar</button></div>${histValorHoraHTML()}</div>
       ${vh?`<div class="msg" style="gap:8px"><div class="msg-k"><b>Calcular aumento</b></div>
         <div style="display:flex;align-items:center;gap:8px"><input id="aumPct" type="number" inputmode="numeric" value="${aumPct}" style="width:80px;padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface)"><span>% de aumento</span></div>
         <dl class="kv" style="margin:0" id="aumOut">${aumKV(vh,nuevoV,h,nuevoP,tot)}</dl>
@@ -860,7 +877,7 @@ function vHoras(){
   </section>
   <section class="sec"><div class="sec-head"><h3>Cobros de tus horas</h3></div>
     ${cuentaHTML(false)}
-    ${S.esOwner?`<div class="field"><label for="vh2">Valor por hora</label><div style="display:flex;gap:8px"><input id="vh2" type="number" inputmode="numeric" min="0" step="500" value="${S.cfg.valorHora||""}" placeholder="Ej: 12000" style="flex:1"><button class="mini go" data-act="vhSave">Guardar</button></div><span class="small muted">Se multiplica por las horas que cargás. Cuando te pagan, tocá Marcar pagado.</span></div>`:`<div class="field"><span class="flabel">Valor por hora</span><b class="num">${money(S.cfg.valorHora||0)}</b><span class="small muted">Lo define Gabriel. Se multiplica por las horas que cargás.</span></div>`}
+    ${S.esOwner?`<div class="field"><label for="vh2">Valor por hora</label><div style="display:flex;gap:8px"><input id="vh2" type="number" inputmode="numeric" min="0" step="500" value="${S.cfg.valorHora||""}" placeholder="Ej: 12000" style="flex:1"><button class="mini go" data-act="vhSave">Guardar</button></div>${histValorHoraHTML()}<span class="small muted">Se multiplica por las horas que cargás. Cuando te pagan, tocá Marcar pagado.</span></div>`:`<div class="field"><span class="flabel">Valor por hora</span><b class="num">${money(S.cfg.valorHora||0)}</b><span class="small muted">Lo define Gabriel. Se multiplica por las horas que cargás.</span></div>`}
   </section>
   <section class="sec"><div class="sec-head"><h3>Días cargados en ${mesSolo(m)}</h3><span class="small muted num">${diasMes.length} días</span></div>
     ${diasMes.length?`<div class="list">${diasMes.map(k=>{const d=isoDate(k); return `<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;width:100%;text-align:left" data-act="hSet" data-f="${k}"><span class="name">${DIAS_LARGO[d.getDay()]} ${d.getDate()}</span><span class="num" style="font-weight:700">${fmtH(S.horas[k])} h</span></button>`}).join("")}</div>`:`<div class="empty">Todavía no cargaste horas este mes. Usá los botones de arriba: cada toque suma media hora.</div>`}
@@ -1655,7 +1672,7 @@ document.addEventListener("click",async e=>{
     case "finMes": { const [y,mm]=S.finMes.split("-").map(Number); S.finMes=mesKey(new Date(y,mm-1+Number(b.dataset.d),1)); render(); break; }
     case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.hMovs=S.hMovs.filter(x=>x.id!==b.dataset.id); render(); await guardarHorasDoc(); break; }
     case "pagoTodo": { $("#ppMonto").value=Math.max(0,saldoProfe().saldo); break; }
-    case "vhSave": { const v=Number($("#vh2").value)||0; if(await safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v}),`Valor por hora: ${money(v)}`)) render(); break; }
+    case "vhSave": { const v=Number($("#vh2").value)||0; if(await guardarValorHora(v,`Valor por hora: ${money(v)}`)) render(); break; }
     case "objetivo": if(objMin()) setObjMin(false); else openObjetivo(); break;
     case "objPick": { $("#objIn").value=b.dataset.v; b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); break; }
     case "objSave": { const v=Math.max(0,Math.round(Number($("#objIn").value)||0)); await guardarObjetivo(v); break; }
@@ -1665,8 +1682,8 @@ document.addEventListener("click",async e=>{
     case "ajuste": if(A) openAjuste(A); break;
     case "ajStep": { const i=$("#ajMonto"); i.value=Math.max(0,(Number(i.value)||0)+Number(b.dataset.d)); ajPreview(); break; }
     case "ajReset": { const a=S.alumnos.find(x=>x.id===$("#fAj").dataset.id); $("#ajMonto").value=cuotaMes(a); $("#ajNota").value=""; ajPreview(); break; }
-    case "valorSave": { const v=Number($("#vHora").value)||0; if(await safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v}),"Valor por hora guardado")) render(); break; }
-    case "aumSave": { const v=Math.round((S.cfg.valorHora||0)*(1+(Number($("#aumPct").value)||0)/100)); if(v&&await safe(()=>S.db.doc("config/general").update({...S.cfg,valorHora:v,ultimoAumento:hoyISO}),`Nuevo valor: ${money(v)} por hora`)) render(); break; }
+    case "valorSave": { const v=Number($("#vHora").value)||0; if(await guardarValorHora(v,"Valor por hora guardado")) render(); break; }
+    case "aumSave": { const v=Math.round((S.cfg.valorHora||0)*(1+(Number($("#aumPct").value)||0)/100)); if(v&&await guardarValorHora(v,`Nuevo valor: ${money(v)} por hora`)) render(); break; }
     case "modoProfe": closeSheet(); { const e=S.equipo[0];  if(!e) toast("Esteban todavía no cargó horas: vas a ver la pantalla vacía."); } S.modo="profe"; S.tab="horas"; S.asKey=null; render(); scrollTo(0,0); break;
     case "modoOwner": S.modo="owner"; S.tab="hoy"; S.club=""; S.asClub="ESPACIO"; S.asKey=null; render(); break;
     case "hDia": { const d=isoDate(S.horasFecha); d.setDate(d.getDate()+Number(b.dataset.d)); if(toISO(d)<=hoyISO){ S.horasFecha=toISO(d); render(); } break; }
