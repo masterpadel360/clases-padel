@@ -183,14 +183,14 @@ function elegirCatM(b){ const box=b.closest(".cat-pick"); const inp=box&&documen
 function elegirCat(b){ const box=b.closest(".cat-pick"); const inp=box&&document.getElementById(box.dataset.for); if(!inp) return;
   const on=b.getAttribute("aria-pressed")!=="true"; box.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed","false"));
   b.setAttribute("aria-pressed",String(on)); inp.value=on?b.dataset.v:""; }
-/* Esteban (vista de profe): toca el nombre de un alumno de Jump en la agenda y le cambia la categoría y/o el horario de Jump.
-   No ve lo que paga ni nada más de la ficha. Cada cambio le llega a Gabriel como aviso. */
+/* Esteban (vista de profe): toca el nombre de un alumno de Jump en la agenda y le cambia la categoría.
+   No ve lo que paga ni nada más de la ficha, y no cambia horarios (eso lo maneja Gabriel). Cada cambio le llega a Gabriel. */
 function openCatAlumno(a){
   const hs=(a.horarios||[]).map((h,i)=>({h,i})).filter(x=>clubH(a,x.h)==="JUMP");
   const fila=({h,i})=>`<div class="hrow-p" data-i="${i}" style="display:flex;gap:8px"><select class="hp-d" aria-label="Día" style="flex:1">${GRILLA.dias.map(d=>`<option value="${d}" ${h.dia===d?"selected":""}>${DIAS_LARGO[d]}</option>`).join("")}</select><select class="hp-h" aria-label="Hora" style="flex:1">${[...new Set([...GRILLA.horas,h.hora])].sort().map(x=>`<option ${h.hora===x?"selected":""}>${x}</option>`).join("")}</select></div>`;
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumno de Jump</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Lo que cambies le llega a Gabriel. El alumno no ve su categoría.</span></div>
     <div class="field"><span class="flabel">Categoría</span>${catPicker("cAl",a.categoria)}</div>
-    ${hs.length?`<div class="field" id="hpBox"><span class="flabel">Horario en Jump</span>${hs.map(fila).join("")}<span class="small muted">El cambio de horario vale desde hoy. Para sumar o sacar días, avisale a Gabriel.</span></div>`:""}
+    <span class="small muted">Si quiere cambiar de horario, que le escriba a Gabriel.</span>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="catAlOk" data-id="${a.id}">Guardar</button></div>`);
 }
 async function guardarCatAlumno(a){
