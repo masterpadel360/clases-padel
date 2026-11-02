@@ -39,6 +39,12 @@ async function enviar(uid, { title, body, tag, link }) {
   return res.successCount;
 }
 
+// Tope de avisos para recuperar: 2 por día por alumno (cuenta también "se abrió un lugar").
+async function topeRecuperar(alumnoId) {
+  const ref = db.doc(`recordatorios/tope_${alumnoId}_${hoy}`);
+  return db.runTransaction(async tx => { const s = await tx.get(ref); const n = (s.exists && s.data().n) || 0; if (n >= 2) return false; tx.set(ref, { n: n + 1 }); return true; });
+}
+
 /* ---------- 0) Lluvia: avisar a cada alumno que se suspendió su clase ---------- */
 {
   const porAlumno = {}; Object.entries(tokens).forEach(([uid, t]) => { if (t.rol === "alumno" && t.alumnoId && t.tokens && t.tokens.length) (porAlumno[t.alumnoId] = porAlumno[t.alumnoId] || []).push(uid); });
@@ -241,10 +247,11 @@ if (alumnosConApp.length) {
       }
     }
 
-    // Pago del mes: se paga del 1 al 14. Avisos el 1, el 11 y el 14; el 15 avisa que está vencido (de 10 a 20 h).
+    // Pago del mes: se paga del 1 al 14. Avisos el 1, el 7, el 11 y el 14 (si ya pagó, no le llegan más); el 15 avisa que está vencido (de 10 a 20 h).
     {
       const mesAct = hoy.slice(0, 7); const dia = Number(hoy.slice(8)); const MESN = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][Number(hoy.slice(5, 7)) - 1];
       const PAGO = { 1: { title: `Ya podés pagar ${MESN} 💳`, body: `${nombre}, tenés del 1 al 14 para pagar la cuota. Entrá a la app, tocá Pagar y subí el comprobante.` },
+        7: { title: `Recordá pagar ${MESN} 💳`, body: `${nombre}, tenés hasta el 14 para pagar la cuota. Tocá Pagar en la app y subí el comprobante.` },
         11: { title: `Te quedan 3 días para pagar ${MESN}`, body: `${nombre}, el pago vence el 14. Tocá Pagar en la app y subí el comprobante.` },
         14: { title: `Hoy vence el pago de ${MESN} ⏳`, body: `${nombre}, hoy es el último día para pagar. Tocá Pagar en la app y subí el comprobante.` },
         15: { title: `Tu pago de ${MESN} está vencido`, body: `${nombre}, venció el 14. Pagalo cuanto antes desde la app: tocá Pagar y subí el comprobante.` } }[dia];
@@ -281,10 +288,20 @@ if (alumnosConApp.length) {
       await mandar(id, { title: "Hoy tenés pádel 🎾", body: `${nombre}, te esperamos a las ${c.hora} en ${lugarTxt(c.club)}${c.tipo === "recupera" ? " (recuperación)" : ""}.${extra}`, tag: "recordatorio-" + a.id });
     }
     if (!nRec || horaAR < 10 || horaAR >= 20) continue;
+    // Avisos para recuperar: como mucho 2 por día por alumno (los de pago y lluvia no cuentan).
+    const tope = () => topeRecuperar(a.id);
+    // Hoy es el último día para recuperar alguna.
+    if (vences.includes(hoy)) { const id = `venc0_${a.id}_${hoy}`;
+      if (!(await yaEnviado(id)) && await tope()) await mandar(id, { title: "Hoy es el último día para recuperar ⏳", body: `${nombre}, hoy se te vence${rec.recVence[hoy] > 1 ? "n" : ""} ${rec.recVence[hoy]} clase${rec.recVence[hoy] > 1 ? "s" : ""} para recuperar. Si hay lugar, reservá ya en la app.`, tag: "recuperar-" + a.id }); }
     // Se le vencen en 3 días o menos (una vez por fecha de vencimiento).
-    const proxV = vences.find(k => k <= sumarDias(hoy, 3));
+    const proxV = vences.find(k => k > hoy && k <= sumarDias(hoy, 3));
     if (proxV) { const id = `venc_${a.id}_${proxV}`;
-      if (!(await yaEnviado(id))) await mandar(id, { title: "Se te vencen clases para recuperar ⏳", body: `${nombre}, tenés ${rec.recVence[proxV]} clase${rec.recVence[proxV] > 1 ? "s" : ""} para recuperar hasta el ${diaDM(proxV)}. Después se pierde${rec.recVence[proxV] > 1 ? "n" : ""}: reservá en la app.`, tag: "recuperar-" + a.id }); }
+      if (!(await yaEnviado(id)) && await tope()) await mandar(id, { title: "Se te vencen clases para recuperar ⏳", body: `${nombre}, tenés ${rec.recVence[proxV]} clase${rec.recVence[proxV] > 1 ? "s" : ""} para recuperar hasta el ${diaDM(proxV)}. Después se pierde${rec.recVence[proxV] > 1 ? "n" : ""}: reservá en la app.`, tag: "recuperar-" + a.id }); }
+    // Una vez por semana (el lunes): "tenés clases para recuperar", aunque no haya un lugar puntual hoy.
+    const entrenaHoy = (a.horarios || []).some(h => h.dia === diaSemana(hoy));
+    const hayLugarHoy = !entrenaHoy && opcionesDelDia(a, hoy, turnos, cupos, cupo, avisos, ahora.getTime() + 90 * 60e3).some(o => !suspendida(o.club, hoy, o.hora));
+    if (diaSemana(hoy) === 1 && !hayLugarHoy && !avisos.some(v => v.alumnoId === a.id && v.tipo === "recupera")) { const id = `recsem_${a.id}_${hoy}`;
+      if (!(await yaEnviado(id)) && await tope()) await mandar(id, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, no te olvides: la${nRec > 1 ? "s" : ""} tenés que recuperar antes del ${diaDM(vences[0])}. Entrá a Recuperá y elegí un horario.`, tag: "recuperar-" + a.id }); }
     // Días que no entrena: si hoy hay lugar para recuperar, avisarle (máximo 3 por semana).
     if ((a.horarios || []).some(h => h.dia === diaSemana(hoy))) continue;
     const idHoy = `rec_${a.id}_${hoy}`; if (await yaEnviado(idHoy)) continue;
@@ -293,6 +310,7 @@ if (alumnosConApp.length) {
     const semana = []; for (let f = lunes; f < hoy; f = sumarDias(f, 1)) semana.push(db.doc(`recordatorios/rec_${a.id}_${f}`));
     const yaSemana = semana.length ? (await db.getAll(...semana)).filter(x => x.exists).length : 0;
     if (yaSemana >= 3) continue;
+    if (!(await tope())) continue;
     const horas = [...new Set(ops.map(o => o.hora))].slice(0, 3); const clubs = [...new Set(ops.map(o => lugarTxt(o.club)))];
     const lista = horas.length > 1 ? horas.slice(0, -1).join(", ") + " y " + horas[horas.length - 1] : horas[0];
     await mandar(idHoy, { title: `Tenés ${nRec} clase${nRec > 1 ? "s" : ""} para recuperar 🎾`, body: `${nombre}, hoy hay lugar a las ${lista} en ${clubs.join(" y ")}. Recuperá antes del ${diaDM(vences[0])}: reservá en la app.`, tag: "recuperar-" + a.id });
@@ -434,6 +452,7 @@ try {
         if (esFijo(a, v.club, v.fecha, v.hora) || avsDia.some(x => x.alumnoId === a.id && x.hora === v.hora && x.tipo === "recupera")) continue;
         const r = normalizar(a, hoy); if (!r.recuperar || !Object.keys(r.recVence).some(k => k >= v.fecha)) continue;
         const ref = db.doc(`recordatorios/abre_${a.id}_${v.fecha}`);
+        if ((await ref.get()).exists || !(await topeRecuperar(a.id))) continue;
         const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp(), hora: v.hora }); return true; });
         if (!nuevo) continue;
         for (const uid of porAlP[a.id]) await enviar(uid, { title: "Se abrió un lugar para recuperar 🎾", body: `${primerNombre(a.nombre)}, ${fechaTxt(v.fecha)} a las ${v.hora} en ${CLUB[v.club] || v.club} hay lugar para vos. Reservalo en la app.`, tag: "recuperar-" + a.id });
