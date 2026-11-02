@@ -344,7 +344,13 @@ try {
     const susp = ((await db.doc("publico/suspendidas").get()).data() || {}).t || {};
     const reemp = (await db.collection("reemplazos").where("fecha", "==", hoy).get()).docs.map(d => d.data()).filter(r => r.club === "JUMP");
     const extras = (await db.collection("extras").where("fecha", "==", hoy).get()).docs.map(d => d.data()).filter(x => x.club === "JUMP");
-    const nom = a => { const p = String(a.nombre || "").trim().split(/\s+/); return primerNombre(p[0]) + (p[1] ? " " + p[1][0].toUpperCase() + "." : ""); };
+    const nom0 = a => { const p = String(a.nombre || "").trim().split(/\s+/); return primerNombre(p[0]) + (p[1] ? " " + p[1][0].toUpperCase() + "." : ""); };
+    // Alumnos nuevos (igual que en la app): si arranca del 1 al 14 es nuevo ese mes; si arranca después, hasta fin del mes siguiente.
+    const arranque = a => a.antiguo ? "" : (a.inicio || "");
+    const nuevoHasta = a => { const i = arranque(a); if (!i) return ""; const [y, m, d] = i.split("-").map(Number); const t = new Date(Date.UTC(y, d <= 14 ? m : m + 1, 0)); return t.toISOString().slice(0, 10); };
+    const primeraHoy = a => { const i = arranque(a); if (!i || i > hoy) return false; for (let f = i; f < hoy; f = sumarDias(f, 1)) if ((a.horarios || []).some(h => Number(h.dia) === diaSemana(f) && !(h.desde && h.desde > f))) return false; return true; };
+    const etiquetaNuevo = a => primeraHoy(a) ? " (1ª clase)" : (nuevoHasta(a) && hoy <= nuevoHasta(a) ? " (nuevo)" : "");
+    const nom = a => nom0(a) + (a.id ? etiquetaNuevo(a) : "");
     const listaY = l => l.length > 1 ? l.slice(0, -1).join(", ") + " y " + l[l.length - 1] : (l[0] || "");
     const turnos = {};
     const t = h => turnos[h] || (turnos[h] = { fijos: [], noVan: [], recs: [], otros: [] });
@@ -387,7 +393,8 @@ try {
         const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp(), horas }); return true; });
         if (!nuevo || !horas.length) continue;
         const fin = masUnaHora(horas[horas.length - 1]) || horas[horas.length - 1];
-        await enviar(uid, { title: `🎾 Hoy trabajás en Jump · ${horas[0]} a ${fin}`, body: `${horas.length} clase${horas.length > 1 ? "s" : ""}: ${listaY(horas)}. Si se suma una clase nueva, te avisamos.`, tag: "jornada-" + hoy });
+        const nuevos = []; horas.forEach(h => turnos[h].fijos.forEach(a => { const e = etiquetaNuevo(a); if (e && !(tieneAv(a.id, h, "ausencia") && !tieneAv(a.id, h, "recupera"))) nuevos.push(`${nom0(a)} a las ${h}${e.includes("1ª") ? " (primera clase)" : ""}`); }));
+        await enviar(uid, { title: `🎾 Hoy trabajás en Jump · ${horas[0]} a ${fin}`, body: `${horas.length} clase${horas.length > 1 ? "s" : ""}: ${listaY(horas)}.${nuevos.length ? ` Alumnos nuevos: ${listaY(nuevos)}.` : ""} Si se suma una clase nueva, te avisamos.`, tag: "jornada-" + hoy });
         console.log(`Jornada al profe: ${horas.join(", ")}`);
       }
     }

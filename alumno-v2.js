@@ -198,7 +198,9 @@
     const ext = (S.extras || []).filter(x => x.club === t.club && x.fecha === f && x.hora === t.hora);
     const vanTot = van + ext.length; const libresTot = CUPO - vanTot;
     const quitar = (k, id) => `<span class="tu-x" role="button" tabindex="0" data-xa="${k}" data-id="${id}" aria-label="Quitar">✕</span>`;
-    const lista = t.al.map(a => fila(a, aj.aus.has(a.id) ? '<span class="bd no">No viene</span>' : esNuevo(a) ? '<span class="bd nv">Nuevo</span>' : "", aj.aus.has(a.id) ? "aus" : ""))
+    // Alumno nuevo: el día de su primera clase dice "1ª clase"; el resto del tiempo que es nuevo, desde cuándo arrancó.
+    const nuevoBd = a => primeraClase(a) === f ? '<span class="bd nv">1ª clase</span>' : esNuevo(a) ? `<span class="bd nv">Nuevo · desde ${fechaDM(arranqueDe(a))}</span>` : "";
+    const lista = t.al.map(a => fila(a, aj.aus.has(a.id) ? '<span class="bd no">No viene</span>' : nuevoBd(a), aj.aus.has(a.id) ? "aus" : ""))
       .concat(aj.rec.map(a => { const v = S.avisos.find(x => x.tipo === "recupera" && x.alumnoId === a.id && x.fecha === f && x.hora === t.hora); return fila(a, '<span class="bd rc">Recupera</span>' + (v && !paso ? quitar("quitarRec", v.id) : ""), "rec"); }))
       .concat(ext.map(x => `<div class="tu-al ext"><span class="av">${ini2(x.nombre)}</span><span class="nm">${esc(x.nombre)}${x.tel ? ` <small>${esc(x.tel)}</small>` : ""}</span><span class="bd pr">${x.tipo === "invitado" ? "Invitado" : "Prueba"}</span>${paso ? "" : quitar("quitarExtra", x.id)}</div>`)).join("");
     return `<div class="tu ${ahora ? "ahora" : ""} ${paso ? "paso" : ""}" data-k="${t.club}|${t.hora}">
