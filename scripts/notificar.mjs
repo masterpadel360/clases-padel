@@ -272,8 +272,8 @@ if (alumnosConApp.length) {
       if (falta <= 1450 || falta > 1620) continue;
       const id = `${a.id}_${f}_${hhmm(c.hora)}_dia`; if (await yaEnviado(id)) continue;
       await mandar(id, { title: "Mañana tenés pádel 🎾", body: c.tipo === "recupera"
-        ? `${nombre}, mañana a las ${c.hora} recuperás en ${lugarTxt(c.club)}. Si no venís, la perdés.`
-        : `${nombre}, mañana a las ${c.hora} en ${lugarTxt(c.club)}. Si no podés venir, avisá ahora en la app y la recuperás.`, tag: "dia-antes-" + a.id });
+        ? `${nombre}, mañana a las ${c.hora} recuperás en ${lugarTxt(c.club)}. Si no podés venir, avisá ahora en la app y la volvés a recuperar; si no avisás, se pierde.`
+        : `${nombre}, mañana a las ${c.hora} en ${lugarTxt(c.club)}. Si no podés venir, avisá ahora en la app y la recuperás; si no avisás, se pierde.`, tag: "dia-antes-" + a.id });
     }
     // El mismo día, 3 horas antes. Si tiene clases para recuperar y hay lugar en la hora siguiente, se lo ofrece.
     for (const c of clasesDelDia(a, hoy, avisos)) {
