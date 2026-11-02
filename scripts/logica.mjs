@@ -63,6 +63,7 @@ export function libres(turnos, cupos, cupo, club, f, hora) {
   return cupo - (t.n || 0) + (c.aus || 0) - (c.rec || 0);
 }
 
+export const puntaAbierta = (cupos, club, f, hora) => { const c = cupos[`${club}_${f}_${hhmm(hora)}`] || {}; return (c.rec || 0) - (c.aus || 0) > 0; };
 // Turnos de ese día donde el alumno puede recuperar: sus clubes, su categoría, con lugar, que no sean los suyos.
 export function opcionesDelDia(a, f, turnos, cupos, cupo, avisos, desdeMs) {
   const dow = diaSemana(f); const cats = catsDe(a); const cl = clubsDe(a);
@@ -74,6 +75,8 @@ export function opcionesDelDia(a, f, turnos, cupos, cupo, avisos, desdeMs) {
     if (cats.size && !nivelCoincide(t.nivel, cats)) return;
     if (new Date(`${f}T${hora}:00-03:00`).getTime() < desdeMs) return;
     if (avisos.some(v => v.alumnoId === a.id && v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
+    // Turno vacío en la punta del día: los avisos no lo ofrecen (en la app aparece solo como último recurso), salvo que alguien ya reservó ahí ese día.
+    if (t.punta && !puntaAbierta(cupos, club, f, hora)) return;
     const n = libres(turnos, cupos, cupo, club, f, hora); if (n > 0) out.push({ club, hora, libres: n });
   });
   return out.sort((x, y) => x.hora.localeCompare(y.hora));

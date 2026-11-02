@@ -179,7 +179,7 @@
         if (new Date(`${f}T${t.hora}:00-03:00`).getTime() < Date.now()) return;
         const e = estadoTurno(t, f); if (e.susp) { L.push(`- ${fTx(f)} ${t.hora} ${club(t.club)}: SUSPENDIDO`); return; }
         const lib = CUPO - e.vienen.length; if (lib <= 0) return; nLib++;
-        L.push(`- ${fTx(f)} ${t.hora} ${club(t.club)} · ${e.vienen.length ? "nivel " + (e.nivel || "sin categoría") : "VACÍO (cualquier nivel)"} · ${lib} ${lib === 1 ? "lugar libre" : "lugares libres"}${e.vienen.length ? ` (vienen: ${e.vienen.map(a => a.nombre).join(", ")})` : ""}${e.aus.length ? ` (avisaron que no van: ${e.aus.map(a => a.nombre).join(", ")})` : ""}`);
+        L.push(`- ${fTx(f)} ${t.hora} ${club(t.club)} · ${e.vienen.length ? "nivel " + (e.nivel || "sin categoría") : (t.punta ? "VACÍO EN LA PUNTA DEL DÍA (para recuperar solo como último recurso, si al alumno no le queda otro lugar de su nivel antes de que se le venza)" : "VACÍO (cualquier nivel)")} · ${lib} ${lib === 1 ? "lugar libre" : "lugares libres"}${e.vienen.length ? ` (vienen: ${e.vienen.map(a => a.nombre).join(", ")})` : ""}${e.aus.length ? ` (avisaron que no van: ${e.aus.map(a => a.nombre).join(", ")})` : ""}`);
       });
     }
     if (!nLib) L.push("- (no hay lugares libres en las próximas 2 semanas)");

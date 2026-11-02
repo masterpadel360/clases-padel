@@ -141,10 +141,16 @@ function opcionesRec() {
       if (inicioDe(f, hora).getTime() < limite) return;
       if (esSusp(club, f, hora)) return;
       if (P.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
-      const libres = libresDe(club, f, hora); if (libres > 0) out.push({ club, fecha: f, hora, nivel: t.nivel, dia: d.getDay(), libres });
+      // Turno vacío en la punta del día: queda "abierto" para esa fecha si alguien ya reservó ahí (el profe va igual).
+      const c = P.cupos[cupoId(club, f, hora)] || {}; const punta = !!t.punta && !((c.rec || 0) - (c.aus || 0) > 0);
+      const libres = libresDe(club, f, hora); if (libres > 0) out.push({ club, fecha: f, hora, nivel: t.nivel, dia: d.getDay(), libres, punta });
     });
   }
-  return out.sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+  out.sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
+  // Las puntas vacías se ofrecen solo si no queda ningún otro lugar de su nivel antes de que se le venza la próxima clase.
+  const normales = out.filter(o => !o.punta); const v0 = bk[0].vence;
+  if (normales.some(o => o.fecha <= v0)) return normales;
+  return out.filter(o => !o.punta || o.fecha <= v0);
 }
 function misAsistencias() {
   const a = P.a; if (!a) return []; const out = [];
