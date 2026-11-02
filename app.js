@@ -822,7 +822,7 @@ function avisarDueno(titulo,cuerpo){ if(S.esOwner||!S.db) return;
   S.db.collection("staffAvisos").add({titulo,cuerpo,de:S.uid||"",notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})
     .then(()=>{ try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){} }).catch(e=>console.error(e)); }
 const tHorasAviso={};
-function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Admin.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
+function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Más acciones → Esteban y canchas.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
 const valorDia = f => S.hVal[f] || S.cfg.valorHora || 0;
 function ganadoEn(pref){ return Object.keys(S.horas).filter(k=>k.startsWith(pref)).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); }
 function saldoProfe(){ const gan=ganadoEn(""); const pag=S.hMovs.reduce((t,x)=>t+(Number(x.monto)||0),0); return {gan,pag,saldo:gan-pag}; }
