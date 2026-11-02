@@ -183,17 +183,35 @@ function elegirCatM(b){ const box=b.closest(".cat-pick"); const inp=box&&documen
 function elegirCat(b){ const box=b.closest(".cat-pick"); const inp=box&&document.getElementById(box.dataset.for); if(!inp) return;
   const on=b.getAttribute("aria-pressed")!=="true"; box.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed","false"));
   b.setAttribute("aria-pressed",String(on)); inp.value=on?b.dataset.v:""; }
-/* Esteban (vista de profe): cambia la categoría de un alumno de Jump tocando su nombre en la agenda. */
+/* Esteban (vista de profe): toca el nombre de un alumno de Jump en la agenda y le cambia la categoría y/o el horario de Jump.
+   No ve lo que paga ni nada más de la ficha. Cada cambio le llega a Gabriel como aviso. */
 function openCatAlumno(a){
-  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Categoría</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Tocá la categoría en la que está ahora. El alumno no la ve.</span></div>
-    <div class="field">${catPicker("cAl",a.categoria)}</div>
+  const hs=(a.horarios||[]).map((h,i)=>({h,i})).filter(x=>clubH(a,x.h)==="JUMP");
+  const fila=({h,i})=>`<div class="hrow-p" data-i="${i}" style="display:flex;gap:8px"><select class="hp-d" aria-label="Día" style="flex:1">${GRILLA.dias.map(d=>`<option value="${d}" ${h.dia===d?"selected":""}>${DIAS_LARGO[d]}</option>`).join("")}</select><select class="hp-h" aria-label="Hora" style="flex:1">${[...new Set([...GRILLA.horas,h.hora])].sort().map(x=>`<option ${h.hora===x?"selected":""}>${x}</option>`).join("")}</select></div>`;
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumno de Jump</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Lo que cambies le llega a Gabriel. El alumno no ve su categoría.</span></div>
+    <div class="field"><span class="flabel">Categoría</span>${catPicker("cAl",a.categoria)}</div>
+    ${hs.length?`<div class="field" id="hpBox"><span class="flabel">Horario en Jump</span>${hs.map(fila).join("")}<span class="small muted">El cambio de horario vale desde hoy. Para sumar o sacar días, avisale a Gabriel.</span></div>`:""}
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="catAlOk" data-id="${a.id}">Guardar</button></div>`);
 }
 async function guardarCatAlumno(a){
   if(S.modo==="profe"&&!clubsDe(a).has("JUMP")){ toast("Solo podés cambiar alumnos de Jump"); return; }
-  const val=($("#cAl").value||"").trim();
-  const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
-  if(ok){ closeSheet(); toast(val?`${a.nombre}: ${capCat(val)}`:`${a.nombre}: sin categoría`); }
+  const val=($("#cAl").value||"").trim(); const cambios=[]; const data={};
+  if(catNorm(val)!==catNorm(a.categoria)){ data.categoria=val; cambios.push(`categoría ${capCat(a.categoria)} → ${capCat(val)}`); }
+  const hs=(a.horarios||[]).map(h=>({...h}));
+  for(const r of document.querySelectorAll("#hpBox .hrow-p")){ const i=Number(r.dataset.i), h=hs[i]; if(!h) continue;
+    const dia=Number(r.querySelector(".hp-d").value), hora=r.querySelector(".hp-h").value;
+    if(dia===h.dia&&hora===h.hora) continue;
+    if(hs.some((x,j)=>j!==i&&x.dia===dia&&x.hora===hora&&clubH(a,x)==="JUMP")){ toast("Ya tiene ese horario."); return; }
+    const ocup=alumnosDelTurno("JUMP",dia,hora).filter(x=>x.id!==a.id).length; if(ocup>=CUPO){ toast(`${DIAS_LARGO[dia]} ${hora} está completo (${ocup}/${CUPO}).`); return; }
+    const destino=turnos("JUMP").find(t=>t.dia===dia&&t.hora===hora);
+    cambios.push(`${DIAS_LARGO[h.dia].toLowerCase()} ${h.hora} → ${DIAS_LARGO[dia].toLowerCase()} ${hora}`);
+    const n={...h,dia,hora,club:"JUMP",desde:hoyISO}; if(destino&&destino.nivel) n.nivel=destino.nivel; else delete n.nivel; hs[i]=n; }
+  if(cambios.some(c=>c.includes("→ ")&&!c.startsWith("categoría"))) data.horarios=hs;
+  if(!cambios.length){ closeSheet(); return; }
+  if(!S.esOwner) data.ultCambioProfe={fecha:hoyISO,cambios};
+  const ok=await safe(()=>colA().doc(a.id).update(data));
+  if(ok){ closeSheet(); toast(`${a.nombre}: ${cambios.join(" · ")}`);
+    if(!S.esOwner) avisarDueno(`${nomProfe()} cambió a ${a.nombre}`,`${cambios.join(" · ").replace(/^./,c=>c.toUpperCase())}${data.horarios?" (desde hoy). Revisá la cuota si cambia la cantidad de clases del mes.":"."}`); }
 }
 /* Horarios con alumnos fijos que todavía no tienen categoría (Esteban ve solo los de Jump). */
 function turnosSinCat(){ return turnos("").filter(t=>t.al.length&&!nivelesDe(t.nivel).length&&(S.modo!=="profe"||t.club==="JUMP")).sort((x,y)=>(x.club.localeCompare(y.club))||((x.dia||7)-(y.dia||7))||x.hora.localeCompare(y.hora)); }
@@ -233,7 +251,7 @@ async function ponerSinCat(a,val){
   if(S.modo==="profe"&&!clubsDe(a).has("JUMP")){ toast("Solo podés cambiar alumnos de Jump"); return; }
   a.categoria=val; openSinCat();
   const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
-  if(ok) toast(`${a.nombre}: ${capCat(val)}`); else { a.categoria=""; openSinCat(); }
+  if(ok){ toast(`${a.nombre}: ${capCat(val)}`); if(!S.esOwner) avisarDueno(`${nomProfe()} cambió a ${a.nombre}`,`Categoría: ${capCat(val)}.`); } else { a.categoria=""; openSinCat(); }
 }
 // Categorías con las que puede recuperar: la suya. Si todavía no tiene, las de sus horarios.
 function catsDe(a){ const set=new Set(nivelesDe(a.categoria)); if(!set.size) (a.horarios||[]).forEach(h=>nivelesDe(h.nivel).forEach(c=>set.add(c))); return set; }
@@ -1569,7 +1587,8 @@ async function guardarTurnoCat(b){
   const al=alumnosDelTurno(club,dia,hora); if(!al.length){ closeSheet(); return; }
   const ok=await safe(async()=>{ const bt=S.db.batch();
     al.forEach(a=>bt.update(colA().doc(a.id),{horarios:(a.horarios||[]).map(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club?{...h,nivel:val}:h)})); await bt.commit(); });
-  if(ok){ closeSheet(); toast(val?`Turno de las ${hora}: ${nivelTxt(val)}`:`Turno de las ${hora} sin categoría`); if(TCAT_VOLVER) setTimeout(()=>openTurnosSinCat(),350); }
+  if(ok){ closeSheet(); toast(val?`Turno de las ${hora}: ${nivelTxt(val)}`:`Turno de las ${hora} sin categoría`); if(TCAT_VOLVER) setTimeout(()=>openTurnosSinCat(),350);
+    if(!S.esOwner) avisarDueno(`${nomProfe()} cambió un horario`,`${DIAS_LARGO[dia]} ${hora} en Jump: ${val?nivelTxt(val):"sin categoría"}.`); }
 }
 async function verComprobante(a){
   const c=compDe(a); if(!c) return;
