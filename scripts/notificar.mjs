@@ -6,7 +6,7 @@
 //    y del pago del mes (se paga del 1 al 14: avisos el 1, el 11, el 14 y el 15 si quedó vencido).
 // 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
 import admin from "firebase-admin";
-import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, nivelCoincide, puntaAbierta, masUnaHora, sumarDias, diaSemana, hhmm, clubH, esFijo } from "./logica.mjs";
+import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, nivelCoincide, puntaAbierta, masUnaHora, sumarDias, diaSemana, hhmm, clubH, clubsDe, esFijo } from "./logica.mjs";
 
 if (!process.env.FIREBASE_SA) { console.log("Falta el secreto FIREBASE_SA: no se envía nada."); process.exit(0); }
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SA)) });
@@ -376,8 +376,66 @@ try {
         console.log(`Aviso de clase al profe: ${hora} (${total})`);
       }
     }
+    // A la mañana (desde las 10): los turnos que tiene hoy, una vez por día.
+    const horaJ = ar.getUTCHours();
+    if (horaJ >= 10 && horaJ < 16) {
+      const cuantos = hora => { const tt = turnos[hora]; let n = tt.recs.length + tt.otros.length;
+        tt.fijos.forEach(a => { if (!(tieneAv(a.id, hora, "ausencia") && !tieneAv(a.id, hora, "recupera")) || reemp.some(x => x.alumnoId === a.id && x.hora === hora)) n++; }); return n; };
+      const horas = Object.keys(turnos).filter(h => !susp[`JUMP|${hoy}|${h}`] && cuantos(h) > 0).sort();
+      for (const uid of profesJ) {
+        const ref = db.doc(`recordatorios/jornada_${uid}_${hoy}`);
+        const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp(), horas }); return true; });
+        if (!nuevo || !horas.length) continue;
+        const fin = masUnaHora(horas[horas.length - 1]) || horas[horas.length - 1];
+        await enviar(uid, { title: `🎾 Hoy trabajás en Jump · ${horas[0]} a ${fin}`, body: `${horas.length} clase${horas.length > 1 ? "s" : ""}: ${listaY(horas)}. Si se suma una clase nueva, te avisamos.`, tag: "jornada-" + hoy });
+        console.log(`Jornada al profe: ${horas.join(", ")}`);
+      }
+    }
   }
 } catch (e) { console.log("Aviso de clase al profe:", e && e.message); }
+
+/* ---------- 4c) Se abrió un turno vacío de la punta (alguien reservó ahí): aviso al profe y a los de ese nivel ---------- */
+try {
+  const avsP = (await db.collection("avisos").where("fecha", ">=", hoy).get()).docs.filter(d => { const v = d.data(); return v.abrePunta && !v.puntaAvisada; });
+  if (avsP.length) {
+    const profesP = Object.entries(tokens).filter(([, t]) => (t.rol === "profe" || t.rol === "dueño") && t.tokens && t.tokens.length).map(([uid, t]) => ({ uid, rol: t.rol }));
+    const porAlP = {}; Object.entries(tokens).forEach(([uid, t]) => { if (t.rol === "alumno" && t.alumnoId && t.tokens && t.tokens.length) (porAlP[t.alumnoId] = porAlP[t.alumnoId] || []).push(uid); });
+    const turnosP = ((await db.doc("publico/turnos").get()).data() || {}).t || {};
+    const cupoP = ((await db.doc("publico/info").get()).data() || {}).cupo || 4;
+    const suspP = ((await db.doc("publico/suspendidas").get()).data() || {}).t || {};
+    let alumnosP = null;
+    for (const d of avsP) {
+      const ok = await db.runTransaction(async tx => { const s = await tx.get(d.ref); if (!s.exists || s.data().puntaAvisada) return false; tx.update(d.ref, { puntaAvisada: true }); return true; });
+      if (!ok) continue; const v = d.data();
+      const empieza = inicioDe(v.fecha, v.hora).getTime(); if (empieza < ahora.getTime() || suspP[`${v.club}|${v.fecha}|${v.hora}`]) continue;
+      // Sigue en pie: no la canceló (si la canceló, ya no ocupa lugar en el cupo).
+      const cupoDoc = (await db.doc(`cupos/${v.club}_${v.fecha}_${hhmm(v.hora)}`).get()).data() || {};
+      if (!((cupoDoc.rec || 0) - (cupoDoc.aus || 0) > 0)) continue;
+      // Al profe (y a Gabriel): tiene que ir a esa hora, que antes estaba vacía.
+      for (const p of profesP) if (p.rol === "dueño" || v.club === "JUMP")
+        await enviar(p.uid, { title: `⚠️ Nueva clase ${fechaTxt(v.fecha)} a las ${v.hora}`, body: `${primerNombre(v.nombre)} reservó para recuperar en ${CLUB[v.club] || v.club} en un horario que estaba vacío. Ese día hay clase a las ${v.hora}.`, tag: "punta-" + d.id });
+      // A los alumnos de ese nivel que tienen clases para recuperar: se abrió un lugar.
+      if (!alumnosP) alumnosP = (await db.collection("alumnos").get()).docs.map(x => ({ id: x.id, ...x.data() })).filter(a => a.activo !== false);
+      const avsDia = (await db.collection("avisos").where("fecha", "==", v.fecha).get()).docs.map(x => x.data());
+      if ((empieza - ahora.getTime()) / 60e3 < 40) continue; // muy encima: no llega a organizarse
+      if (libres(turnosP, { [`${v.club}_${v.fecha}_${hhmm(v.hora)}`]: cupoDoc }, cupoP, v.club, v.fecha, v.hora) < 1) continue;
+      const nivel = cupoDoc.nivel || "";
+      let n = 0;
+      for (const a of alumnosP) {
+        if (a.id === v.alumnoId || !porAlP[a.id] || !clubsDe(a).has(v.club)) continue;
+        const cats = catsDe(a); if (nivel && cats.size && !nivelCoincide(nivel, cats)) continue;
+        if (esFijo(a, v.club, v.fecha, v.hora) || avsDia.some(x => x.alumnoId === a.id && x.hora === v.hora && x.tipo === "recupera")) continue;
+        const r = normalizar(a, hoy); if (!r.recuperar || !Object.keys(r.recVence).some(k => k >= v.fecha)) continue;
+        const ref = db.doc(`recordatorios/abre_${a.id}_${v.fecha}`);
+        const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp(), hora: v.hora }); return true; });
+        if (!nuevo) continue;
+        for (const uid of porAlP[a.id]) await enviar(uid, { title: "Se abrió un lugar para recuperar 🎾", body: `${primerNombre(a.nombre)}, ${fechaTxt(v.fecha)} a las ${v.hora} en ${CLUB[v.club] || v.club} hay lugar para vos. Reservalo en la app.`, tag: "recuperar-" + a.id });
+        n++;
+      }
+      console.log(`Se abrió la punta ${v.fecha} ${v.hora} ${v.club}: aviso al profe y a ${n} alumnos`);
+    }
+  }
+} catch (e) { console.log("Punta abierta:", e && e.message); }
 
 /* ---------- 5) Mi Agenda (personal de Gabriel) ---------- */
 try {

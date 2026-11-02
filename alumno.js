@@ -127,22 +127,24 @@ function nivelOk(t, cats, club, fecha, hora) {
   if ((t.n || 0) > 0) return false;
   const nv = nivelCupo(club, fecha, hora); return !nv || nivelCoincide(nv, cats);
 }
+const anticipacionMs = punta => (punta ? 3 * 60 : 10) * 60 * 1000;
 function opcionesRec() {
   const a = P.a; if (!a) return [];
   const bk = recAl(); if (!bk.length) return []; const hasta = bk[bk.length - 1].vence;
   const mios = new Set((a.horarios || []).map(h => `${clubH(a, h)}|${h.dia}|${h.hora}`)); const cats = catsDe(a); const cl = clubsDe(a);
-  const limite = Date.now() + 30 * 60 * 1000; const out = [];
+  const out = [];
   for (let i = 0; i < 40; i++) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i); const f = toISO(d); if (f > hasta) break;
     Object.entries(P.turnos).forEach(([k, t]) => {
       const [club, dia, hora] = k.split("|");
       if (!cl.has(club) || Number(dia) !== d.getDay() || mios.has(`${club}|${dia}|${hora}`)) return;
       if (cats.size && !nivelOk(t, cats, club, f, hora)) return;
-      if (inicioDe(f, hora).getTime() < limite) return;
       if (esSusp(club, f, hora)) return;
       if (P.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
       // Turno vacío en la punta del día: queda "abierto" para esa fecha si alguien ya reservó ahí (el profe va igual).
       const c = P.cupos[cupoId(club, f, hora)] || {}; const punta = !!t.punta && !((c.rec || 0) - (c.aus || 0) > 0);
+      // Hasta cuándo se puede reservar: 10 minutos antes; una punta vacía, 3 horas antes (para que el profe se organice).
+      if (inicioDe(f, hora).getTime() - Date.now() < anticipacionMs(punta)) return;
       const libres = libresDe(club, f, hora); if (libres > 0) out.push({ club, fecha: f, hora, nivel: t.nivel, dia: d.getDay(), libres, punta });
     });
   }
@@ -419,7 +421,7 @@ function confirmar(titulo, texto, boton, accion) {
 // Guarda con un tope de espera. Si la señal se corta o el alumno minimiza la app en el medio,
 // no sabemos si llegó: lo confirmamos con el servidor antes de decirle que falló.
 const ESPERA_TX = 20000;
-const ERR_LOGICOS = ["ya", "lleno", "sin-clases", "ocupado", "susp"];
+const ERR_LOGICOS = ["ya", "lleno", "sin-clases", "ocupado", "susp", "tarde", "tarde-punta"];
 // Con mala señal Firestore guarda en el celu y sube solo cuando vuelve la conexión: no dejamos el botón trabado esperando.
 const conTope = (p, ms = 10000) => Promise.race([p, new Promise(ok => setTimeout(ok, ms))]);
 async function guardarSeguro(vRef, tipo, hacer) {
@@ -470,7 +472,10 @@ async function reservarRec(fecha, hora, clubElegido) {
     const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
     const base = ((tS.data() || {}).t || {})[`${club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
     if (!base || cupo - base.n + (c.aus || 0) - (c.rec || 0) < 1) throw { code: "lleno" };
-    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: (recAl()[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false });
+    // Punta vacía que se abre con esta reserva: hace falta más anticipación y se avisa al profe y a los de su nivel.
+    const abrePunta = !!base.punta && !((c.rec || 0) - (c.aus || 0) > 0);
+    if (inicioDe(fecha, hora).getTime() - Date.now() < anticipacionMs(abrePunta)) throw { code: abrePunta ? "tarde-punta" : "tarde" };
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: (recAl()[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false, ...(abrePunta ? { abrePunta: true } : {}) });
     // Turno vacío: el primero que reserva le pone su nivel para esa fecha (no se muestra a los alumnos).
     const nivelC = c.nivel || (!base.n && !base.nivel ? ([...catsDe(a)][0] || "") : "");
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId, ...(nivelC ? { nivel: nivelC } : {}) });
@@ -478,7 +483,7 @@ async function reservarRec(fecha, hora, clubElegido) {
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   }));
 }
-const ERR_AL = { susp: "Esa clase está suspendida: no hace falta avisar, ya te queda para recuperar.", ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
+const ERR_AL = { susp: "Esa clase está suspendida: no hace falta avisar, ya te queda para recuperar.", ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", tarde: "Ese horario ya cerró: se puede reservar hasta 10 minutos antes. Elegí otro.", "tarde-punta": "Ese horario se tenía que reservar con 3 horas de anticipación. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
 document.addEventListener("click", async e => {
   if (window.MODO_STAFF) return;
   const b = e.target.closest("[data-pa]"); if (!b) return;
