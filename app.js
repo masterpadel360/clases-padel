@@ -157,14 +157,14 @@ function turnosGrilla(club){
   return ts;
 }
 function slotsDe(dia){ return turnosGrilla(S.club).filter(t=>t.dia===dia).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
-const catNorm = c => String(c||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^iniciales$/,"inicial");
+const catNorm = c => String(c||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^iniciales$/,"inicial").replace(/^nino$/,"ninos");
 /* Un horario puede tener una o varias categorías (se guardan juntas, separadas por coma: "sexta,séptima").
    A recuperar ahí puede ir cualquier alumno de alguna de esas categorías. */
 const nivelesDe=n=>String(n||"").split(",").map(catNorm).filter(Boolean);
 const nivelCoincide=(n,cats)=>nivelesDe(n).some(c=>cats.has(c));
 const nivelTxt=n=>String(n||"").split(",").map(x=>x.trim()).filter(Boolean).map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(" + ");
 /* Categorías para elegir tocando (sin escribir, así no hay errores de tipeo). Se guardan en minúscula. */
-const CATS_AL=["Inicial","Octava","Séptima","Sexta","Quinta","Cuarta"];
+const CATS_AL=["Niños","Inicial","Octava","Séptima","Sexta","Quinta","Cuarta"];
 function catPicker(id,cur){
   const n=catNorm(cur); const opts=CATS_AL.map(c=>[c.toLowerCase(),c]); let val=String(cur||"").trim();
   const hit=opts.find(([v])=>catNorm(v)===n); if(hit) val=hit[0]; else if(n) opts.push([val,val]);

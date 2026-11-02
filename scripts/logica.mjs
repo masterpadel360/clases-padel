@@ -34,7 +34,7 @@ export function normalizar(a, hoy, pend = []) {
 export const esFijo = (a, club, f, hora) => (a.horarios || []).some(h => Number(h.dia) === diaSemana(f) && h.hora === hora && clubH(a, h) === club);
 export const igualRec = (a, b) => (Number(a.recuperar) || 0) === b.recuperar && JSON.stringify(Object.fromEntries(Object.entries(a.recVence || {}).filter(([, n]) => n > 0).sort())) === JSON.stringify(b.recVence);
 
-export const catNorm = c => String(c || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/^iniciales$/, "inicial");
+export const catNorm = c => String(c || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/^iniciales$/, "inicial").replace(/^nino$/, "ninos");
 // Un horario puede tener una o varias categorías ("sexta,séptima"). Igual que en app.js.
 export const nivelesDe = n => String(n || "").split(",").map(catNorm).filter(Boolean);
 export const nivelCoincide = (n, cats) => nivelesDe(n).some(c => cats.has(c));
