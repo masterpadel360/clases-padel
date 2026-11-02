@@ -123,9 +123,9 @@ function recAl() { return P.a ? recBuckets(P.a) : []; }
 // el turno queda con el nivel de ese alumno para esa fecha, y solo lo ven los de su mismo nivel.
 function nivelCupo(club, fecha, hora) { const c = P.cupos[cupoId(club, fecha, hora)] || {}; return (c.rec || 0) - (c.aus || 0) > 0 ? (c.nivel || "") : ""; }
 function nivelOk(t, cats, club, fecha, hora) {
-  if (t.nivel) return cats.has(catNorm(t.nivel));
+  if (nivelesDe(t.nivel).length) return nivelCoincide(t.nivel, cats);
   if ((t.n || 0) > 0) return false;
-  const nv = nivelCupo(club, fecha, hora); return !nv || cats.has(catNorm(nv));
+  const nv = nivelCupo(club, fecha, hora); return !nv || nivelCoincide(nv, cats);
 }
 function opcionesRec() {
   const a = P.a; if (!a) return [];
@@ -386,7 +386,7 @@ function opcionesSumar() {
   const cats = catsDe(a); const cl = clubsDe(a); const out = [];
   Object.entries(P.turnos || {}).forEach(([k, t]) => { const [club, dia, hora] = k.split("|"); const d = Number(dia);
     if (!cl.has(club) || mios.has(k) || misDias.has(d)) return;
-    if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
+    if (cats.size && !nivelCoincide(t.nivel, cats)) return;
     const lib = CUPO - (t.n || 0); if (lib > 0) out.push({ club, dia: d, hora, nivel: t.nivel || "", lib }); });
   return out.sort((x, y) => ((x.dia || 7) - (y.dia || 7)) || x.hora.localeCompare(y.hora));
 }

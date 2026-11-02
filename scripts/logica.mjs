@@ -35,7 +35,11 @@ export const esFijo = (a, club, f, hora) => (a.horarios || []).some(h => Number(
 export const igualRec = (a, b) => (Number(a.recuperar) || 0) === b.recuperar && JSON.stringify(Object.fromEntries(Object.entries(a.recVence || {}).filter(([, n]) => n > 0).sort())) === JSON.stringify(b.recVence);
 
 export const catNorm = c => String(c || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/^iniciales$/, "inicial");
-export function catsDe(a) { const s = new Set(); String(a.categoria || "").split(",").map(catNorm).filter(Boolean).forEach(c => s.add(c)); (a.horarios || []).forEach(h => h.nivel && s.add(catNorm(h.nivel))); return s; }
+// Un horario puede tener una o varias categorías ("sexta,séptima"). Igual que en app.js.
+export const nivelesDe = n => String(n || "").split(",").map(catNorm).filter(Boolean);
+export const nivelCoincide = (n, cats) => nivelesDe(n).some(c => cats.has(c));
+// Categorías con las que puede recuperar: la suya. Si todavía no tiene, las de sus horarios.
+export function catsDe(a) { const s = new Set(nivelesDe(a.categoria)); if (!s.size) (a.horarios || []).forEach(h => nivelesDe(h.nivel).forEach(c => s.add(c))); return s; }
 export const clubH = (a, h) => (h && h.club) || a.club || "JUMP";
 export const clubsDe = a => { const s = new Set((a.horarios || []).map(h => clubH(a, h))); if (!s.size && a.club) s.add(a.club); return s; };
 export const hhmm = h => String(h || "").replace(":", "");
@@ -67,7 +71,7 @@ export function opcionesDelDia(a, f, turnos, cupos, cupo, avisos, desdeMs) {
   Object.entries(turnos).forEach(([k, t]) => {
     const [club, dia, hora] = k.split("|");
     if (!cl.has(club) || Number(dia) !== dow || mios.has(k)) return;
-    if (cats.size && !(t.nivel && cats.has(catNorm(t.nivel)))) return;
+    if (cats.size && !nivelCoincide(t.nivel, cats)) return;
     if (new Date(`${f}T${hora}:00-03:00`).getTime() < desdeMs) return;
     if (avisos.some(v => v.alumnoId === a.id && v.tipo === "recupera" && v.fecha === f && v.hora === hora)) return;
     const n = libres(turnos, cupos, cupo, club, f, hora); if (n > 0) out.push({ club, hora, libres: n });

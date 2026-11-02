@@ -6,7 +6,7 @@
 //    y del pago del mes (se paga del 1 al 14: avisos el 1, el 11, el 14 y el 15 si quedó vencido).
 // 4) Al profe de Jump: si a la noche le falta cargar asistencia u horas (y a la mañana si sigue faltando lo de ayer).
 import admin from "firebase-admin";
-import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, masUnaHora, sumarDias, diaSemana, hhmm, clubH, esFijo } from "./logica.mjs";
+import { venceDe, normalizar, igualRec, clasesDelDia, opcionesDelDia, libres, catsDe, catNorm, nivelCoincide, masUnaHora, sumarDias, diaSemana, hhmm, clubH, esFijo } from "./logica.mjs";
 
 if (!process.env.FIREBASE_SA) { console.log("Falta el secreto FIREBASE_SA: no se envía nada."); process.exit(0); }
 admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SA)) });
@@ -276,7 +276,7 @@ if (alumnosConApp.length) {
       const id = `${a.id}_${hoy}_${hhmm(c.hora)}`; if (await yaEnviado(id)) continue;
       let extra = "";
       const sig = masUnaHora(c.hora); const ts = sig && turnos[`${c.club}|${diaSemana(hoy)}|${sig}`]; const cats = catsDe(a);
-      if (nRec > 0 && ts && (!cats.size || (ts.nivel && cats.has(catNorm(ts.nivel)))) && libres(turnos, cupos, cupo, c.club, hoy, sig) > 0 && !suspendida(c.club, hoy, sig) && !(a.horarios || []).some(h => h.hora === sig && h.dia === diaSemana(hoy)))
+      if (nRec > 0 && ts && (!cats.size || nivelCoincide(ts.nivel, cats)) && libres(turnos, cupos, cupo, c.club, hoy, sig) > 0 && !suspendida(c.club, hoy, sig) && !(a.horarios || []).some(h => h.hora === sig && h.dia === diaSemana(hoy)))
         extra = ` ¿Te quedás? A las ${sig} hay lugar para recuperar una clase: reservalo en la app.`;
       await mandar(id, { title: "Hoy tenés pádel 🎾", body: `${nombre}, te esperamos a las ${c.hora} en ${lugarTxt(c.club)}${c.tipo === "recupera" ? " (recuperación)" : ""}.${extra}`, tag: "recordatorio-" + a.id });
     }

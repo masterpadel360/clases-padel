@@ -153,6 +153,11 @@ function turnosGrilla(club){
 }
 function slotsDe(dia){ return turnosGrilla(S.club).filter(t=>t.dia===dia).sort((x,y)=>x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
 const catNorm = c => String(c||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/^iniciales$/,"inicial");
+/* Un horario puede tener una o varias categorías (se guardan juntas, separadas por coma: "sexta,séptima").
+   A recuperar ahí puede ir cualquier alumno de alguna de esas categorías. */
+const nivelesDe=n=>String(n||"").split(",").map(catNorm).filter(Boolean);
+const nivelCoincide=(n,cats)=>nivelesDe(n).some(c=>cats.has(c));
+const nivelTxt=n=>String(n||"").split(",").map(x=>x.trim()).filter(Boolean).map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(" + ");
 /* Categorías para elegir tocando (sin escribir, así no hay errores de tipeo). Se guardan en minúscula. */
 const CATS_AL=["Inicial","Octava","Séptima","Sexta","Quinta","Cuarta"];
 function catPicker(id,cur){
@@ -160,6 +165,16 @@ function catPicker(id,cur){
   const hit=opts.find(([v])=>catNorm(v)===n); if(hit) val=hit[0]; else if(n) opts.push([val,val]);
   return `<input type="hidden" id="${id}" value="${esc(val)}"><div class="cat-pick" data-for="${id}" style="display:flex;gap:6px;flex-wrap:wrap">${opts.map(([v,l])=>`<button type="button" class="chip" data-act="catPick" data-v="${esc(v)}" aria-pressed="${!!n&&catNorm(v)===n}" style="text-transform:none;letter-spacing:0;font-size:14px;padding:9px 14px">${esc(l)}</button>`).join("")}</div>`;
 }
+// Igual que catPicker, pero se pueden marcar varias (para los horarios).
+function catPickerMulti(id,cur){
+  const sel=new Set(nivelesDe(cur)); const opts=CATS_AL.map(c=>[c.toLowerCase(),c]);
+  String(cur||"").split(",").map(x=>x.trim()).filter(Boolean).forEach(v=>{ if(!opts.some(([o])=>catNorm(o)===catNorm(v))) opts.push([v,v]); });
+  const val=opts.filter(([v])=>sel.has(catNorm(v))).map(([v])=>v).join(",");
+  return `<input type="hidden" id="${id}" value="${esc(val)}"><div class="cat-pick" data-for="${id}" style="display:flex;gap:6px;flex-wrap:wrap">${opts.map(([v,l])=>`<button type="button" class="chip" data-act="catPickM" data-v="${esc(v)}" aria-pressed="${sel.has(catNorm(v))}" style="text-transform:none;letter-spacing:0;font-size:14px;padding:9px 14px">${esc(l)}</button>`).join("")}</div>`;
+}
+function elegirCatM(b){ const box=b.closest(".cat-pick"); const inp=box&&document.getElementById(box.dataset.for); if(!inp) return;
+  b.setAttribute("aria-pressed",String(b.getAttribute("aria-pressed")!=="true"));
+  inp.value=[...box.querySelectorAll('button[aria-pressed="true"]')].map(x=>x.dataset.v).join(","); }
 function elegirCat(b){ const box=b.closest(".cat-pick"); const inp=box&&document.getElementById(box.dataset.for); if(!inp) return;
   const on=b.getAttribute("aria-pressed")!=="true"; box.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed","false"));
   b.setAttribute("aria-pressed",String(on)); inp.value=on?b.dataset.v:""; }
@@ -175,6 +190,32 @@ async function guardarCatAlumno(a){
   const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
   if(ok){ closeSheet(); toast(val?`${a.nombre}: ${capCat(val)}`:`${a.nombre}: sin categoría`); }
 }
+/* Horarios con alumnos fijos que todavía no tienen categoría (Esteban ve solo los de Jump). */
+function turnosSinCat(){ return turnos("").filter(t=>t.al.length&&!nivelesDe(t.nivel).length&&(S.modo!=="profe"||t.club==="JUMP")).sort((x,y)=>(x.club.localeCompare(y.club))||((x.dia||7)-(y.dia||7))||x.hora.localeCompare(y.hora)); }
+function openTurnosSinCat(){ const l=turnosSinCat();
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Recuperaciones</span><h2 class="disp">Horarios sin categoría${l.length?` · ${l.length}`:""}</h2><span class="small muted">${l.length?"Tocá cada horario y marcá una o varias categorías (por ejemplo Sexta + Séptima). Ahí van a poder recuperar solo los de esas categorías.":"🎉 Todos los horarios tienen categoría."}</span></div>
+    ${l.length?`<div class="list">${l.map(t=>`<button class="row" style="width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left" data-act="turnoCatL" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}"><span class="main"><span class="name">${DIAS_LARGO[t.dia]} ${t.hora}</span><span class="meta"><span class="tag ${t.club}">${t.club==="ESPACIO"?"Espacio":"Jump"}</span><span>${esc(t.al.map(a=>nombreCorto(a.nombre)).join(", "))}</span></span></span><span class="mini">Poner</span></button>`).join("")}</div>`:""}
+    <div style="display:flex;justify-content:flex-end"><button class="mini" data-act="close">Listo</button></div>`,openTurnosSinCat);
+}
+/* Alumnos con datos sin completar (solo Gabriel): qué le falta a cada uno, para terminar de cargarlo. */
+function faltaDe(a){ const f=[];
+  if(sinCat(a)) f.push("categoría");
+  if(!String(a.tel||"").trim()) f.push("teléfono");
+  if(!(a.horarios||[]).length) f.push("horario");
+  if(!(Number(a.precioClase)>0)) f.push("precio");
+  if(!a.inicio&&!a.antiguo) f.push("fecha de arranque");
+  return f; }
+function incompletosLista(){ return activos().filter(a=>faltaDe(a).length).sort((x,y)=>(faltaDe(y).length-faltaDe(x).length)||(x.nombre||"").localeCompare(y.nombre||"")); }
+function openIncompletos(){ const l=incompletosLista();
+  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Datos sin completar${l.length?` · ${l.length}`:""}</h2><span class="small muted">${l.length?"A cada uno le falta lo que dice en rojo. La categoría la podés poner acá tocando; para lo demás tocá Completar.":"🎉 Todos los alumnos tienen todos sus datos."}</span></div>
+    ${l.length?`<div class="list">${l.map(a=>{ const f=faltaDe(a); return `<div class="row" style="grid-template-columns:1fr;gap:8px;padding:12px 14px"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${tagsClub(a)}${f.map(x=>`<span class="tag" style="background:var(--k-no,#b3261e);color:#fff">Falta ${x}</span>`).join("")}</span></span>
+      ${sinCat(a)?`<div style="display:flex;gap:6px;flex-wrap:wrap">${CATS_AL.map(c=>`<button type="button" class="chip" data-act="incCatOk" data-id="${a.id}" data-v="${c.toLowerCase()}" style="text-transform:none;letter-spacing:0;font-size:13px;padding:7px 12px">${c}</button>`).join("")}</div>`:""}
+      ${f.some(x=>x!=="categoría")?`<div style="display:flex;justify-content:flex-end"><button class="mini go" data-act="editA" data-id="${a.id}">Completar</button></div>`:""}</div>`; }).join("")}</div>`:""}
+    <div style="display:flex;justify-content:flex-end"><button class="mini" data-act="close">Listo</button></div>`,openIncompletos);
+}
+async function ponerCatInc(a,val){ a.categoria=val; openIncompletos();
+  const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
+  if(ok) toast(`${a.nombre}: ${capCat(val)}`); else { a.categoria=""; openIncompletos(); } }
 /* Alumnos sin categoría: aviso en "Para resolver" y lista para ponérsela tocando (se guarda al instante). */
 const sinCat=a=>!String(a.categoria||"").trim();
 function sinCatLista(){ return activos().filter(a=>sinCat(a)&&(S.modo!=="profe"||clubsDe(a).has("JUMP"))).sort((x,y)=>(x.nombre||"").localeCompare(y.nombre||"")); }
@@ -189,11 +230,12 @@ async function ponerSinCat(a,val){
   const ok=await safe(()=>colA().doc(a.id).update({categoria:val}));
   if(ok) toast(`${a.nombre}: ${capCat(val)}`); else { a.categoria=""; openSinCat(); }
 }
-function catsDe(a){ const set=new Set(); String(a.categoria||"").split(",").map(catNorm).filter(Boolean).forEach(c=>set.add(c)); (a.horarios||[]).forEach(h=>h.nivel&&set.add(catNorm(h.nivel))); return set; }
+// Categorías con las que puede recuperar: la suya. Si todavía no tiene, las de sus horarios.
+function catsDe(a){ const set=new Set(nivelesDe(a.categoria)); if(!set.size) (a.horarios||[]).forEach(h=>nivelesDe(h.nivel).forEach(c=>set.add(c))); return set; }
 function ordenSemana(t){ const hoyD=now.getDay()||7; return (((t.dia||7)-hoyD+7)%7)*10000+Number(String(t.hora).replace(":","")); }
 function opcionesRecupera(a,max=3){
   const mios=new Set((a.horarios||[]).map(h=>`${clubH(a,h)}|${h.dia}|${h.hora}`)); const cats=catsDe(a); const cl=clubsDe(a);
-  return turnosGrilla("").filter(t=>cl.has(t.club) && t.al.length<CUPO && !mios.has(`${t.club}|${t.dia}|${t.hora}`) && (cats.size&&t.al.length ? (t.nivel && cats.has(catNorm(t.nivel))) : true))
+  return turnosGrilla("").filter(t=>cl.has(t.club) && t.al.length<CUPO && !mios.has(`${t.club}|${t.dia}|${t.hora}`) && (cats.size&&t.al.length ? nivelCoincide(t.nivel,cats) : true))
     .sort((x,y)=>ordenSemana(x)-ordenSemana(y)).slice(0,max);
 }
 
@@ -283,7 +325,9 @@ function estHoy(t){ const f=hoyISO, h=t.hora; const al=t.al.filter(a=>vaEn(a,t,f
 function vHoy(){
   const owner=S.esOwner&&S.modo!=="profe"; if(owner) escucharAsMes(mesKey(now));
   const p="";
-  return `${p}<div id="secAvisos">${avisosHoyHTML()}</div>${vAgenda()}${owner?libresHoyHTML():""}${S.alumnos.length?"":emptyAlumnos()}`;
+  const nTS=S.modo==="profe"?turnosSinCat().length:0;
+  const pTS=nTS?`<section class="w-card w-pend"><div class="pd-i"><i style="background:var(--k-amb)"></i><span><b>${nTS} horario${nTS===1?"":"s"} de Jump sin categoría</b></span><button class="mini go" data-act="turnosSinCat">Poner</button></div></section>`:"";
+  return `${p}${pTS}<div id="secAvisos">${avisosHoyHTML()}</div>${vAgenda()}${owner?libresHoyHTML():""}${S.alumnos.length?"":emptyAlumnos()}`;
 }
 /* ---------- Pendientes de Gabriel (arriba de Hoy): lo que hay que hacer, y se va solo cuando está hecho ---------- */
 function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAct); const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -292,9 +336,12 @@ function pendDuenoHTML(){ const it=[]; const mAct=mesKey(now); escucharAsMes(mAc
   // 0) Pedidos para sumar un día
   (S.solic||[]).filter(x=>x.estado==="pendiente").forEach(x=>{ const a=S.alumnos.find(y=>y.id===x.alumnoId); if(!a) return;
     item("#13834f",`<b>${esc(nombreCorto(a.nombre))}</b> quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> · ${clubN(x.club)}`,`<button class="mini go" data-act="solVer" data-id="${x.id}">Ver</button>`); });
-  // 1) Alumnos sin categoría (siempre que haya alguno)
-  const nSC=sinCatLista().length;
-  if(nSC) item("var(--k-amb)",`<b>${nSC} alumno${nSC===1?"":"s"} sin categoría</b>`,`<button class="mini go" data-act="sinCat">Poner</button>`);
+  // 1) Alumnos con datos sin completar (categoría, teléfono, horario, precio, fecha de arranque)
+  const nInc=incompletosLista().length;
+  if(nInc) item("var(--k-amb)",`<b>${nInc} alumno${nInc===1?"":"s"} con datos sin completar</b>`,`<button class="mini go" data-act="incompletos">Ver</button>`);
+  // 1a) Horarios sin categoría (para que se pueda recuperar bien)
+  const nTS=turnosSinCat().length;
+  if(nTS) item("var(--k-amb)",`<b>${nTS} horario${nTS===1?"":"s"} sin categoría</b>`,`<button class="mini go" data-act="turnosSinCat">Poner</button>`);
   // 1b) Alumnos nuevos: primera clase hoy, y después preguntarle qué le pareció
   activos().filter(esNuevo).forEach(a=>{ const pc=primeraClase(a); if(!pc) return; const hs=(a.horarios||[]).filter(h=>Number(h.dia)===isoDate(pc).getDay()).map(h=>`${h.hora} · ${clubN(clubH(a,h))}`).join(", ");
     if(pc===hoyISO) item("#13834f",`<b>${esc(a.nombre)}</b> tiene hoy su <b>primera clase</b> (${hs})`,"");
@@ -357,7 +404,7 @@ function vSemana(){
   <div class="w-seg">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button data-act="semClub" data-v="${v}" aria-pressed="${cl===v}">${l}</button>`).join("")}</div>
   <p class="sem-res">${/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"} · ${ts.length} turno${ts.length===1?"":"s"} · ${al} alumnos · <b>${lib} lugar${lib===1?"":"es"} libre${lib===1?"":"s"}</b></p>
   ${ts.length?ts.map(t=>{ const lb=Math.max(0,CUPO-t.al.length);
-    return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.al.length?`<button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(t.nivel):"+ Categoría"}</button>`:`<span class="sem-cat">Vacío</span>`}<span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
+    return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.al.length?`<button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(nivelTxt(t.nivel)):"+ Categoría"}</button>`:`<span class="sem-cat">Vacío</span>`}<span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
       <div class="sem-al">${t.al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>`<button data-act="editA" data-id="${a.id}">${esc(a.nombre)}${(()=>{ const hh=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); const ds=[a.inicio,hh&&hh.desde].filter(Boolean).sort().pop(); return ds&&ds>hoyISO?` <small>empieza ${fechaDM(ds)}</small>`:""; })()}</button>`).join("")}${lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
   <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="tab" data-t="hoy">Ver por fecha (con avisos y lluvia) ›</button></section>`;
 }
@@ -369,7 +416,7 @@ function openSolicitud(id){ const x=(S.solic||[]).find(y=>y.id===id); if(!x) ret
   const pc=precioEn(a,mesKey(now))||a.precioClase||0; const m=mesKey(now); const n=desde.slice(0,7)===m?(()=>{ const d0=isoDate(desde); const last=new Date(d0.getFullYear(),d0.getMonth()+1,0).getDate(); let k=0; for(let d=d0.getDate();d<=last;d++) if(new Date(d0.getFullYear(),d0.getMonth(),d).getDay()===x.dia) k++; return k; })():0;
   const pagoMes=pago(a,m);
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Pedido de un alumno</span><h2 class="disp">${esc(a.nombre)}</h2></div>
-    <div class="msg" style="gap:6px"><span>Quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> en ${clubN(x.club)}${x.nivel?` (${esc(x.nivel)})`:""}.</span><span class="small muted">Hoy va: ${esc(horarioTxt(a))} · Ese turno tiene ${ocup}/${CUPO}.</span></div>
+    <div class="msg" style="gap:6px"><span>Quiere sumar los <b>${DIAS_LARGO[x.dia].toLowerCase()} ${x.hora}</b> en ${clubN(x.club)}${x.nivel?` (${esc(nivelTxt(x.nivel))})`:""}.</span><span class="small muted">Hoy va: ${esc(horarioTxt(a))} · Ese turno tiene ${ocup}/${CUPO}.</span></div>
     <div class="field"><label for="solDesde">Empieza el</label><input id="solDesde" type="date" value="${desde}"></div>
     <p class="small" style="margin:0">${n?`En ${mesSolo(m)} suma <b>${n} clase${n===1?"":"s"}</b> (${money(n*pc)}).${pagoMes?" Ya pagó este mes: esas clases cobralas aparte.":" Se suma solo a la cuota del mes."} `:""}Desde ${mesSolo(n?mesSig(m):desde.slice(0,7))} paga ${clasesMes({...a,horarios:[...(a.horarios||[]),{dia:x.dia,hora:x.hora,club:x.club}]},mesSig(m))} clases por mes.</p>
     <div class="btns"><button class="btn sec2" data-act="solNo" data-id="${id}">No puedo</button><span style="display:flex;gap:8px"><button class="btn sec2" data-act="close">Después</button><button class="btn pri" data-act="solOk" data-id="${id}">Aprobar</button></span></div>`); }
@@ -389,7 +436,7 @@ function vInicioG(){
   const filas=ts.map(t=>{ const e=t.e; const fin=sumMin(t.hora,60)<=hhmm;
     const st=e.lluvia?'<span class="w-st">⛔ Suspendida</span>':e.tomada?'<span class="w-st ok">✓ Tomada</span>':fin?'<span class="w-st no">Tomar asistencia</span>':`<span class="w-st">${e.vienen} vienen</span>`;
     const nombres=[...e.al.map(a=>({a,aus:e.aus.includes(a)})),...e.recs.map(a=>({a,rec:1}))];
-    return `<button class="w-cl" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-cl-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.nivel?`<span class="w-cl-n">${esc(t.nivel)}</span>`:""}${st}</span>
+    return `<button class="w-cl" data-act="irAsist" data-f="${hoyISO}" data-c="${t.club}"><span class="w-cl-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.nivel?`<span class="w-cl-n">${esc(nivelTxt(t.nivel))}</span>`:""}${st}</span>
       <span class="w-cl-al">${nombres.map(x=>`<span class="${x.aus?"aus":x.rec?"rec":""}">${esc(nombreCorto(x.a.nombre))}${x.aus?" · no viene":x.rec?" · recupera":""}</span>`).join("")}${e.libres?`<span class="lib">${e.libres} libre${e.libres===1?"":"s"}</span>`:""}</span></button>`; }).join("");
   return `
   <header class="w-head"><span class="w-av">${esc(ini)}</span><span class="w-hola"><b>¡Hola, ${esc(nom)}!</b><small>${DIAS_LARGO[now.getDay()]} ${now.getDate()} de ${mesSolo(m).toLowerCase()}</small></span>
@@ -460,7 +507,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length;
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${sinCat(a)&&a.activo!==false?`<span class="tag" style="background:var(--k-amb,#b86e00);color:#fff">Sin categoría</span>`:""}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
+    <span class="meta">${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${a.activo!==false&&(S.modo==="profe"?sinCat(a):faltaDe(a).length)?`<span class="tag" style="background:var(--k-amb,#b86e00);color:#fff">${S.modo==="profe"||(faltaDe(a).length===1&&sinCat(a))?"Sin categoría":"Falta "+faltaDe(a).join(", ")}</span>`:""}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13))?"Vencido":"Debe"}</button>`}</div></div>`;
 }
@@ -512,7 +559,7 @@ function primeraClase(a){ const i=arranqueDe(a); if(!i) return ""; const d=isoDa
   for(let k=0;k<35;k++){ const f=toISO(d); if((a.horarios||[]).some(h=>Number(h.dia)===d.getDay()&&!(h.desde&&h.desde>f))) return f; d.setDate(d.getDate()+1); } return ""; }
 function slotHTML(t,fecha){
   const aj=fecha?ajusteTurno(t,fecha):{aus:new Set(),rec:[]}; const libres=CUPO-t.al.length+aj.aus.size-aj.rec.length;
-  return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}${t.al.length?`<button class="linkish" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" style="justify-self:start;font-size:12px;text-align:left">${t.nivel?esc(t.nivel):"+ Categoría"} ✎</button>`:(aj.rec.length?"":`<span class="small muted">Vacío</span>`)}<span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
+  return `<div class="slot"><div class="side"><div class="h num">${t.hora||"—"}</div>${S.club?"":`<span class="tag ${t.club}" style="justify-self:start">${t.club}</span>`}${t.al.length?`<button class="linkish" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" style="justify-self:start;font-size:12px;text-align:left">${t.nivel?esc(nivelTxt(t.nivel)):"+ Categoría"} ✎</button>`:(aj.rec.length?"":`<span class="small muted">Vacío</span>`)}<span class="small ${libres>0?"free":"muted"}">${libres>0?libres+" libre"+(libres>1?"s":""):"Completo"}</span></div>
     <div style="display:grid;gap:4px;min-width:0"><div class="who">${t.al.map(a=>`<button class="pill ${t.club} ${esNuevo(a)?"nuevo":""} ${aj.aus.has(a.id)?"aus":""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)?' <b class="nuevo-b">Nuevo</b>':""}${aj.aus.has(a.id)?' <b class="aus-b">No viene</b>':""}</button>`).join("")}${aj.rec.map(a=>`<button class="pill rec" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <b class="rec-b">Recupera</b></button>`).join("")}</div>
     <button class="linkish suspend" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${fecha||hoyISO}">Suspender por lluvia</button></div></div>`;
 }
@@ -556,7 +603,7 @@ function vRecuperar(){
   const recs=activos().filter(a=>recN(a)>0).sort((x,y)=>(recN(y)-recN(x))||x.nombre.localeCompare(y.nombre));
   const tot=recs.reduce((s,a)=>s+recN(a),0);
   const libres=turnosGrilla(S.club).filter(t=>t.al.length<CUPO);
-  const grupos={}; libres.forEach(t=>{ const k=`${t.club} · ${t.nivel||"sin categoría"}`; (grupos[k]=grupos[k]||[]).push(t); });
+  const grupos={}; libres.forEach(t=>{ const k=`${t.club} · ${nivelTxt(t.nivel)||"sin categoría"}`; (grupos[k]=grupos[k]||[]).push(t); });
   return `
   <section class="sec" style="margin-top:4px">
     <div class="sec-head"><h2 class="disp">Recuperar</h2><button class="cta" data-act="recAdd" style="padding:6px 6px 6px 14px;font-size:13px">Anotar <i>+</i></button></div>
@@ -571,7 +618,7 @@ function vRecuperar(){
 /* ---------- Lugares libres para ofrecer a gente nueva ---------- */
 const capCat=c=>c?c.charAt(0).toUpperCase()+c.slice(1):"Sin categoría";
 function libresPorCat(club){ const g={};
-  turnosGrilla(club).filter(t=>t.al.length<CUPO).forEach(t=>{ const k=t.nivel?catNorm(t.nivel):""; (g[k]=g[k]||{nombre:t.nivel?String(t.nivel).trim():"",ts:[]}).ts.push(t); });
+  turnosGrilla(club).filter(t=>t.al.length<CUPO).forEach(t=>{ const k=nivelesDe(t.nivel).join(","); (g[k]=g[k]||{nombre:nivelTxt(t.nivel).toLowerCase(),ts:[]}).ts.push(t); });
   Object.values(g).forEach(x=>x.ts.sort((a,b)=>(a.dia||7)-(b.dia||7)||a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club)));
   return Object.keys(g).sort((a,b)=>(!a)-(!b)||a.localeCompare(b)).map(k=>({k,...g[k],n:g[k].ts.reduce((s,t)=>s+CUPO-t.al.length,0)})); }
 function libresHoyHTML(){ const gs=libresPorCat(S.club); const n=gs.reduce((s,g)=>s+g.n,0); if(!n) return "";
@@ -1050,7 +1097,7 @@ function asistTurnoHTML(t){ const f=S.asFecha, h=t.hora; const E=asistEstado(t);
   const tomada=pasado&&lista&&!E.pend&&total>0&&!todasLluvia;
   const cerrado=(tomada||todasLluvia)&&!abierto;
   const estado=todasLluvia?`<span class="as2-st ll">🌧 Suspendida</span>`:tomada?`<span class="as2-st ok">✓ Tomada</span>`:E.pend&&pasado?`<span class="as2-st no">Falta${E.pend===1?"":"n"} marcar ${E.pend}</span>`:total?`<span class="as2-st">${total-E.pend}/${total} marcados</span>`:"";
-  const head=`<div class="as2-head"><div class="as2-h"><b class="num">${h}</b>${t.nivel?`<span class="as2-cat">${esc(capCat(t.nivel))}</span>`:""}</div>${estado}</div>`;
+  const head=`<div class="as2-head"><div class="as2-h"><b class="num">${h}</b>${t.nivel?`<span class="as2-cat">${esc(nivelTxt(t.nivel))}</span>`:""}</div>${estado}</div>`;
   if(cerrado){ const res=todasLluvia?`${t.al.length} alumno${t.al.length===1?"":"s"} recuperan`:[`<b class="free">${vinieron}</b> vinieron`,faltaron?`<b class="due">${faltaron}</b> faltó${faltaron===1?"":"aron"}`:"",E.avisaron.length?`${E.avisaron.length} avisó que no`:""].filter(Boolean).join(" · ");
     const nombres=todasLluvia?t.al.map(a=>esc(a.nombre.split(" ")[0])).join(", "):marcados.filter(a=>mk(a)==="falto").map(a=>`<span class="due">✗ ${esc(a.nombre)}</span>`).join(" · ");
     return `<section class="as2 cerrado ${todasLluvia?"ll":"ok"}">${head}<p class="as2-res num">${res}</p>${nombres?`<p class="as2-res">${nombres}</p>`:""}<button type="button" class="as2-link" data-act="asOpen" data-k="${okKey}">Ver / corregir</button></section>`; }
@@ -1144,10 +1191,10 @@ async function lluviaTurno(club,fecha,hora,auto=false){
 }
 function openAsRecAdd(hora){
   const dow=isoDate(S.asFecha).getDay(); const t=turnos(S.asClub).find(x=>x.dia===dow&&x.hora===hora);
-  const cat=t&&t.nivel?catNorm(t.nivel):"";
-  const list=S.alumnos.filter(a=>a.activo!==false&&recN(a)>0&&enClub(a,S.asClub)).sort((x,y)=>(catsDe(y).has(cat)-catsDe(x).has(cat))||x.nombre.localeCompare(y.nombre));
-  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Viene a recuperar</h2><span class="small muted">${DIAS_LARGO[dow]} ${hora} · ${esc(t?.nivel||"")}. Al marcarlo se le descuenta una clase pendiente.</span></div>
-    ${list.length?`<div class="list">${list.map(a=>`<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%" data-act="asRecSel" data-id="${a.id}" data-hora="${hora}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${a.categoria?`<span>${esc(a.categoria)}</span>`:""}<span class="tag rec">Debe ${recN(a)}</span>${catsDe(a).has(cat)?'<span class="free">Su categoría</span>':""}</span></span><span class="mini">Elegir</span></button>`).join("")}</div>`:`<div class="empty">Nadie de ${S.asClub==="ESPACIO"?"Espacio":"Jump"} tiene clases pendientes.</div>`}
+  const nv=t&&t.nivel||""; const suya=a=>nivelCoincide(nv,catsDe(a));
+  const list=S.alumnos.filter(a=>a.activo!==false&&recN(a)>0&&enClub(a,S.asClub)).sort((x,y)=>(suya(y)-suya(x))||x.nombre.localeCompare(y.nombre));
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Viene a recuperar</h2><span class="small muted">${DIAS_LARGO[dow]} ${hora} · ${esc(nivelTxt(t?.nivel))}. Al marcarlo se le descuenta una clase pendiente.</span></div>
+    ${list.length?`<div class="list">${list.map(a=>`<button class="row" style="background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%" data-act="asRecSel" data-id="${a.id}" data-hora="${hora}"><span class="main"><span class="name">${esc(a.nombre)}</span><span class="meta">${a.categoria?`<span>${esc(a.categoria)}</span>`:""}<span class="tag rec">Debe ${recN(a)}</span>${suya(a)?'<span class="free">Su categoría</span>':""}</span></span><span class="mini">Elegir</span></button>`).join("")}</div>`:`<div class="empty">Nadie de ${S.asClub==="ESPACIO"?"Espacio":"Jump"} tiene clases pendientes.</div>`}
     <div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`);
 }
 function vCaptar(){
@@ -1484,10 +1531,12 @@ function aplicarComprobantes(){
 }
 /* ---------- Categoría de un turno (club + día + hora): se guarda en el horario de cada alumno del turno ---------- */
 function alumnosDelTurno(club,dia,hora){ return S.alumnos.filter(a=>a.activo!==false&&(a.horarios||[]).some(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club)); }
-function openTurnoCat(club,dia,hora){
+let TCAT_VOLVER=false;
+function openTurnoCat(club,dia,hora,volver){
+  TCAT_VOLVER=!!volver;
   const al=alumnosDelTurno(club,dia,hora); const act=(al.flatMap(a=>(a.horarios||[]).filter(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club).map(h=>h.nivel||""))).find(Boolean)||"";
-  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Categoría del turno</h2><span class="small muted">${DIAS_LARGO[dia]} ${hora} · ${club} · ${al.length} alumno${al.length===1?"":"s"}. Solo pueden venir a recuperar acá los de esta categoría.</span></div>
-    <div class="field">${catPicker("tCat",act)}</div>
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Categoría del turno</h2><span class="small muted">${DIAS_LARGO[dia]} ${hora} · ${club==="ESPACIO"?"Espacio":"Jump"} · ${al.length} alumno${al.length===1?"":"s"}${al.length?`: ${esc(al.map(a=>nombreCorto(a.nombre)).join(", "))}`:""}.<br>Podés marcar <b>una o varias</b>. Solo pueden venir a recuperar acá los de esas categorías.</span></div>
+    <div class="field">${catPickerMulti("tCat",act)}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="turnoCatOk" data-club="${club}" data-dia="${dia}" data-hora="${hora}">Guardar</button></div>`);
 }
 async function guardarTurnoCat(b){
@@ -1495,7 +1544,7 @@ async function guardarTurnoCat(b){
   const al=alumnosDelTurno(club,dia,hora); if(!al.length){ closeSheet(); return; }
   const ok=await safe(async()=>{ const bt=S.db.batch();
     al.forEach(a=>bt.update(colA().doc(a.id),{horarios:(a.horarios||[]).map(h=>h.dia===dia&&h.hora===hora&&clubH(a,h)===club?{...h,nivel:val}:h)})); await bt.commit(); });
-  if(ok){ closeSheet(); toast(val?`Turno de las ${hora}: ${val}`:`Turno de las ${hora} sin categoría`); }
+  if(ok){ closeSheet(); toast(val?`Turno de las ${hora}: ${nivelTxt(val)}`:`Turno de las ${hora} sin categoría`); if(TCAT_VOLVER) setTimeout(()=>openTurnosSinCat(),350); }
 }
 async function verComprobante(a){
   const c=compDe(a); if(!c) return;
@@ -1579,6 +1628,11 @@ document.addEventListener("click",async e=>{
     case "catPick": elegirCat(b); break;
     case "catAlOk": if(A) await guardarCatAlumno(A); break;
     case "sinCat": openSinCat(); break;
+    case "incompletos": openIncompletos(); break;
+    case "incCatOk": if(A) await ponerCatInc(A,b.dataset.v); break;
+    case "turnosSinCat": openTurnosSinCat(); break;
+    case "turnoCatL": if(S.modo==="profe"&&b.dataset.club!=="JUMP") break; openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora,true); break;
+    case "catPickM": elegirCatM(b); break;
     case "sinCatOk": if(A) await ponerSinCat(A,b.dataset.v); break;
     case "turnoCat": if(S.modo==="profe"&&b.dataset.club!=="JUMP") break; openTurnoCat(b.dataset.club,Number(b.dataset.dia),b.dataset.hora); break;
     case "turnoCatOk": guardarTurnoCat(b); break;
