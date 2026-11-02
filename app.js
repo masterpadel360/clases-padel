@@ -875,7 +875,7 @@ function saveFin(){ render(); if(!targetId()){ toast(S.esOwner?"Esteban todavía
   if(S.esOwner&&S.equipo[0]) S.finEq[S.equipo[0].id]=[...S.fin];
   const data={movs:[...S.fin]}; fPend++;
   const p=fQueue.then(()=>safe(()=>finDoc().set(data))).finally(()=>{fPend--;}); fQueue=p.catch(()=>{}); return p; }
-const INICIO_PROFE="2026-10-07";
+const INICIO_PROFE="2026-11-01"; // Esteban arranca con la app el 1/11/2026: no se le reclama nada de antes
 const fmtCorto = f => { const d=isoDate(f); return `${DIAS[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth()+1}`; };
 function marcasDe(f){ return (S.asKey===`${f}_JUMP`) ? S.asMarcas : ((S.asHist[f])||{}); }
 function faltantes(){

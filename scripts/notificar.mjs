@@ -303,7 +303,7 @@ if (alumnosConApp.length) {
 
 /* ---------- 4) Recordatorio al profe de Jump: lo que le falta cargar ---------- */
 {
-  const INICIO_PROFE = "2026-10-07";
+  const INICIO_PROFE = "2026-11-01"; // Esteban arranca con la app el 1/11/2026
   const profes = Object.entries(tokens).filter(([, t]) => t.rol === "profe" && t.tokens && t.tokens.length).map(([uid]) => uid);
   const horaAR = ar.getUTCHours(), minAR = ar.getUTCMinutes();
   // A la noche (desde las 21:30) revisa hoy; a la mañana (desde las 10) revisa ayer.
