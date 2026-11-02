@@ -138,12 +138,18 @@
       ${hero(prox)}
       ${sumarDia()}
       ${tarjetaNotif("alumno")}
+      ${claveAviso()}
       ${tusClases(a, cl, marcas, proxKey)}
       ${cuota(a)}
       ${recuperar(a, wa)}
       <div class="v2-extra"><button class="v2-mini" data-pa="ptab" data-t="ausencias">Programar una ausencia</button><button class="v2-mini" data-pa="calendario">Recordatorios en mi calendario</button>${wa ? `<a class="v2-mini wa" href="${wa}" target="_blank" rel="noopener">Escribirle a Gabriel</a>` : ""}</div>
     </div>`;
   };
+  // Aviso chico hasta que elige su propia contraseña (o lo cierra).
+  function claveAviso() {
+    try { if (localStorage.getItem("claveOk_" + P.uid) === "1") return ""; } catch (e) { return ""; }
+    return `<div style="display:flex;gap:8px;align-items:center"><button class="v2-recordar" data-pa="cuenta" style="flex:1"><span class="ico"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span class="tx"><b>Elegí tu propia contraseña</b><small>Tocá acá: en Mi cuenta podés cambiar tu usuario y tu contraseña</small></span></button><button class="v2-mini" data-pa="claveOk" aria-label="Cerrar">✕</button></div>`;
+  }
   // Tarjeta grande para pedir sumar un día más (y el estado del pedido).
   function sumarDia() {
     const sol = (P.solic || []).slice().sort((x, y) => ((y.creado && y.creado.seconds) || 0) - ((x.creado && x.creado.seconds) || 0));

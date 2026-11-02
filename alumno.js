@@ -490,6 +490,7 @@ document.addEventListener("click", async e => {
   const pa = b.dataset.pa;
   if (pa === "salir") { salir(); return; }
   if (pa === "cuenta") { abrirCuenta(); return; }
+  if (pa === "claveOk") { try { localStorage.setItem("claveOk_" + P.uid, "1"); } catch (e) {} renderPortal(); return; }
   if (pa === "cuUsuario" || pa === "cuClave") { await guardarCuenta(pa, b); return; }
   if (pa === "cerrar") { closeSheet(); return; }
   if (pa === "reemp") { abrirReemplazo(b.dataset.f, b.dataset.h, b.dataset.c); return; }
@@ -700,7 +701,7 @@ async function guardarCuenta(pa, b) {
       const u = fauth.currentUser;
       try { await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, a)); }
       catch (e) { mal(["auth/wrong-password", "auth/invalid-credential", "auth/invalid-login-credentials"].includes(e && e.code) ? "La contraseña actual no es correcta." : errorAuth(e)); return; }
-      await u.updatePassword(n); $("#cuA").value = $("#cuN").value = $("#cuR").value = "";
+      await u.updatePassword(n); $("#cuA").value = $("#cuN").value = $("#cuR").value = ""; try { localStorage.setItem("claveOk_" + P.uid, "1"); } catch (e) {}
       ok("Listo, contraseña cambiada. La próxima vez entrás con la nueva.");
     }
   } catch (x) { console.error(x); mal((x && x.msg) || (x && x.code ? errorAuth(x) : "No se pudo. Probá de nuevo.")); }
