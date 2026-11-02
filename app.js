@@ -332,8 +332,9 @@ function estHoy(t){ const f=hoyISO, h=t.hora; const al=t.al.filter(a=>vaEn(a,t,f
 function vHoy(){
   const owner=S.esOwner&&S.modo!=="profe"; if(owner) escucharAsMes(mesKey(now));
   const p="";
-  const nTS=S.modo==="profe"?turnosSinCat().length:0;
-  const pTS=nTS?`<section class="w-card w-pend"><div class="pd-i"><i style="background:var(--k-amb)"></i><span><b>${nTS} horario${nTS===1?"":"s"} de Jump sin categoría</b></span><button class="mini go" data-act="turnosSinCat">Poner</button></div></section>`:"";
+  const nTS=S.modo==="profe"?turnosSinCat().length:0, nSC=S.modo==="profe"?sinCatLista().length:0;
+  const itP=(n,txt,act)=>n?`<div class="pd-i"><i style="background:var(--k-amb)"></i><span><b>${n} ${txt}</b></span><button class="mini go" data-act="${act}">Poner</button></div>`:"";
+  const pTS=nTS||nSC?`<section class="w-card w-pend">${itP(nSC,`alumno${nSC===1?"":"s"} de Jump sin categoría`,"sinCat")}${itP(nTS,`horario${nTS===1?"":"s"} de Jump sin categoría`,"turnosSinCat")}</section>`:"";
   return `${p}${pTS}<div id="secAvisos">${avisosHoyHTML()}</div>${vAgenda()}${owner?libresHoyHTML():""}${S.alumnos.length?"":emptyAlumnos()}`;
 }
 /* ---------- Pendientes de Gabriel (arriba de Hoy): lo que hay que hacer, y se va solo cuando está hecho ---------- */
