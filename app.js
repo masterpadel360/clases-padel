@@ -430,6 +430,7 @@ function vSemana(){
   return `
   <div class="w-seg sem-dias">${dias.map(x=>`<button data-act="semDia" data-d="${x}" aria-pressed="${x===d}"><b>${DIAS[x]}</b><small>${n(x)} turno${n(x)===1?"":"s"}</small></button>`).join("")}</div>
   <div class="w-seg">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button data-act="semClub" data-v="${v}" aria-pressed="${cl===v}">${l}</button>`).join("")}</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px"><button class="mini lluvia-btn" data-act="suspender" data-f="${(()=>{ const x=new Date(now); for(let i=0;i<7&&x.getDay()!==d;i++) x.setDate(x.getDate()+1); return toISO(x); })()}">⛔ Suspender clases (feriado, etc.)</button><button class="mini lluvia-btn" data-act="lluvia" data-f="${hoyISO}">🌧 Por lluvia</button></div>
   <p class="sem-res">${/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"} · ${ts.length} turno${ts.length===1?"":"s"} · ${al} alumnos · <b>${lib} lugar${lib===1?"":"es"} libre${lib===1?"":"s"}</b></p>
   ${ts.length?ts.map(t=>{ const lb=Math.max(0,CUPO-t.al.length);
     return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.al.length?`<button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(nivelTxt(t.nivel)):"+ Categoría"}</button>`:`<span class="sem-cat">${t.punta?"Vacío · solo si hace falta":"Vacío"}</span>`}<span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
