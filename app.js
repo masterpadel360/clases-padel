@@ -810,8 +810,8 @@ function panelEquipo(){
         <div class="stat"><div class="big-num num">${money(pagoE).replace("$ ","$")}</div><div class="lbl" style="color:var(--muted)">Le pagás</div></div>
         <div class="stat"><div class="big-num num">${money(vh).replace("$ ","$")}</div><div class="lbl" style="color:var(--muted)">Por hora</div></div>
       </div>
-      ${S.equipo[0]?(()=>{ const ds=Object.keys(S.equipo[0].dias||{}).filter(k=>S.equipo[0].dias[k]).sort().reverse().slice(0,7);
-        return ds.length?`<div><span class="flabel">Últimos días cargados</span><div class="hs-dias">${ds.map(k=>`<span><small>${diaTxt(k)}</small><b class="num">${fmtH(S.equipo[0].dias[k])} h</b></span>`).join("")}</div></div>`:""; })():""}
+      ${S.equipo[0]?(()=>{ const ds=Object.keys(S.equipo[0].dias||{}).filter(k=>S.equipo[0].dias[k]&&k.startsWith(mesKey(now))).sort().reverse().slice(0,7);
+        return ds.length?`<div><span class="flabel">Días cargados en ${mesSolo(mesKey(now))}</span><div class="hs-dias">${ds.map(k=>`<span><small>${diaTxt(k)}</small><b class="num">${fmtH(S.equipo[0].dias[k])} h</b></span>`).join("")}</div></div>`:""; })():""}
       ${S.equipo[0]?`${cuentaHTML(true)}<button class="linkish" data-act="modoProfe" style="justify-self:start">Ver y revisar las horas que cargó día por día</button>`:""}
       <div class="field"><label for="vHora">Le pagás por hora</label><div style="display:flex;gap:8px"><input id="vHora" type="number" inputmode="numeric" min="0" step="500" value="${vh||""}" placeholder="Ej: 12000"><button class="mini go" data-act="valorSave">Guardar</button></div>${histValorHoraHTML()}</div>
       ${vh?`<div class="msg" style="gap:8px"><div class="msg-k"><b>Calcular aumento</b></div>
