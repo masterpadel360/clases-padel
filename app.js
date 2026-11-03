@@ -844,7 +844,9 @@ const tHorasAviso={};
 function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Más acciones → Esteban y canchas.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
 const valorDia = f => S.hVal[f] || S.cfg.valorHora || 0;
 function ganadoEn(pref){ return Object.keys(S.horas).filter(k=>k.startsWith(pref)).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); }
-function saldoProfe(){ const gan=ganadoEn(""); const pag=S.hMovs.reduce((t,x)=>t+(Number(x.monto)||0),0); return {gan,pag,saldo:gan-pag}; }
+// La cuenta de Esteban arranca de cero el 1/11/2026: lo de antes ya está saldado.
+const CUENTA_DESDE="2026-11-01";
+function saldoProfe(){ const gan=Object.keys(S.horas).filter(k=>k>=CUENTA_DESDE).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); const pag=S.hMovs.filter(x=>(x.fecha||"")>=CUENTA_DESDE).reduce((t,x)=>t+(Number(x.monto)||0),0); return {gan,pag,saldo:gan-pag}; }
 function cuentaHTML(enPanel){
   const m=mesKey(now); const {gan,pag,saldo}=saldoProfe(); const gMes=ganadoEn(m); const pMes=S.hMovs.filter(x=>x.fecha.startsWith(m)).reduce((t,x)=>t+(Number(x.monto)||0),0);
   const movs=[...S.hMovs].sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,12);
