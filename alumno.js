@@ -8,24 +8,31 @@ const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
 const fechaLarga = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()}`; };
 const fechaRel = f => { const ayer = new Date(now); ayer.setDate(ayer.getDate() - 1); if (f === toISO(ayer)) return "Ayer"; const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };
 
-// Cada vez que el alumno abre la app y no tiene las notificaciones activas, le pedimos que las active.
+// Sin notificaciones no se puede usar la app: pantalla completa que no se cierra hasta que las activen.
+// Solo se deja pasar si el celu no las soporta, o si al activar falla algo técnico (para no dejarlo trabado).
+let notifPase = false;
 function pedirNotifAlEntrar() {
-  const st = estadoNotif(); if (!["pedir", "instalar", "bloqueadas"].includes(st)) return;
-  try { if (sessionStorage.getItem("notifPedida") === "1") return; sessionStorage.setItem("notifPedida", "1"); } catch (e) {}
-  if (!$("#overlay").hidden) return;
-  const cab = `<div id="notifSheet" style="display:grid;gap:8px;text-align:center;justify-items:center"><div style="font-size:44px;line-height:1">🔔</div><h2 class="disp" style="margin:0">Importante: activá las notificaciones</h2>
-    <p class="small" style="margin:0">Así te avisamos <b>de tus clases</b>, <b>cuándo tenés que recuperar</b> y <b>cuándo vence la cuota</b>. Sin notificaciones te los perdés.</p></div>`;
+  if (window.MODO_STAFF || !P.perfil) return;
+  const st = estadoNotif(); let g = document.getElementById("notifGate");
+  if (notifPase || !["pedir", "instalar", "bloqueadas"].includes(st)) { if (g) g.remove(); document.documentElement.style.overflow = ""; return; }
+  if (!g) { g = document.createElement("div"); g.id = "notifGate"; document.body.appendChild(g); }
+  g.style.cssText = "position:fixed;inset:0;z-index:90;background:var(--s-bg,#d3d8c9);color:var(--s-ink,#1d2419);overflow:auto;display:grid;place-items:center;padding:calc(env(safe-area-inset-top,0px) + 24px) 22px calc(env(safe-area-inset-bottom,0px) + 24px)";
+  document.documentElement.style.overflow = "hidden";
+  const cab = `<div style="font-size:52px;line-height:1">🔔</div><h2 class="disp" style="margin:0">Activá las notificaciones para entrar</h2>
+    <p class="small" style="margin:0">Sin notificaciones <b>no podés usar la app</b>: por ahí te avisamos <b>de tus clases</b>, <b>cuándo tenés que recuperar</b> (y cuándo se libera un lugar) y <b>cuándo vence la cuota</b>.</p>`;
   let cuerpo;
-  if (st === "instalar") cuerpo = `<p class="small" style="margin:0"><b>En iPhone hay que instalar la app primero</b> (es gratis y tarda 10 segundos):</p>
-    <ol class="small" style="margin:0;padding-left:18px;line-height:1.7;text-align:left"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b></li><li>Abrí la app desde el ícono nuevo y tocá <b>Activar</b></li></ol>
-    <button class="btn pri" data-pa="cerrar" style="width:100%">Entendido</button>`;
-  else if (st === "bloqueadas") cuerpo = `<p class="small" style="margin:0">Están bloqueadas en tu celu. Entrá a <b>Ajustes</b> del celu → esta app → <b>Notificaciones</b> y activalas.</p>
-    <button class="btn pri" data-pa="cerrar" style="width:100%">Entendido</button>`;
+  if (st === "instalar") cuerpo = `<p class="small" style="margin:0"><b>En iPhone primero hay que instalar la app</b> (es gratis y tarda 10 segundos):</p>
+    <ol class="small" style="margin:0;padding-left:20px;line-height:1.8;text-align:left"><li>Tocá <b>Compartir</b> <span aria-hidden="true">⎙</span> abajo en Safari</li><li>Elegí <b>Agregar a inicio</b> (si no aparece, deslizá hacia abajo en ese menú)</li><li>Cerrá Safari, abrí la app <b>desde el ícono nuevo</b> e iniciá sesión</li><li>Tocá <b>Activar notificaciones</b> y después <b>Permitir</b></li></ol>`;
+  else if (st === "bloqueadas") cuerpo = `<p class="small" style="margin:0">Las tenés <b>bloqueadas</b> en el celu. Para destrabarlas:</p>
+    <ul class="small" style="margin:0;padding-left:20px;line-height:1.8;text-align:left">${NOTIF.esIOS() ? `<li>Entrá a <b>Ajustes</b> del iPhone → <b>Notificaciones</b></li><li>Buscá esta app (Clases de Pádel) y activá <b>Permitir notificaciones</b></li>` : `<li>Tocá el candado o los <b>⋮</b> arriba en el navegador → <b>Configuración del sitio</b> (o <b>Permisos</b>)</li><li>En <b>Notificaciones</b> elegí <b>Permitir</b></li>`}<li>Volvé acá y tocá <b>Ya las activé</b></li></ul>
+    <button class="btn pri" onclick="location.reload()" style="width:100%;font-size:16px;padding:14px">Ya las activé</button>`;
   else cuerpo = `<button class="btn pri" data-pa="notif" style="width:100%;font-size:16px;padding:14px">Activar notificaciones</button>
-    <p class="small muted" style="margin:0;text-align:center">Cuando el celu pregunte, tocá <b>Permitir</b>.</p>
-    <button class="linkish" data-pa="cerrar" style="justify-self:center;font-size:12px;opacity:.7">Ahora no</button>`;
-  openSheet(`${cab}<div style="display:grid;gap:12px">${cuerpo}</div>`);
+    <p class="small muted" style="margin:0">Cuando el celu pregunte, tocá <b>Permitir</b>.</p>`;
+  const err = g.dataset.err ? `<div class="notice" style="display:grid;gap:8px;text-align:left"><span class="small">${g.dataset.err}</span><button class="linkish" data-pa="notifPase" style="justify-self:start;font-size:12px">Entrar igual por ahora</button></div>` : "";
+  g.innerHTML = `<div style="display:grid;gap:14px;text-align:center;justify-items:center;max-width:380px;width:100%">${cab}<div style="display:grid;gap:12px;width:100%">${cuerpo}</div>${err}<button class="linkish" data-pa="salir" style="font-size:12px;opacity:.6">Cerrar sesión</button></div>`;
 }
+// Al volver de los ajustes del celu, se revisa solo.
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pedirNotifAlEntrar(); });
 
 // Le pide al servidor que le avise a Gabriel ya mismo (si no responde, sale igual en el próximo envío automático).
 function avisarAlInstante() { if (!window.AVISOS_URL) return; try { fetch(window.AVISOS_URL, { method: "POST", keepalive: true }).catch(() => {}); } catch (e) {} }
@@ -52,7 +59,7 @@ function iniciarPortal(perfil, u) {
   fdb.doc("alumnos/" + id).onSnapshot(d => { if (!d.exists && d.metadata && d.metadata.fromCache && !P.a) return; P.a = d.exists ? { id: d.id, ...d.data() } : null; P.cargado = true; pr(); }, e => { console.error(e); P.cargado = true; P.error = true; pr(); });
   refrescarNotif(datosNotif());
   setTimeout(() => registrarIngreso(), 2500);
-  setTimeout(pedirNotifAlEntrar, 700);
+  pedirNotifAlEntrar();
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
   fdb.doc("publico/suspendidas").onSnapshot(d => { P.susp = (d.exists && d.data().t) || {}; pr(); }, () => {});
@@ -540,7 +547,13 @@ document.addEventListener("click", async e => {
   if (pa === "viaje") { abrirViaje(); return; }
   if (pa === "vjModo") { const d = ($("#vjD") || {}).value; abrirViaje(b.dataset.m); if (d) { $("#vjD").value = d; viajePrev(); } return; }
   if (pa === "viajeOk") { const sel = clasesViaje().map(c => ({ f: c.fecha, h: c.hora })); if (!sel.length) return; await avisarLista(b, sel); return; }
-  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; try { await activarNotificaciones(datosNotif()); registrarIngreso(true); closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); } catch (x) { console.error(x); toast(x && x.code === "denegado" ? "No diste permiso. Podés activarlo desde los ajustes del celu." : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Mandale captura a Gabriel.`); } if (!$("#overlay").hidden && $("#notifSheet")) closeSheet(); renderPortal(); return; }
+  if (pa === "notifPase") { notifPase = true; pedirNotifAlEntrar(); renderPortal(); return; }
+  if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; const g = document.getElementById("notifGate");
+    try { await activarNotificaciones(datosNotif()); registrarIngreso(true); if (g) delete g.dataset.err; if ($("#notifSheet")) closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); }
+    catch (x) { console.error(x);
+      if (x && x.code === "denegado") toast("No diste permiso. Sin notificaciones no podés usar la app.");
+      else { const t = `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Probá de nuevo; si sigue, mandale captura a Gabriel.`; if (g) g.dataset.err = t; else toast(t); } }
+    b.disabled = false; b.textContent = "Activar notificaciones"; pedirNotifAlEntrar(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }
   if (pa === "vuelvo") {
