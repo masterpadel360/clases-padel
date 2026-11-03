@@ -52,14 +52,17 @@ function manejaHTML(a) {
   if (a.manejaUid) return `<div class="field"><span class="flabel">Lo maneja otra cuenta</span><span class="small">Entra desde la cuenta de <b>${esc(nombreManeja(a))}</b> y cambia entre los dos arriba de la app. Le llegan los avisos de ${esc(nombreCorto(a.nombre))} a ese celu.</span><button type="button" class="linkish" data-act="accDesvincular" data-id="${a.id}" style="justify-self:start">Desvincular</button></div>`;
   const ops = S.alumnos.filter(x => x.id !== a.id && x.uid && x.usuario && x.activo !== false && !x.manejaUid).sort((x, y) => x.nombre.localeCompare(y.nombre));
   return `${hijos.length ? `<div class="field"><span class="flabel">También maneja</span><span class="small">${esc(hijos.map(x => x.nombre).join(", "))}</span></div>` : ""}
-    ${a.usuario ? "" : `<div class="field"><label class="flabel" for="accManeja">¿Lo maneja otra persona? (hijos, familia)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="accManeja" style="flex:1;min-width:0"><option value="">Elegí quién lo maneja…</option>${ops.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join("")}</select><button type="button" class="mini go" data-act="accVincular" data-id="${a.id}">Vincular</button></div><span class="small muted">Sirve para chicos: usa la misma app y el mismo usuario que esa persona.</span></div>`}`;
+    ${a.usuario && hijos.length ? "" : `<div class="field"><label class="flabel" for="accManeja">¿Lo maneja otra persona? (hijos, familia)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="accManeja" style="flex:1;min-width:0"><option value="">Elegí quién lo maneja…</option>${ops.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join("")}</select><button type="button" class="mini go" data-act="accVincular" data-id="${a.id}">Vincular</button></div><span class="small muted">Sirve para chicos: usa la misma app y el mismo usuario que esa persona.${a.usuario ? ` <b>Su usuario propio (${esc(a.usuario)}) se borra</b> y pasa a entrar desde la cuenta de esa persona.` : ""}</span></div>`}`;
 }
 async function vincularManeja(a, pid) {
   const p = S.alumnos.find(x => x.id === pid); if (!p || !p.uid) { toast("Esa persona todavía no tiene acceso a la app. Creáselo primero."); return false; }
   const FV = firebase.firestore.FieldValue; const bt = fdb.batch();
   bt.set(fdb.doc("usuarios/" + p.uid), { alumnos: FV.arrayUnion(a.id) }, { merge: true });
-  bt.set(fdb.doc("alumnos/" + a.id), { manejaUid: p.uid, manejaId: p.id }, { merge: true });
-  try { await bt.commit(); a.manejaUid = p.uid; a.manejaId = p.id; toast(`Listo: ${nombreCorto(p.nombre)} ve también las clases de ${nombreCorto(a.nombre)}`); return true; }
+  // Si tenía usuario propio (creado sin querer), se lo sacamos: desde ahora entra por la cuenta de esa persona.
+  const viejo = a.uid && a.uid !== p.uid ? a.uid : null;
+  if (viejo) bt.delete(fdb.doc("usuarios/" + viejo));
+  bt.set(fdb.doc("alumnos/" + a.id), { manejaUid: p.uid, manejaId: p.id, ...(a.usuario || a.uid ? { uid: FV.delete(), usuario: FV.delete() } : {}) }, { merge: true });
+  try { await bt.commit(); a.manejaUid = p.uid; a.manejaId = p.id; delete a.uid; delete a.usuario; toast(`Listo: ${nombreCorto(p.nombre)} ve también las clases de ${nombreCorto(a.nombre)}`); return true; }
   catch (e) { console.error(e); toast("No se pudo vincular. Probá de nuevo."); return false; }
 }
 async function desvincularManeja(a) {
