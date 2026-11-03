@@ -609,7 +609,10 @@ document.addEventListener("click", async e => {
     try { await activarNotificaciones(datosNotif()); registrarIngreso(true); if (g) delete g.dataset.err; if ($("#notifSheet")) closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); }
     catch (x) { console.error(x);
       if (x && x.code === "denegado") toast("No diste permiso. Sin notificaciones no podés usar la app.");
-      else { const t = `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Probá de nuevo; si sigue, mandale captura a Gabriel.`; if (g) g.dataset.err = t; else toast(t); } }
+      else { const t = x && x.code === "push"
+          ? (NOTIF.esIOS() ? `Tu iPhone no pudo conectarse al servicio de notificaciones. Revisá que tengas iOS actualizado (16.4 o más), reiniciá el celu y probá de nuevo. Si sigue, mandale captura a Gabriel.`
+            : `Tu celu no pudo conectarse al servicio de notificaciones de Google. Probá esto y volvé a tocar <b>Activar</b>:<br>1) Abrí el link en <b>Google Chrome</b> (no Brave, Opera, Samsung u otro).<br>2) En Play Store actualizá <b>Chrome</b> y <b>Servicios de Google Play</b>.<br>3) Reiniciá el celu.<br>Si sigue, mandale captura a Gabriel. (${esc(String(x.detalle || ""))})`)
+          : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Probá de nuevo; si sigue, mandale captura a Gabriel.`; if (g) g.dataset.err = t; else toast(t.replace(/<[^>]+>/g, " ")); } }
     b.disabled = false; b.textContent = "Activar notificaciones"; pedirNotifAlEntrar(); renderPortal(); return; }
   if (pa === "calendario") { abrirCalendario(); return; }
   if (pa === "calOk") { descargarCalendario(); closeSheet(); return; }

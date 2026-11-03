@@ -227,8 +227,14 @@ async function activarNotificaciones(datos) {
     if (sw && sw.state !== "activated") await new Promise(ok => { const t = setTimeout(ok, 8000); sw.addEventListener("statechange", () => { if (sw.state === "activated") { clearTimeout(t); ok(); } }); });
   } catch (e) { console.error(e); throw { code: "sw", detalle: e && (e.message || e.name) }; }
   let token;
-  try { token = await Promise.race([firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg }), new Promise((_, no) => setTimeout(() => no({ code: "lento" }), 20000))]); }
-  catch (e) { console.error(e); throw { code: "token", detalle: e && (e.code || e.message) }; }
+  const pedirToken = () => Promise.race([firebase.messaging().getToken({ vapidKey: window.VAPID_KEY, serviceWorkerRegistration: reg }), new Promise((_, no) => setTimeout(() => no({ code: "lento" }), 20000))]);
+  try { token = await pedirToken(); }
+  catch (e1) { console.error(e1);
+    // Android a veces falla la primera vez ("push service error"): borramos la suscripción vieja y probamos de nuevo.
+    try { const sub = await reg.pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch (x) {}
+    await new Promise(ok => setTimeout(ok, 1500));
+    try { token = await pedirToken(); }
+    catch (e) { console.error(e); const push = e && (e.name === "AbortError" || e.code === 20 || /push service/i.test(e.message || "")); throw { code: push ? "push" : "token", detalle: e && (e.name || e.code || e.message) }; } }
   if (!token) throw { code: "sin-token" };
   // Si la cuenta maneja a otro alumno (hijo, familiar), también se anota para sus avisos.
   const extra = (datos && datos.extra) || []; datos = { ...datos }; delete datos.extra;
