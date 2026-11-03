@@ -91,7 +91,7 @@ function iniciarPortal(perfil, u) {
     fdb.collection("avisos").where("alumnoId", "==", oid).onSnapshot(s => { P.fam[oid].avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); }, () => {}); }
   fdb.collection("solicitudes").where("alumnoId", "==", id).onSnapshot(s => { P.solic = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
   { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
+    fdb.collection("asistencia").where("fecha", ">=", toISO(d) < "2026-11-01" ? "2026-11-01" : toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
 }
 
 async function barraCuentas(uid) {
@@ -185,7 +185,7 @@ function opcionesRec() {
 }
 function misAsistencias() {
   const a = P.a; if (!a) return []; const out = [];
-  P.asis.forEach(v => Object.keys(v.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) out.push({ fecha: v.fecha, hora, club: v.club, estado: v.marcas[k] }); }));
+  P.asis.filter(v => v.fecha >= "2026-11-01").forEach(v => Object.keys(v.marcas || {}).forEach(k => { const [aid, hora] = k.split("|"); if (aid === a.id) out.push({ fecha: v.fecha, hora, club: v.club, estado: v.marcas[k] }); }));
   return out.sort((x, y) => (y.fecha + y.hora).localeCompare(x.fecha + x.hora));
 }
 function mesesPago() {

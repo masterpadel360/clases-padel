@@ -717,7 +717,7 @@ function usoAuto(club,f,desde){ const mk=((S.asMes||{})[`${club}|${f}`])||null; 
 function usoDia(C,f){ const a=C.aj[f]; if(a) return {luz:Number(a.luz)||0,sin:Number(a.sin)||0,manual:true}; const u=usoAuto(C.club,f,C.desde); return {...u,manual:false}; }
 let asMesUnsub=null, asMesKey="";
 function escucharAsMes(m){ if(asMesKey===m||!S.db) return; asMesKey=m; if(asMesUnsub) asMesUnsub(); const [y,mm]=m.split("-").map(Number);
-  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${mesAnt(m)}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy"||S.tab==="dinero")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
+  asMesUnsub=S.db.collection("asistencia").where("fecha",">=",`${mesAnt(m)}-01`<"2026-11-01"?"2026-11-01":`${mesAnt(m)}-01`).where("fecha","<=",`${m}-${pad(new Date(y,mm,0).getDate())}`).onSnapshot(snap=>{ S.asMes={}; snap.docs.forEach(d=>{ const v=d.data(); S.asMes[`${v.club}|${v.fecha}`]=v.marcas||{}; }); if((S.tab==="gestion"||S.tab==="hoy"||S.tab==="dinero")&&$("#overlay").hidden) render(); },e=>console.error(e)); }
 function canchaTotal(club,m){ const C=canchaDe(club); const pg=C.pagos[m]; if(pg&&pg.pagado&&pg.monto!==undefined) return Number(pg.monto)||0;
   const [y,mm]=m.split("-").map(Number); let hl=0,hs=0; for(let d=1;d<=new Date(y,mm,0).getDate();d++){ const f=`${m}-${pad(d)}`; if(f>hoyISO) break; const u=usoDia(C,f); hl+=u.luz; hs+=u.sin; } return hl*C.luz+hs*C.sin; }
 function canchaHTML(club,m){ const C=canchaDe(club); const [y,mm]=m.split("-").map(Number); const ult=new Date(y,mm,0).getDate(); let hl=0,hs=0; const filas=[];
@@ -1457,7 +1457,9 @@ function historialDeSnap(snap,id){ const out=[];
   snap.docs.forEach(d=>{ const v=d.data(); Object.keys(v.marcas||{}).forEach(k=>{ const [aid,hora]=k.split("|"); if(aid===id) out.push({fecha:v.fecha,club:v.club,hora,estado:v.marcas[k],quien:(v.quien||{})[k]||""}); }); });
   return out.sort((x,y)=>(y.fecha+y.hora).localeCompare(x.fecha+x.hora));
 }
-function qHist(){ const d=new Date(); d.setDate(d.getDate()-120); const desde=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; return S.db.collection("asistencia").where("fecha",">=",desde); }
+// Todo arranca el 1/11/2026: la asistencia de antes no cuenta ni se muestra.
+const ARRANQUE_APP="2026-11-01";
+function qHist(){ const d=new Date(); d.setDate(d.getDate()-120); let desde=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; if(desde<ARRANQUE_APP) desde=ARRANQUE_APP; return S.db.collection("asistencia").where("fecha",">=",desde); }
 async function historialDe(id){ return historialDeSnap(await hastaTiempo(qHist().get(),12000),id); }
 async function cargarHist(a){
   const el=$("#histA"); if(!el||!S.db) return;
@@ -1471,7 +1473,7 @@ async function cargarHist(a){
 function pintarHist(h){
   if(!$("#histA")) return;
   { $("#histA").dataset.cache="1";
-    if(!h.length){ $("#histA").innerHTML="Sin asistencias marcadas en los últimos 4 meses."; return; }
+    if(!h.length){ $("#histA").innerHTML="Todavía no tiene asistencias marcadas (cuenta desde noviembre)."; return; }
     const cnt=e=>h.filter(x=>x.estado===e).length;
     $("#histA").innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;color:var(--ink)"><span><b class="num">${cnt("vino")+cnt("recuperando")}</b> vino</span><span style="color:var(--warn)"><b class="num">${cnt("falto")}</b> faltó</span><span style="color:var(--sun)"><b class="num">${cnt("recupera")}</b> avisó</span></div>
       <div style="display:grid;gap:4px;max-height:220px;overflow:auto">${h.map(x=>{const d=isoDate(x.fecha); return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line-2)"><span style="color:var(--ink)"><span style="text-transform:capitalize">${DIAS[d.getDay()]}</span> ${d.getDate()}/${d.getMonth()+1} · ${x.hora}</span><span style="color:${EST_COL[x.estado]||"var(--muted)"};font-weight:700;text-align:right">${EST_TXT[x.estado]||x.estado}${x.quien?` <span class="muted" style="font-weight:500">· ${esc(x.quien)}</span>`:""}</span></div>`;}).join("")}</div>`;
