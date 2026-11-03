@@ -10,10 +10,24 @@ const fechaRel = f => { const ayer = new Date(now); ayer.setDate(ayer.getDate() 
 
 // Sin notificaciones no se puede usar la app: pantalla completa que no se cierra hasta que las activen.
 // Sin excepciones: si el navegador no las soporta (ej. abierto desde WhatsApp o Instagram), se le pide abrirla en Chrome o Safari.
+// Excepción: si dio permiso pero el celu falló 2 veces al activarlas (problema del celu), entra con un cartel fijo arriba.
+const NK_FALLAS = "notifFallas";
+const notifPaseTec = () => { try { return Notification.permission === "granted" && Number(localStorage.getItem(NK_FALLAS) || 0) >= 2; } catch (e) { return false; } };
+function cartelNotif(mostrar) {
+  let c = document.getElementById("notifBanner");
+  if (!mostrar) { if (c) c.remove(); return; }
+  if (c) { c.disabled = false; c.innerHTML = "⚠️ No te llegan las notificaciones. <u>Tocá acá para activarlas</u>"; return; }
+  c = document.createElement("button"); c.id = "notifBanner"; c.type = "button"; c.dataset.pa = "notif";
+  c.style.cssText = "position:sticky;top:0;z-index:40;display:block;width:100%;border:0;margin:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;background:#b3261e;color:#fff;font:700 14px/1.35 system-ui,sans-serif;text-align:center;cursor:pointer";
+  c.innerHTML = "⚠️ No te llegan las notificaciones. <u>Tocá acá para activarlas</u>";
+  const pt = document.getElementById("portal"); if (pt) pt.prepend(c);
+}
 function pedirNotifAlEntrar() {
   if (window.MODO_STAFF || !P.perfil) return;
   const st = estadoNotif(); let g = document.getElementById("notifGate");
-  if (!["pedir", "instalar", "bloqueadas", "nosoporta"].includes(st)) { if (g) g.remove(); document.documentElement.style.overflow = ""; return; }
+  const pase = st === "pedir" && notifPaseTec();
+  cartelNotif(pase);
+  if (pase || !["pedir", "instalar", "bloqueadas", "nosoporta"].includes(st)) { if (g) g.remove(); document.documentElement.style.overflow = ""; return; }
   if (!g) { g = document.createElement("div"); g.id = "notifGate"; document.body.appendChild(g); }
   g.style.cssText = "position:fixed;inset:0;z-index:90;background:var(--s-bg,#d3d8c9);color:var(--s-ink,#1d2419);overflow:auto;display:grid;place-items:center;padding:calc(env(safe-area-inset-top,0px) + 24px) 22px calc(env(safe-area-inset-bottom,0px) + 24px)";
   document.documentElement.style.overflow = "hidden";
@@ -62,6 +76,7 @@ function iniciarPortal(perfil, u) {
   refrescarNotif(datosNotif());
   setTimeout(() => registrarIngreso(), 2500);
   pedirNotifAlEntrar();
+  if (estadoNotif() === "pedir" && notifPaseTec()) setTimeout(() => activarNotificaciones(datosNotif()).then(() => { try { localStorage.removeItem(NK_FALLAS); } catch (e) {} registrarIngreso(true); pedirNotifAlEntrar(); toast("¡Listo! Ya se activaron las notificaciones."); }).catch(() => {}), 3000);
   fdb.doc("publico/turnos").onSnapshot(d => { P.turnos = (d.exists && d.data().t) || {}; pr(); }, () => {});
   fdb.doc("publico/info").onSnapshot(d => { P.info = d.exists ? d.data() : {}; pr(); }, () => {});
   fdb.doc("publico/suspendidas").onSnapshot(d => { P.susp = (d.exists && d.data().t) || {}; pr(); }, () => {});
@@ -606,10 +621,12 @@ document.addEventListener("click", async e => {
   if (pa === "viajeOk") { const sel = clasesViaje().map(c => ({ f: c.fecha, h: c.hora })); if (!sel.length) return; await avisarLista(b, sel); return; }
   if (pa === "copiarLink") { const u = location.origin + location.pathname; try { await navigator.clipboard.writeText(u); toast("Link copiado. Pegalo en Chrome o Safari."); } catch (x) { prompt("Copiá este link y abrilo en Chrome o Safari:", u); } return; }
   if (pa === "notif") { b.disabled = true; b.textContent = "Activando…"; const g = document.getElementById("notifGate");
-    try { await activarNotificaciones(datosNotif()); registrarIngreso(true); if (g) delete g.dataset.err; if ($("#notifSheet")) closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); }
+    try { await activarNotificaciones(datosNotif()); try { localStorage.removeItem(NK_FALLAS); } catch (e) {} registrarIngreso(true); if (g) delete g.dataset.err; if ($("#notifSheet")) closeSheet(); toast("¡Listo! Te vamos a avisar antes de cada clase."); }
     catch (x) { console.error(x);
       if (x && x.code === "denegado") toast("No diste permiso. Sin notificaciones no podés usar la app.");
-      else { const t = x && x.code === "push"
+      else { let nf = 0; try { nf = Number(localStorage.getItem(NK_FALLAS) || 0) + 1; localStorage.setItem(NK_FALLAS, String(nf)); } catch (e) {}
+        if (nf >= 2 && Notification.permission === "granted") { if (g) delete g.dataset.err; toast("Tu celu no deja activarlas por ahora. Podés usar la app; probá de nuevo desde el cartel rojo de arriba."); }
+        const t = x && x.code === "push"
           ? (NOTIF.esIOS() ? `Tu iPhone no pudo conectarse al servicio de notificaciones. Revisá que tengas iOS actualizado (16.4 o más), reiniciá el celu y probá de nuevo. Si sigue, mandale captura a Gabriel.`
             : `Tu celu no pudo conectarse al servicio de notificaciones de Google. Probá esto y volvé a tocar <b>Activar</b>:<br>1) Abrí el link en <b>Google Chrome</b> (no Brave, Opera, Samsung u otro).<br>2) En Play Store actualizá <b>Chrome</b> y <b>Servicios de Google Play</b>.<br>3) Reiniciá el celu.<br>Si sigue, mandale captura a Gabriel. (${esc(String(x.detalle || ""))})`)
           : `No se pudo activar (${x && x.code}${x && x.detalle ? ": " + x.detalle : ""}). Probá de nuevo; si sigue, mandale captura a Gabriel.`; if (g) g.dataset.err = t; else toast(t.replace(/<[^>]+>/g, " ")); } }
