@@ -11,7 +11,7 @@ export const diaSemana = f => { const [y, m, d] = partes(f); return new Date(Dat
 // Las clases son de lunes a viernes: habil() lleva al viernes anterior una fecha que caiga sábado o domingo.
 export function habil(f) { while ([0, 6].includes(diaSemana(f))) f = sumarDias(f, -1); return f; }
 // Arranque: lo que se debe de antes de noviembre vale hasta el 30/11 (igual que en app.js).
-const REC_INI = { corte: "2026-11-01", vence: "2026-11-30", desde: "2026-10-16", hasta: "2026-11-20" };
+const REC_INI = { corte: "2026-11-01", vence: "2026-11-30", desde: "2026-10-16", hasta: "2026-11-21" };
 const recIni = k => (k >= REC_INI.desde && k < REC_INI.hasta) ? REC_INI.vence : k;
 export function venceDe(f) { if (f < REC_INI.corte) return REC_INI.vence; return sumarDias(f, 18 - ((diaSemana(f) + 6) % 7)); }
 

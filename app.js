@@ -96,7 +96,7 @@ function montoClub(a,club,m=S.mes){ const hs=a.horarios||[]; if(!hs.length) retu
 function habil(f){ const d=isoDate(f); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); return toISO(d); }
 // Arranque con la app: lo que se debe de antes de noviembre (cargado a mano o faltas de octubre) vale hasta el 30/11.
 // Desde noviembre, cada falta se recupera en 2 semanas.
-const REC_INI={corte:"2026-11-01",vence:"2026-11-30",desde:"2026-10-16",hasta:"2026-11-20"};
+const REC_INI={corte:"2026-11-01",vence:"2026-11-30",desde:"2026-10-16",hasta:"2026-11-21"};
 const recIni=k=>(k>=REC_INI.desde&&k<REC_INI.hasta)?REC_INI.vence:k;
 function venceDe(f){ if(f<REC_INI.corte) return REC_INI.vence; const d=isoDate(f); d.setDate(d.getDate()-((d.getDay()+6)%7)+18); return toISO(d); }
 const fechaDM = f => { const d=isoDate(f); return `${d.getDate()}/${d.getMonth()+1}`; };
@@ -122,9 +122,11 @@ function recBuckets(a,pend=recPendAvisos(a).map(v=>venceAviso(a,v))){
 function recN(a){ return recBuckets(a).reduce((s,x)=>s+x.n,0); }
 function recVenceTxt(a){ return recBuckets(a).map(x=>`${x.n} hasta el ${fechaDM(x.vence)}`).join(" · "); }
 // Suma (delta>0, por una falta del día "fecha") o descuenta (delta<0, primero las que vencen antes) y devuelve lo que hay que guardar.
-function recCambio(a,delta,fecha=hoyISO,quitarDe=null){
+// Las que Gabriel carga a mano durante noviembre 2026 (clases que venían debiendo) valen todo noviembre.
+const venceManual=f=>hoyISO<"2026-12-01"?REC_INI.vence:venceDe(f);
+function recCambio(a,delta,fecha=hoyISO,quitarDe=null,manual=false){
   const m={}; recBuckets(a).forEach(x=>m[x.vence]=x.n);
-  if(delta>0){ const k=venceDe(fecha); m[k]=(m[k]||0)+delta; }
+  if(delta>0){ const k=manual?venceManual(fecha):venceDe(fecha); m[k]=(m[k]||0)+delta; }
   else if(delta<0){ let r=-delta; const ks=Object.keys(m).sort(); if(quitarDe&&m[quitarDe]) ks.unshift(quitarDe);
     for(const k of ks){ if(!r) break; const q=Math.min(r,m[k]||0); if(!q) continue; m[k]-=q; r-=q; if(!m[k]) delete m[k]; } }
   // Las fechas que ya no corresponden se guardan en 0 (la app guarda mezclando campos, no reemplazando).
@@ -1612,7 +1614,7 @@ async function verComprobante(a){
   catch(e){ const el=$("#compImg"); if(el) el.textContent="No se pudo cargar la foto."; }
 }
 // Suma o descuenta clases para recuperar (con su vencimiento). "fecha" = el día que faltó.
-async function setRec(a,delta,fecha=hoyISO,quitarDe=null){ const pend=recPendAvisos(a); const p=recCambio(a,delta,fecha,quitarDe);
+async function setRec(a,delta,fecha=hoyISO,quitarDe=null,manual=false){ const pend=recPendAvisos(a); const p=recCambio(a,delta,fecha,quitarDe,manual);
   const ok=await safe(async()=>{ const bt=S.db.batch(); bt.update(colA().doc(a.id),p); pend.forEach(v=>bt.update(S.db.doc("avisos/"+v.id),{contado:true})); await bt.commit(); });
   if(ok){ Object.assign(a,p); pend.forEach(v=>v.contado=true); } return ok; }
 const recPrev=a=>({recuperar:a.recuperar||0,recVence:{...(a.recVence||{})}});
@@ -1675,7 +1677,7 @@ document.addEventListener("click",async e=>{
     case "pago": if(A){ const was=!!pago(A); if(await setPago(A,!was)) toast(was?`${A.nombre}: vuelve a deber`:`${A.nombre}: pagó ${money(montoMes(A))}`,()=>setPago(A,was)); } break;
     case "msg": if(A) openMensajes(A); break;
     case "copy": { const t=b.dataset.text; try{ await navigator.clipboard.writeText(t); toast("Mensaje copiado"); }catch(err){ const r=document.createRange(); const bub=b.closest(".msg")?.querySelector(".bubble"); if(bub){ r.selectNodeContents(bub); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Texto seleccionado, copialo"); } } break; }
-    case "recMas": if(A){ if(await setRec(A,1)){ toast(`${A.nombre}: +1 clase a recuperar (hasta el ${fechaDM(venceDe(hoyISO))})`); if($("#recQ")) openRecAdd($("#recQ").value); } } break;
+    case "recMas": if(A){ if(await setRec(A,1,hoyISO,null,true)){ toast(`${A.nombre}: +1 clase a recuperar (hasta el ${fechaDM(venceManual(hoyISO))})`); if($("#recQ")) openRecAdd($("#recQ").value); } } break;
     case "recAdd": openRecAdd(); break;
     case "libres": LIB.club=S.club||""; openLibres(); break;
     case "libClub": LIB.club=b.dataset.v; openLibres(); break;
@@ -1779,7 +1781,7 @@ document.addEventListener("submit",async e=>{
     const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; { const pa=S.alumnos.find(x=>x.id===f.dataset.id); const ph=pa&&(pa.horarios||[]).find(x=>x.dia===h.dia&&x.hora===h.hora&&clubH(pa,x)===h.club); if(ph&&ph.desde&&ph.desde>hoyISO.slice(0,8)+"01") h.desde=ph.desde; } return h;}).filter(h=>h.hora);
     const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim()};
     const prevA=S.alumnos.find(x=>x.id===f.dataset.id)||{}; const pendA=prevA.id?recPendAvisos(prevA):[];
-    { const el=$("#aRec"); const dRec=(Number(el.textContent)||0)-(Number(el.dataset.orig)||0); if(dRec) Object.assign(data,recCambio(prevA,dRec)); }
+    { const el=$("#aRec"); const dRec=(Number(el.textContent)||0)-(Number(el.dataset.orig)||0); if(dRec) Object.assign(data,recCambio(prevA,dRec,hoyISO,null,true)); }
     if(!data.nombre) return;
     const id=f.dataset.id,lead=f.dataset.lead;
     if(id&&$("#aIni")){ const pm=planGuardado(prevA); const ini=$("#aIni").value||prevA.inicio; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este"; const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1;
