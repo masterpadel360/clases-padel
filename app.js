@@ -73,8 +73,10 @@ function precioEn(a,m=S.mes){ const L=aumentosDe(a), act=mesKey(now);
   const pas=L.filter(x=>x.desde<=m).pop(); if(pas&&pas.precio) return pas.precio; const sig=L.find(x=>x.desde>m&&x.aplicado); return sig&&sig.antes?sig.antes:(a.precioClase||0); }
 function ultimoAumento(a){ return aumentosDe(a).filter(x=>x.desde<=mesKey(now)).pop()||null; }
 function aumentoProx(a){ return aumentosDe(a).find(x=>!x.aplicado&&x.desde>mesKey(now))||null; }
-function cuotaMes(a,m=S.mes){ const p=precioEn(a,m); return p>0 ? clasesMes(a,m)*p : (a.cuota||0); }
-function extraDias(a,m=S.mes){ return (a.horarios||[]).map(h=>Number(h.dia)).filter(d=>ocurrencias(d,m)===5); }
+// Cobro fijo: si tiene "clasesFijas" (ej. 8), se le cobran siempre esas clases, sin importar cuántas trae el mes.
+function clasesCobro(a,m=S.mes){ return Number(a.clasesFijas)>0?Number(a.clasesFijas):clasesMes(a,m); }
+function cuotaMes(a,m=S.mes){ const p=precioEn(a,m); return p>0 ? clasesCobro(a,m)*p : (a.cuota||0); }
+function extraDias(a,m=S.mes){ if(Number(a.clasesFijas)>0) return []; return (a.horarios||[]).map(h=>Number(h.dia)).filter(d=>ocurrencias(d,m)===5); }
 function ajusteDe(a,m=S.mes){ const p=a.pagos&&a.pagos[m]; return p&&typeof p.ajuste==="number"?p.ajuste:null; }
 function montoMes(a,m=S.mes){ const aj=ajusteDe(a,m); return aj!==null?aj:cuotaMes(a,m); }
 function cobradoDe(a,m=S.mes){ const p=a.pagos[m]; const aj=ajusteDe(a,m); return aj!==null?aj:(p.monto||cuotaMes(a,m)); }
@@ -695,7 +697,7 @@ function leadRow(l){
 function ajPreview(){ const f=$("#fAj"); if(!f) return; const a=S.alumnos.find(x=>x.id===f.dataset.id); const v=Number($("#ajMonto").value)||0; const d=v-cuotaMes(a);
   $("#ajDif").innerHTML = d===0?"Igual al calculado":`${d>0?"+":"−"}${money(Math.abs(d))} ${precioEn(a)&&Number.isInteger(Math.abs(d)/precioEn(a))?`(${Math.abs(d)/precioEn(a)} clase${Math.abs(d)/precioEn(a)>1?"s":""} ${d>0?"de más":"de menos"})`:""} contra el calculado`; }
 function openAjuste(a){
-  const n=clasesMes(a), base=cuotaMes(a), cur=montoMes(a), p=a.pagos&&a.pagos[S.mes]||{}; const ex=extraDias(a).length;
+  const n=clasesCobro(a), base=cuotaMes(a), cur=montoMes(a), p=a.pagos&&a.pagos[S.mes]||{}; const ex=extraDias(a).length;
   openSheet(`<form id="fAj" data-id="${a.id}" style="display:grid;gap:14px">
     <div style="display:grid;gap:4px"><span class="flabel">Cobro de ${mesLbl(S.mes)}</span><h2 class="disp">${esc(a.nombre)}</h2></div>
     <dl class="kv" style="margin:0"><dt>Calculado</dt><dd class="num">${n} clases x ${money(precioEn(a))} = ${money(base)}</dd>${ex?`<dt></dt><dd class="small muted" style="font-weight:500">incluye ${ex===1?"una clase extra":ex+" clases extra"}</dd>`:""}</dl>
@@ -1505,6 +1507,7 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
     </div>
     <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
+    <label class="small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:-4px"><input type="checkbox" id="aFijoOn" ${Number(a.clasesFijas)>0?"checked":""}> Cobrarle siempre <input id="aFijo" type="number" inputmode="numeric" min="1" max="31" value="${Number(a.clasesFijas)||8}" style="width:64px;padding:6px 8px"> clases por mes <span class="muted">(sin clase extra, hasta que lo saques)</span></label>
     ${a.id&&a.precioClase>0?`<button type="button" class="linkish" data-act="aumUno" data-id="${a.id}" style="justify-self:start;margin-top:-4px">+ Registrar un aumento a ${esc(nombreCorto(a.nombre))} ›</button>`:""}
     ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&(pagoReal((a.pagos||{})[mesKey(now)])||a.antiguo||!esNuevo(a))){ /* alumno que ya venía: la fecha no toca las cuotas */
         // Ya pagó el mes: la fecha de arranque igual se ve y se puede corregir (sirve para los aumentos y para marcarlo como nuevo).
@@ -1526,8 +1529,8 @@ function formAlumno(a={},leadId=""){
     ${a.id?`<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="aAct" ${a.activo===false?"":"checked"}> Activo (sacalo si dejó o está en pausa)</label>`:""}
     <div class="btns">${a.id?`<button type="button" class="btn del" data-act="delA">Borrar</button>`:"<span></span>"}<span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
   </form>`);
-  const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)}))};
-    const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesMes(tmp)} clases = ${money(cuotaMes(tmp))}${ex?" (incluye clase extra)":""}`:"";
+  const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)})),clasesFijas:$("#aFijoOn")&&$("#aFijoOn").checked?Number($("#aFijo").value)||0:0};
+    const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesCobro(tmp)} clases = ${money(cuotaMes(tmp))}${tmp.clasesFijas?" (cobro fijo)":""}${ex?" (incluye clase extra)":""}`:"";
     const pr=$("#aPromo"); if(pr){ const ini=$("#aIni").value||hoyISO; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este";
       const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1; $("#aDurBox").hidden=!Number(pr.value);
       $("#aPromoCalc").textContent=(tmp.precioClase||Number(pr.value))&&tmp.horarios.length?planPrimerMes(tmp,ini,Number(pr.value)||0,modo,dur).txt:"Cargá el precio por clase y los horarios y te calculo el primer mes."; } };
@@ -1780,7 +1783,7 @@ document.addEventListener("submit",async e=>{
   e.preventDefault(); const f=e.target;
   if(f.id==="fA"){
     const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; { const pa=S.alumnos.find(x=>x.id===f.dataset.id); const ph=pa&&(pa.horarios||[]).find(x=>x.dia===h.dia&&x.hora===h.hora&&clubH(pa,x)===h.club); if(ph&&ph.desde&&ph.desde>hoyISO.slice(0,8)+"01") h.desde=ph.desde; } return h;}).filter(h=>h.hora);
-    const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim()};
+    const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim(),clasesFijas:$("#aFijoOn")&&$("#aFijoOn").checked?Math.max(1,Math.min(31,Number($("#aFijo").value)||8)):0};
     const prevA=S.alumnos.find(x=>x.id===f.dataset.id)||{}; const pendA=prevA.id?recPendAvisos(prevA):[];
     { const el=$("#aRec"); const dRec=(Number(el.textContent)||0)-(Number(el.dataset.orig)||0); if(dRec) Object.assign(data,recCambio(prevA,dRec,hoyISO,null,true)); }
     if(!data.nombre) return;
