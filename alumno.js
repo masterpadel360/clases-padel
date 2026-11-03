@@ -69,6 +69,11 @@ function iniciarPortal(perfil, u) {
   fdb.collection("reemplazos").where("alumnoId", "==", id).onSnapshot(s => { P.reemp = {}; s.docs.forEach(d => { const r = d.data(); P.reemp[`${r.fecha}|${r.hora}`] = r; }); pr(); }, () => {});
   fdb.collection("comprobantes").where("alumnoId", "==", id).onSnapshot(s => { P.comps = {}; s.docs.forEach(d => { const c = d.data(); P.comps[c.mes] = c; }); pr(); }, () => {});
   fdb.collection("avisos").where("alumnoId", "==", id).onSnapshot(s => { P.avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
+  // Cuenta familiar: también escuchamos a los hermanos, para avisar o recuperar por todos juntos.
+  P.fam = {};
+  for (const oid of P.lista.filter(x => x !== id)) { P.fam[oid] = { a: null, avisos: [] };
+    fdb.doc("alumnos/" + oid).onSnapshot(d => { P.fam[oid].a = d.exists ? { id: d.id, ...d.data() } : null; }, () => {});
+    fdb.collection("avisos").where("alumnoId", "==", oid).onSnapshot(s => { P.fam[oid].avisos = s.docs.map(d => ({ id: d.id, ...d.data() })); }, () => {}); }
   fdb.collection("solicitudes").where("alumnoId", "==", id).onSnapshot(s => { P.solic = s.docs.map(d => ({ id: d.id, ...d.data() })); pr(); }, () => {});
   { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     fdb.collection("asistencia").where("fecha", ">=", toISO(d)).onSnapshot(s => { P.asis = s.docs.map(d => d.data()); pr(); }, () => {}); }
@@ -475,13 +480,13 @@ async function guardarSeguro(vRef, tipo, hacer) {
 const conRecuperoSi = (fecha, hora) => inicioDe(fecha, hora).getTime() - Date.now() >= DIA_MS + 120000;
 // Hasta cuándo vale la clase que le vuelve: una recuperación cancelada conserva su vencimiento original.
 const venceSiCancela = (fecha, hora, tipo) => tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).vence || venceDe(hoyISO)) : venceDe(fecha);
-async function avisarNoVoy(fecha, hora, tipo) {
-  const a = P.a; const ini = inicioDe(fecha, hora); const con = conRecuperoSi(fecha, hora, tipo);
+async function avisarNoVoy(fecha, hora, tipo, ctx) {
+  const a = ctx ? ctx.a : P.a; const avs = ctx ? ctx.avisos : P.avisos; const ini = inicioDe(fecha, hora); const con = conRecuperoSi(fecha, hora, tipo);
   const d = isoDate(fecha); const hFija = (a.horarios || []).find(x => x.dia === d.getDay() && x.hora === hora);
-  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((P.avisos.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
+  const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_ausencia`; const club = tipo === "recupera" ? ((avs.find(v => v.tipo === "recupera" && v.fecha === fecha && v.hora === hora) || {}).club || clubH(a, hFija)) : clubH(a, hFija);
   const cid = cupoId(club, fecha, hora);
   if (esSusp(club, fecha, hora)) throw { code: "susp" };
-  if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+  if (avs.some(v => v.id === avId)) throw { code: "ya" };
   const vRef = fdb.doc("avisos/" + avId);
   const res = await guardarSeguro(vRef, "ausencia", () => fdb.runTransaction(async tx => {
     const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid);
@@ -495,11 +500,11 @@ async function avisarNoVoy(fecha, hora, tipo) {
   }));
   return res.verificado ? !!res.r.conRecupero : res.r;
 }
-async function reservarRec(fecha, hora, clubElegido) {
-  const a = P.a; const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
+async function reservarRec(fecha, hora, clubElegido, ctx) {
+  const a = ctx ? ctx.a : P.a; const avs = ctx ? ctx.avisos : P.avisos; const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(club, fecha, hora); const cupo = P.info.cupo || CUPO;
   if (esSusp(club, fecha, hora)) throw { code: "susp" };
-  if (P.avisos.some(v => v.id === avId)) throw { code: "ya" };
+  if (avs.some(v => v.id === avId)) throw { code: "ya" };
   const vRef = fdb.doc("avisos/" + avId);
   await guardarSeguro(vRef, "recupera", () => fdb.runTransaction(async tx => {
     const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), tRef = fdb.doc("publico/turnos");
@@ -510,7 +515,7 @@ async function reservarRec(fecha, hora, clubElegido) {
     // Punta vacía que se abre con esta reserva: hace falta más anticipación y se avisa al profe y a los de su nivel.
     const abrePunta = !!base.punta && !((c.rec || 0) - (c.aus || 0) > 0);
     if (inicioDe(fecha, hora).getTime() - Date.now() < anticipacionMs(abrePunta)) throw { code: abrePunta ? "tarde-punta" : "tarde" };
-    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: (recAl()[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false, ...(abrePunta ? { abrePunta: true } : {}) });
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: ((ctx ? recBuckets(a) : recAl())[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false, ...(abrePunta ? { abrePunta: true } : {}) });
     // Turno vacío: el primero que reserva le pone su nivel para esa fecha (no se muestra a los alumnos).
     const nivelC = c.nivel || (!base.n && !base.nivel ? ([...catsDe(a)][0] || "") : "");
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId, ...(nivelC ? { nivel: nivelC } : {}) });
@@ -518,6 +523,18 @@ async function reservarRec(fecha, hora, clubElegido) {
     tx.update(aRef, { recuperar: rec - 1, ultimoAviso: avId });
   }));
 }
+// Hermanos (cuenta familiar) que tienen esa misma clase y todavía no avisaron.
+function famLista() { return Object.values(P.fam || {}).filter(o => o.a && o.a.activo !== false); }
+function hermanosNoVoy(f, h) {
+  const dia = isoDate(f).getDay();
+  return famLista().map(o => {
+    if (o.avisos.some(v => v.tipo === "ausencia" && v.fecha === f && v.hora === h)) return null;
+    const t = o.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === h) ? "recupera" : (o.a.horarios || []).some(x => Number(x.dia) === dia && x.hora === h) ? "fija" : null;
+    return t ? { o, t } : null; }).filter(Boolean);
+}
+function hermanosRec(f, h) { return famLista().filter(o => (o.a.recuperar || 0) > 0 && !o.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === h)).map(o => ({ o })); }
+function famChecks(l, txt) { return l.length ? `<div class="msg" style="gap:6px;margin-top:10px"><span class="small"><b>${txt}</b></span>${l.map((x, i) => `<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="famChk" data-i="${i}" checked> ${esc(nombreCorto(x.o.a.nombre))}</label>`).join("")}</div>` : ""; }
+const famElegidos = l => [...document.querySelectorAll(".famChk:checked")].map(x => l[+x.dataset.i]).filter(Boolean);
 const ERR_AL = { susp: "Esa clase está suspendida: no hace falta avisar, ya te queda para recuperar.", ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", tarde: "Ese horario ya cerró: se puede reservar hasta 10 minutos antes. Elegí otro.", "tarde-punta": "Ese horario se tenía que reservar con 3 horas de anticipación. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
 document.addEventListener("click", async e => {
   if (window.MODO_STAFF) return;
@@ -540,7 +557,7 @@ document.addEventListener("click", async e => {
   if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
   if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
   if (pa === "novoy") {
-    const { f, h, t } = b.dataset; const con = conRecuperoSi(f, h, t);
+    const { f, h, t } = b.dataset; const con = conRecuperoSi(f, h, t); const herm = hermanosNoVoy(f, h);
     const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     confirmar(`¿No venís ${cuando}?`,
       t === "recupera" ? (con ? `Como avisás con más de 24 horas, <b>la clase te vuelve</b> y la podés recuperar en otro horario hasta el <b>${fechaDM(venceSiCancela(f, h, t))}</b>.`
@@ -548,15 +565,26 @@ document.addEventListener("click", async e => {
         : con ? "Como avisás con más de 24 horas, <b>te queda una clase para recuperar</b>."
         : '<b style="color:var(--warn)">Faltan menos de 24 horas: si no venís, esta clase se pierde y no se recupera.</b> Podés avisar igual.',
       con ? "Avisar que no voy" : "Avisar igual", async () => {
+        const fam = famElegidos(herm);
         const r = await avisarNoVoy(f, h, t);
-        return { titulo: "Listo, avisado", texto: r ? `Te quedó una clase para recuperar <b>hasta el ${fechaDM(venceSiCancela(f, h, t))}</b>. Reservala en <b>Inicio</b>, donde dice <b>Recuperar</b>.` : "Quedó registrado que no venís.",
-          msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. No voy a ir ${cuando}${r ? ". Avisé por la app, me queda para recuperar." : ". Avisé por la app."}` };
+        const ok = [P.a], mal = [];
+        for (const x of fam) { try { await avisarNoVoy(f, h, x.t, x.o); ok.push(x.o.a); } catch (e) { console.error(e); if (e && e.code === "ya") ok.push(x.o.a); else mal.push(x.o.a); } }
+        const nom = ok.map(z => nombreCorto(z.nombre)).join(" y "), varios = ok.length > 1;
+        return { titulo: "Listo, avisado", texto: (r ? `${varios ? "Les quedó" : "Te quedó"} una clase para recuperar <b>hasta el ${fechaDM(venceSiCancela(f, h, t))}</b>. Reservala en <b>Inicio</b>, donde dice <b>Recuperar</b>.` : "Quedó registrado que no venís.") + (varios ? ` Avisado por <b>${esc(nom)}</b>.` : "") + (mal.length ? ` <span class="due">No se pudo avisar por ${esc(mal.map(z => nombreCorto(z.nombre)).join(" y "))}: entrá a su perfil y avisá de nuevo.</span>` : ""),
+          msg: varios ? `Hola Gabi, ¿cómo estás? ${nom} no van a ir ${cuando}. Avisé por la app.` : `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. No voy a ir ${cuando}${r ? ". Avisé por la app, me queda para recuperar." : ". Avisé por la app."}` };
       });
+    { const sh = $("#pErr"); if (herm.length && sh) sh.insertAdjacentHTML("beforebegin", famChecks(herm, "¿Tampoco va?")); }
     return;
   }
   if (pa === "reservar") {
     const { f, h, c } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
+    const hermR = hermanosRec(f, h);
     confirmar(`¿Recuperás ${cuando}?`, `Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.`, "Reservar", async () => {
+      const famR = famElegidos(hermR), famOk = [], famMal = [];
+      if (famR.length) await reservarRec(f, h, c);
+      for (const x of famR) { try { await reservarRec(f, h, c, x.o); famOk.push(x.o.a); } catch (e) { console.error(e); famMal.push([x.o.a, e && e.code]); } }
+      if (famR.length) { const nom = [P.a, ...famOk].map(z => nombreCorto(z.nombre)).join(" y ");
+        return { titulo: "¡Reservado!", texto: `Lugar guardado ${cuando} para <b>${esc(nom)}</b>.` + (famMal.length ? ` <span class="due">${famMal.map(([z, cd]) => `${esc(nombreCorto(z.nombre))}: ${ERR_AL[cd] || "no se pudo reservar"}`).join(" ")}</span>` : ""), msg: `Hola Gabi, ¿cómo estás? Reservé por la app para recuperar ${cuando}: ${nom}.` }; }
       const quien = (($("#recQuien") || {}).value || "").trim().replace(/\s+/g, " ");
       await reservarRec(f, h, c);
       if (quien.length >= 2) {
@@ -567,6 +595,7 @@ document.addEventListener("click", async e => {
       }
       return { titulo: "¡Reservado!", texto: `Te esperamos ${cuando}.`, msg: `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Reservé por la app para recuperar ${cuando}.` };
     });
+    { const sh = $("#pErr"); if (hermR.length && sh) sh.insertAdjacentHTML("beforebegin", famChecks(hermR, "¿Recupera también?")); }
     return;
   }
   if (pa === "varias") { abrirVarias(); return; }
@@ -634,20 +663,24 @@ function abrirVarias() {
         return `<label class="row" style="grid-template-columns:auto 1fr;background:rgba(255,255,255,.6);border:1px solid var(--line-2);border-radius:14px;padding:10px 12px;gap:10px"><input type="checkbox" class="chkVar" data-f="${c.fecha}" data-h="${c.hora}" style="width:20px;height:20px"><span class="main"><span class="name">${DIAS_LARGO[dd.getDay()]} ${dd.getDate()}/${dd.getMonth() + 1} · ${c.hora}</span><span class="meta">${con ? "Te queda para recuperar" : '<span class="due">Menos de 24 h: no se recupera</span>'}</span></span></label>`; }).join("")}</div>`; }).join("") || '<div class="empty">No tenés clases para marcar.</div>'}</div>
     <p class="small" id="pErr" style="margin:0;color:var(--warn)"></p>
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-pa="cerrar">Cancelar</button><button class="btn pri" data-pa="variasOk">Avisar</button></span></div>`);
+  { const fl = famLista().map(o => ({ o })); P.famVar = fl; const bt = document.querySelector('[data-pa="variasOk"]'); const bx = bt && bt.closest(".btns"); if (fl.length && bx) bx.insertAdjacentHTML("beforebegin", famChecks(fl, "¿Tampoco va? (en las que tenga la misma clase)")); }
 }
 async function confirmarVarias(b) {
   const sel = [...document.querySelectorAll(".chkVar:checked")].map(x => ({ f: x.dataset.f, h: x.dataset.h }));
   if (!sel.length) { $("#pErr").textContent = "Marcá al menos una clase."; return; }
-  await avisarLista(b, sel);
+  await avisarLista(b, sel, famElegidos(P.famVar || []).map(x => x.o));
 }
-async function avisarLista(b, sel) {
+async function avisarLista(b, sel, fam = []) {
   if (P.ocupado) return; P.ocupado = true; b.disabled = true; b.textContent = "Avisando…";
-  const ok = []; let rec = 0, fallo = 0;
+  const ok = []; let rec = 0, fallo = 0; const famOk = new Set();
+  // Hermanos elegidos: se avisa por ellos en las clases que tienen en el mismo horario.
+  for (const c of sel) for (const x of hermanosNoVoy(c.f, c.h).filter(x => fam.includes(x.o))) { try { await avisarNoVoy(c.f, c.h, x.t, x.o); famOk.add(nombreCorto(x.o.a.nombre)); } catch (e) { console.error(e); if (e && e.code === "ya") famOk.add(nombreCorto(x.o.a.nombre)); } }
   // Si se corta la señal, no seguimos probando una por una (tardaría minutos): las que faltan se avisan después.
   try { for (const c of sel) { if (fallo && ["lento", "unavailable", "sin-conexion"].includes(P.ultErr)) { fallo++; continue; } try { if (await avisarNoVoy(c.f, c.h, "fija")) rec++; ok.push(c); } catch (x) { console.error(x); P.ultErr = x && x.code; if (x && x.code === "ya") ok.push(c); else fallo++; } } }
   finally { P.ocupado = false; P.ultErr = null; } if (ok.length) avisarAlInstante();
   const lista = ok.map(c => `${fechaLarga(c.f).toLowerCase()} a las ${c.h}`).join(", ");
-  const msg = `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Te aviso que no voy a poder ir: ${lista}. Lo cargué en la app.`;
+  const quienes = [nombreCorto(P.a.nombre), ...famOk];
+  const msg = famOk.size ? `Hola Gabi, ¿cómo estás? Te aviso que ${quienes.join(" y ")} no van a poder ir: ${lista}. Lo cargué en la app.` : `Hola Gabi, ¿cómo estás? Soy ${P.a.nombre}. Te aviso que no voy a poder ir: ${lista}. Lo cargué en la app.`;
   const url = P.info.telGabriel && ok.length ? waURL(P.info.telGabriel, msg) : "";
   openSheet(`<div style="display:grid;gap:6px"><h2 class="disp">Listo, avisado</h2><p class="small" style="margin:0">Avisaste ${ok.length} clase${ok.length === 1 ? "" : "s"}${rec ? `: sumaste ${rec} clase${rec === 1 ? "" : "s"} para recuperar` : ""}.${fallo ? ` <span class="due">${fallo} no se pudo${fallo > 1 ? "eron" : ""} avisar, probá de nuevo.</span>` : ""}</p></div>
     ${url ? `<div class="msg"><span class="small"><b>Último paso:</b> mandale el aviso a Gabriel por WhatsApp. Ya está escrito, solo tocás enviar.</span><div class="bubble">${esc(msg)}</div><a class="cta wa" href="${url}" target="_blank" rel="noopener" data-pa="cerrar" style="justify-self:start">Mandar por WhatsApp <i>→</i></a></div>` : ""}
