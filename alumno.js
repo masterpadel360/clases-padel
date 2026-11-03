@@ -321,8 +321,9 @@ async function achicarFoto(file) {
 
 function abrirPagar(m) {
   const a = P.a; const tot = montoMes(a, m); P.compFoto = null;
-  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp" style="text-transform:capitalize">Pagar ${mesLbl(m)}</h2><div class="mega num" style="font-size:40px">${money(tot)}</div></div>
+  openSheet(`<div style="display:grid;gap:4px"><h2 class="disp" style="text-transform:capitalize">Pagar ${mesLbl(m)}</h2><div class="mega num" id="pagTot" style="font-size:40px">${money(tot)}</div></div>
     <div style="display:grid;gap:14px">
+      <div id="pagFam" hidden></div>
       ${P.info.alias ? `<div class="msg" style="gap:8px"><span class="small"><b>1.</b> Transferí al alias <b>${esc(P.info.alias)}</b></span><button class="mini" data-pa="alias" style="justify-self:start">Copiar alias</button></div>` : ""}
       <div class="msg" style="gap:8px"><span class="small"><b>${P.info.alias ? "2." : "1."}</b> Subí la foto o captura del comprobante</span>
         <label class="mini" style="justify-self:start;cursor:pointer">Elegir foto<input type="file" id="compFile" accept="image/*" hidden></label>
@@ -331,6 +332,28 @@ function abrirPagar(m) {
       <button class="btn pri" data-pa="pagarOk" data-m="${m}" id="compOk" disabled style="width:100%;font-size:16px;padding:14px">Pagar</button>
       <button class="linkish" data-pa="cerrar" style="justify-self:center;font-size:12px;opacity:.7">Cancelar</button>
     </div>`);
+  P.pagFam = []; if ((P.lista || []).length > 1) cargarFamPago(m);
+}
+// Cuenta familiar (ej. una mamá con sus dos hijos): se paga todo junto con una sola transferencia y un solo comprobante.
+async function cargarFamPago(m) {
+  const otros = [];
+  for (const id of P.lista.filter(x => x !== P.a.id)) {
+    try { const d = await fdb.doc("alumnos/" + id).get(); if (!d.exists) continue; const o = { id: d.id, ...d.data() };
+      if (o.activo === false || (o.pagos && o.pagos[m] && o.pagos[m].pagado) || (o.inicio && m < o.inicio.slice(0, 7))) continue;
+      let c = null; try { const cd = await fdb.doc(`comprobantes/${id}_${m}`).get(); if (cd.exists) c = cd.data(); } catch (x) {}
+      if (c && c.estado === "enviado") continue;
+      const monto = montoMes(o, m); if (monto > 0) otros.push({ id, nombre: o.nombre || "", monto });
+    } catch (e) { console.error(e); }
+  }
+  const box = $("#pagFam"); if (!box || !otros.length) return;
+  P.pagFam = otros.map(o => ({ ...o, si: true }));
+  box.hidden = false; box.className = "msg"; box.style.gap = "8px";
+  box.innerHTML = `<span class="small"><b>Pagás todo junto</b> con una sola transferencia y un solo comprobante:</span>
+    <label class="small" style="display:flex;justify-content:space-between;gap:8px;opacity:.8"><span>✓ ${esc(nombreCorto(P.a.nombre))}</span><b class="num">${money(montoMes(P.a, m))}</b></label>
+    ${P.pagFam.map((o, i) => `<label class="small" style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span><input type="checkbox" data-fam="${i}" checked> ${esc(nombreCorto(o.nombre))}</span><b class="num">${money(o.monto)}</b></label>`).join("")}`;
+  const tot = () => { const t = montoMes(P.a, m) + P.pagFam.filter(o => o.si).reduce((x, o) => x + o.monto, 0); const el = $("#pagTot"); if (el) el.textContent = money(t); };
+  box.addEventListener("change", e => { const i = e.target.dataset.fam; if (i == null) return; P.pagFam[+i].si = e.target.checked; tot(); });
+  tot();
 }
 document.addEventListener("change", async e => {
   if (window.MODO_STAFF || e.target.id !== "compFile") return;
@@ -350,6 +373,9 @@ async function mandarComprobante(m, b) {
     const bt = fdb.batch();
     bt.set(fdb.doc("fotosPago/" + id), { alumnoId: a.id, mes: m, foto: P.compFoto });
     bt.set(fdb.doc("comprobantes/" + id), { alumnoId: a.id, uid: P.uid, nombre: a.nombre, mes: m, monto: montoMes(a, m), estado: "enviado", aplicado: false, notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() });
+    for (const o of (P.pagFam || []).filter(o => o.si)) { const oid = `${o.id}_${m}`;
+      bt.set(fdb.doc("fotosPago/" + oid), { alumnoId: o.id, mes: m, foto: P.compFoto });
+      bt.set(fdb.doc("comprobantes/" + oid), { alumnoId: o.id, uid: P.uid, nombre: o.nombre, mes: m, monto: o.monto, estado: "enviado", aplicado: false, notificado: false, creado: firebase.firestore.FieldValue.serverTimestamp() }); }
     // Con mala señal la foto queda guardada en el celu y se manda sola cuando vuelve la conexión.
     const envio = bt.commit();
     const r = await Promise.race([envio.then(() => "ok"), new Promise(ok => setTimeout(() => ok("lento"), 15000))]);
