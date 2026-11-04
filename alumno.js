@@ -95,11 +95,12 @@ function iniciarPortal(perfil, u) {
 }
 
 async function barraCuentas(uid) {
-  const top = document.querySelector("#portal header.top"); if (!top || document.getElementById("pCuentas")) return;
+  // Va arriba de todo, visible (en el diseño nuevo la barra "top" está oculta).
+  const top = document.querySelector("#portal .app"); if (!top || document.getElementById("pCuentas")) return;
   const NK = "nombresCuentas_" + uid; let nombres = {}; try { nombres = JSON.parse(localStorage.getItem(NK) || "{}"); } catch (e) {}
   const bar = document.createElement("div"); bar.id = "pCuentas"; bar.className = "cuentas"; bar.setAttribute("role", "tablist"); bar.setAttribute("aria-label", "Ver las clases de");
   const pintar = () => { bar.innerHTML = P.lista.map(id => `<button type="button" role="tab" data-cuenta="${esc(id)}" aria-selected="${id === P.perfil.alumnoId}">${esc((nombres[id] || "…").split(/\s+/)[0])}</button>`).join(""); };
-  pintar(); top.appendChild(bar);
+  pintar(); const hd = top.querySelector("header.top"); if (hd && hd.nextSibling) top.insertBefore(bar, hd.nextSibling); else top.prepend(bar);
   bar.addEventListener("click", e => { const b = e.target.closest("[data-cuenta]"); if (!b || b.dataset.cuenta === P.perfil.alumnoId || P.ocupado) return;
     try { localStorage.setItem(KSEL(uid), b.dataset.cuenta); } catch (x) {} bar.querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x === b)); location.reload(); });
   for (const id of P.lista) { try { const d = await fdb.doc("alumnos/" + id).get(); if (d.exists) nombres[id] = d.data().nombre || ""; } catch (e) {} }
