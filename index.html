@@ -262,7 +262,7 @@ label.mini input[type=file]{display:none}
 .rec-top .big-num{font-size:60px;color:var(--warn)}
 
 </style>
-<link rel="stylesheet" href="alumno-v2.css?v=202611041506">
+<link rel="stylesheet" href="alumno-v2.css?v=202611041508">
 </head>
 <body>
 <div class="scene" aria-hidden="true"></div>
@@ -314,7 +314,7 @@ label.mini input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script>
 /* Actualización automática: si hay una versión nueva publicada, la app se recarga sola. */
-window.APP_V = "202611041506";
+window.APP_V = "202611041508";
 (function () {
   let avisado = false;
   function recargar(nv) { location.replace(location.pathname + "?v=" + nv); }
@@ -336,12 +336,29 @@ window.APP_V = "202611041506";
   setInterval(() => { if (document.visibilityState === "visible") revisar(false); }, 5 * 60 * 1000);
 })();
 </script>
-<script src="config.js?v=202611041506"></script>
-<script src="app.js?v=202611041506"></script>
-<script src="staff-extra.js?v=202611041506"></script>
-<script src="alumno.js?v=202611041506"></script>
-<script src="alumno-v2.js?v=202611041506"></script>
-<script src="asistente.js?v=202611041506"></script>
-<script src="firebase.js?v=202611041506"></script>
+<script src="config.js?v=202611041508"></script>
+<script src="app.js?v=202611041508"></script>
+<script src="staff-extra.js?v=202611041508"></script>
+<script src="alumno.js?v=202611041508"></script>
+<script src="alumno-v2.js?v=202611041508"></script>
+<script src="asistente.js?v=202611041508"></script>
+<script src="firebase.js?v=202611041508"></script>
+<script>
+/* Deslizar hacia abajo desde arriba de todo para actualizar (instalada en el inicio no lo trae). */
+(function () {
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  if (!standalone) return;
+  let y0 = null, dy = 0, el = null;
+  const ocupado = () => { const ov = document.getElementById("overlay"); return (ov && !ov.hidden) || document.getElementById("notifGate") || document.documentElement.classList.contains("ia-abierto"); };
+  const ind = () => { if (el) return el; el = document.createElement("div");
+    el.style.cssText = "position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);transform:translate(-50%,-60px);z-index:95;width:40px;height:40px;border-radius:50%;background:#1c2619;color:#cfe04a;display:grid;place-items:center;font:700 20px system-ui;box-shadow:0 6px 18px rgba(0,0,0,.3);transition:opacity .15s;opacity:0;pointer-events:none";
+    el.textContent = "↻"; document.body.appendChild(el); return el; };
+  document.addEventListener("touchstart", e => { if (window.scrollY > 0 || ocupado() || e.touches.length !== 1) { y0 = null; return; } y0 = e.touches[0].clientY; dy = 0; }, { passive: true });
+  document.addEventListener("touchmove", e => { if (y0 === null) return; dy = e.touches[0].clientY - y0; if (window.scrollY > 0 || dy <= 0) { if (el) el.style.opacity = 0; return; }
+    const p = Math.min(dy, 110); const i = ind(); i.style.opacity = Math.min(1, p / 70); i.style.transform = `translate(-50%,${p - 60}px) rotate(${p * 3}deg)`; }, { passive: true });
+  document.addEventListener("touchend", () => { if (y0 === null) return; const ok = dy > 90 && window.scrollY <= 0; y0 = null;
+    if (!el) return; if (ok) { el.style.transform = "translate(-50%,40px)"; el.textContent = "…"; setTimeout(() => location.reload(), 150); } else { el.style.opacity = 0; el.style.transform = "translate(-50%,-60px)"; } }, { passive: true });
+})();
+</script>
 </body>
 </html>
