@@ -400,6 +400,37 @@ try {
         console.log(`Aviso de clase al profe: ${hora} (${total})`);
       }
     }
+    // Si se bajan todos de un horario de hoy: avisarle al profe (y si con eso termina antes o empieza más tarde).
+    // Si después alguien reserva ahí, se le avisa que vuelve a haber clase.
+    {
+      const cuenta = hora => { const tt = turnos[hora]; let n = tt.recs.length + tt.otros.length;
+        tt.fijos.forEach(a => { if (!(tieneAv(a.id, hora, "ausencia") && !tieneAv(a.id, hora, "recupera")) || reemp.some(x => x.alumnoId === a.id && x.hora === hora)) n++; }); return n; };
+      const conFijos = Object.keys(turnos).filter(h => turnos[h].fijos.length && !susp[`JUMP|${hoy}|${h}`]).sort();
+      const conClase = Object.keys(turnos).filter(h => !susp[`JUMP|${hoy}|${h}`] && cuenta(h) > 0).sort();
+      for (const hora of conFijos) {
+        if (inicioDe(hoy, hora).getTime() <= nowMs) continue;
+        const vacio = cuenta(hora) === 0;
+        for (const uid of profesJ) {
+          const ref = db.doc(`recordatorios/vacio_${uid}_${hoy}_${hora.replace(":", "")}`);
+          const prev = await ref.get(); const estaba = prev.exists && prev.data().vacio;
+          if (vacio && !estaba) {
+            const quienes = turnos[hora].fijos.map(nom0); const todos = quienes.length > 1 ? `los ${quienes.length === 2 ? "dos" : quienes.length}` : quienes[0];
+            let extra = "";
+            if (!conClase.length) extra = " Hoy no te queda ninguna clase en Jump.";
+            else if (hora > conClase[conClase.length - 1]) extra = ` Hoy terminás antes: tu última clase es a las ${conClase[conClase.length - 1]} (terminás ${masUnaHora(conClase[conClase.length - 1]) || ""}).`;
+            else if (hora < conClase[0]) extra = ` Hoy empezás más tarde: tu primera clase es a las ${conClase[0]}.`;
+            else extra = " Te queda ese hueco libre.";
+            await enviar(uid, { title: quienes.length > 1 ? `🔕 Se bajaron ${todos} de las ${hora}` : `🔕 Sin clase a las ${hora}`, body: `${quienes.length > 1 ? `Se bajaron ${todos} (${listaY(quienes)})` : `Se bajó ${todos}`}: hoy a las ${hora} no hay clase en Jump.${extra}`, tag: "vacio-" + hoy + "-" + hora });
+            await ref.set({ vacio: true, enviado: admin.firestore.FieldValue.serverTimestamp() });
+            console.log(`Turno vacío avisado al profe: ${hora}`);
+          } else if (!vacio && estaba) {
+            const tt = turnos[hora]; const van = [...tt.recs.map(nom), ...tt.otros, ...tt.fijos.filter(a => !(tieneAv(a.id, hora, "ausencia") && !tieneAv(a.id, hora, "recupera"))).map(nom)];
+            await enviar(uid, { title: `🎾 Vuelve a haber clase a las ${hora}`, body: `Hoy a las ${hora} en Jump viene${van.length > 1 ? "n" : ""} ${listaY(van)}.`, tag: "vacio-" + hoy + "-" + hora });
+            await ref.set({ vacio: false, enviado: admin.firestore.FieldValue.serverTimestamp() });
+          }
+        }
+      }
+    }
     // A la mañana (desde las 10): los turnos que tiene hoy, una vez por día.
     const horaJ = ar.getUTCHours();
     if (horaJ >= 10 && horaJ < 16) {
