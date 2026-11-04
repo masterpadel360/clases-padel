@@ -235,7 +235,27 @@ function renderPTabs() {
   const nav = $("#pTabs"); if (!nav) return; nav.hidden = !P.a;
   nav.innerHTML = P_TABS.map(([k, l, i]) => `<button class="tab" role="tab" data-pa="ptab" data-t="${k}" aria-selected="${P.tab === k}">${i}${l}</button>`).join("");
 }
+// Alumno dado de baja (Gabriel le sacó "Activo"): no puede usar la app; solo ve un aviso y cómo volver.
+function pausaGate() {
+  let g = document.getElementById("pausaGate"); const off = P.a && P.a.activo === false;
+  if (!off) { if (g) { g.remove(); document.documentElement.style.overflow = ""; } return false; }
+  if (!g) { g = document.createElement("div"); g.id = "pausaGate"; document.body.appendChild(g); }
+  g.style.cssText = "position:fixed;inset:0;z-index:91;background:var(--s-bg,#d3d8c9);color:var(--s-ink,#1d2419);overflow:auto;display:grid;place-items:center;padding:calc(env(safe-area-inset-top,0px) + 24px) 22px calc(env(safe-area-inset-bottom,0px) + 24px)";
+  document.documentElement.style.overflow = "hidden";
+  const otros = (P.lista || []).filter(id => id !== P.a.id && P.fam && P.fam[id] && P.fam[id].a && P.fam[id].a.activo !== false);
+  const tel = P.info && P.info.telGabriel; const wa = tel ? intentarWA(tel, `Hola Gabi! Soy ${P.a.nombre}. Quiero volver a las clases 🎾`) : "";
+  g.innerHTML = `<div style="display:grid;gap:14px;text-align:center;justify-items:center;max-width:380px;width:100%"><div style="font-size:48px;line-height:1">🎾</div>
+    <h2 class="disp" style="margin:0">Tus clases están en pausa</h2>
+    <p class="small" style="margin:0">${esc(nombreCorto(P.a.nombre))}, por ahora no tenés clases activas. Si querés volver, escribile a Gabriel y te arma el horario.</p>
+    ${wa ? `<a class="btn pri" href="${wa}" target="_blank" rel="noopener" style="width:100%;font-size:16px;padding:14px;text-decoration:none">Escribirle a Gabriel</a>` : ""}
+    ${otros.map(id => `<button class="btn sec2" data-cuentaPausa="${esc(id)}" style="width:100%">Ver las clases de ${esc(nombreCorto(P.fam[id].a.nombre))}</button>`).join("")}
+    <button class="linkish" data-pa="salir" style="font-size:12px;opacity:.6">Cerrar sesión</button></div>`;
+  return true;
+}
+function intentarWA(t, m) { try { return waURL(t, m); } catch (e) { return ""; } }
+document.addEventListener("click", e => { const b = e.target.closest("[data-cuentaPausa]"); if (!b) return; try { localStorage.setItem(KSEL(P.uid), b.getAttribute("data-cuentaPausa")); } catch (x) {} location.reload(); });
 function renderPortal() {
+  pausaGate();
   const v = $("#pView"); if (!v) return;
   const a = P.a;
   $("#pHola").textContent = a ? `Hola, ${nombreCorto(a.nombre)}` : "";
