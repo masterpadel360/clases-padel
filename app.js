@@ -551,7 +551,7 @@ function accesoEst(a){
   const usr=a.usuario||a.manejaUid||(S.usuarios||[]).some(u=>u.alumnoId===a.id||(u.alumnos||[]).includes(a.id));
   if(ing) return ing.notif?"app":"notif"; return usr?"creado":"sin";
 }
-const ACC_TAG={app:'<span class="tag" style="background:#1f6f43;color:#fff">📱 En la app</span>',notif:'<span class="tag" style="background:#b3261e;color:#fff">🔕 Entró sin notificaciones</span>',creado:'<span class="tag" style="background:#3a5a8c;color:#fff">🔑 Acceso creado · no entró</span>',sin:'<span class="tag" style="background:transparent;color:#7a7f73;border:1px dashed #a3a89b">Sin acceso</span>'};
+const ACC_TAG={app:'<span class="tag" style="background:#1f6f43;color:#fff">📱 En la app</span>',notif:'<span class="tag" style="background:#b3261e;color:#fff">🔕 Inició sesión · falta activar notificaciones</span>',creado:'<span class="tag" style="background:#3a5a8c;color:#fff">🔑 Acceso creado · no entró</span>',sin:'<span class="tag" style="background:transparent;color:#7a7f73;border:1px dashed #a3a89b">Sin acceso</span>'};
 function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length; const ae=accesoEst(a);
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"${ae&&ae!=="sin"?' style="background:#e4e8dc"':""}><button class="main" data-act="editA" data-id="${a.id}">
