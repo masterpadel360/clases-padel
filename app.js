@@ -612,7 +612,7 @@ function slotHTML(t,fecha){
     <div style="display:grid;gap:4px;min-width:0"><div class="who">${t.al.map(a=>`<button class="pill ${t.club} ${esNuevo(a)?"nuevo":""} ${aj.aus.has(a.id)?"aus":""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)?' <b class="nuevo-b">Nuevo</b>':""}${aj.aus.has(a.id)?' <b class="aus-b">No viene</b>':""}</button>`).join("")}${aj.rec.map(a=>`<button class="pill rec" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <b class="rec-b">Recupera</b></button>`).join("")}</div>
     <button class="linkish suspend" data-act="lluvia" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}" data-f="${fecha||hoyISO}">Suspender por lluvia</button></div></div>`;
 }
-const AGENDA_DESDE="2026-10-07";
+const AGENDA_DESDE="2026-11-01"; // todo arranca en noviembre: no se muestran días de octubre
 function fechasAgenda(){
   const out=[]; const [y,m,d]=AGENDA_DESDE.split("-").map(Number); const f=new Date(y,m-1,d);
   const hasta=new Date(now.getFullYear(),now.getMonth(),now.getDate()+42);
