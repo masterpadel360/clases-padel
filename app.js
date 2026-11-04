@@ -422,22 +422,32 @@ const WI={
 const wico=(k,cl="")=>`<svg class="${cl}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WI[k]}</svg>`;
 let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
 /* ---------- Agenda fija de la semana: quién va cada día y hora (para contestar a los que preguntan) ---------- */
+// Agenda de la semana con fechas: cada día muestra quién no viene (avisó), quién viene a recuperar y si está suspendido.
+// "Grilla fija" muestra la semana de siempre, sin avisos.
+function semLunes(){ const x=new Date(now); x.setHours(12,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)+7*(S.semOff||0)); return x; }
+function semFecha(dia){ const x=semLunes(); x.setDate(x.getDate()+((dia+6)%7)); return toISO(x); }
 function vSemana(){
-  const cl=S.semClub||""; const todos=turnosGrilla("").filter(t=>!cl||t.club===cl);
+  const cl=S.semClub||""; const todos=turnosGrilla("").filter(t=>!cl||t.club===cl); const fija=!!S.semFija;
   const dias=[1,2,3,4,5,6,0].filter(d=>turnosGrilla("").some(t=>t.dia===d));
   if(S.semDia===undefined||!dias.includes(S.semDia)) S.semDia=dias.includes(now.getDay())?now.getDay():(dias[0]??1);
-  const d=S.semDia; const ts=todos.filter(t=>t.dia===d).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
+  const d=S.semDia; const f=semFecha(d); const ts=todos.filter(t=>t.dia===d).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
   const n=x=>todos.filter(t=>t.dia===x).length;
-  const lib=ts.reduce((t,x)=>t+Math.max(0,CUPO-x.al.length),0), al=ts.reduce((t,x)=>t+x.al.length,0);
+  const susp=t=>!fija&&!!(S.suspT||{})[suspKey(t.club,f,t.hora)];
+  const info=t=>{ const al=fija?t.al:t.al.filter(a=>vaEn(a,t,f)); const aj=fija?{aus:new Set(),rec:[]}:ajusteTurno(t,f); const vienen=susp(t)?0:al.length-al.filter(a=>aj.aus.has(a.id)).length+aj.rec.length; return {al,aj,vienen,lb:Math.max(0,CUPO-vienen)}; };
+  const tot=ts.reduce((s,t)=>{ const i=info(t); return {al:s.al+i.vienen,lib:s.lib+(susp(t)?0:i.lb)}; },{al:0,lib:0});
+  const lun=semLunes(), vie=new Date(lun); vie.setDate(vie.getDate()+4);
+  const dm=x=>`${x.getDate()}/${x.getMonth()+1}`;
+  const fD=x=>{ const y=new Date(lun); y.setDate(y.getDate()+((x+6)%7)); return y; };
   return `
-  <div class="w-seg sem-dias">${dias.map(x=>`<button data-act="semDia" data-d="${x}" aria-pressed="${x===d}"><b>${DIAS[x]}</b><small>${n(x)} turno${n(x)===1?"":"s"}</small></button>`).join("")}</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 8px">${fija?`<b class="small">Grilla fija (sin avisos)</b>`:`<span style="display:flex;align-items:center;gap:4px"><button class="mini" data-act="semOff" data-d="-1" aria-label="Semana anterior">‹</button><b class="small" style="min-width:118px;text-align:center">${(S.semOff||0)===0?"Esta semana":(S.semOff===1?"Semana que viene":"Semana")} · ${dm(lun)} al ${dm(vie)}</b><button class="mini" data-act="semOff" data-d="1" aria-label="Semana siguiente">›</button></span>`}<button class="linkish" data-act="semFija" style="font-size:12.5px">${fija?"‹ Ver por fecha":"Grilla fija"}</button></div>
+  <div class="w-seg sem-dias">${dias.map(x=>`<button data-act="semDia" data-d="${x}" aria-pressed="${x===d}"><b>${DIAS[x]}${fija?"":` ${dm(fD(x))}`}</b><small>${n(x)} turno${n(x)===1?"":"s"}</small></button>`).join("")}</div>
   <div class="w-seg">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button data-act="semClub" data-v="${v}" aria-pressed="${cl===v}">${l}</button>`).join("")}</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px"><button class="mini lluvia-btn" data-act="suspender" data-f="${(()=>{ const x=new Date(now); for(let i=0;i<7&&x.getDay()!==d;i++) x.setDate(x.getDate()+1); return toISO(x); })()}">⛔ Suspender clases (feriado, etc.)</button><button class="mini lluvia-btn" data-act="lluvia" data-f="${hoyISO}">🌧 Por lluvia</button></div>
-  <p class="sem-res">${/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"} · ${ts.length} turno${ts.length===1?"":"s"} · ${al} alumnos · <b>${lib} lugar${lib===1?"":"es"} libre${lib===1?"":"s"}</b></p>
-  ${ts.length?ts.map(t=>{ const lb=Math.max(0,CUPO-t.al.length);
-    return `<section class="w-card sem-t"><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.al.length?`<button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(nivelTxt(t.nivel)):"+ Categoría"}</button>`:`<span class="sem-cat">${t.punta?"Vacío · solo si hace falta":"Vacío"}</span>`}<span class="sem-cupo ${lb?"":"full"}">${t.al.length}/${CUPO}</span></div>
-      <div class="sem-al">${t.al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>`<button data-act="editA" data-id="${a.id}">${esc(a.nombre)}${esNuevo(a)&&!(arranqueDe(a)>hoyISO)?` <small style="color:#13834f">Nuevo · desde ${fechaDM(arranqueDe(a))}</small>`:""}${(()=>{ const hh=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); const ds=[a.inicio,hh&&hh.desde].filter(Boolean).sort().pop(); return ds&&ds>hoyISO?` <small>empieza ${fechaDM(ds)}</small>`:""; })()}</button>`).join("")}${lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
-  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="tab" data-t="hoy">Ver por fecha (con avisos y lluvia) ›</button></section>`;
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px"><button class="mini lluvia-btn" data-act="suspender" data-f="${f<hoyISO?hoyISO:f}">⛔ Suspender clases (feriado, etc.)</button><button class="mini lluvia-btn" data-act="lluvia" data-f="${f<hoyISO?hoyISO:f}">🌧 Por lluvia</button></div>
+  <p class="sem-res">${fija?(/s$/.test(DIAS_LARGO[d])?DIAS_LARGO[d]:DIAS_LARGO[d]+"s"):`${DIAS_LARGO[d]} ${dm(isoDate(f))}${f===hoyISO?" (hoy)":""}`} · ${ts.length} turno${ts.length===1?"":"s"} · ${tot.al} ${fija?"alumnos":"vienen"} · <b>${tot.lib} lugar${tot.lib===1?"":"es"} libre${tot.lib===1?"":"s"}</b></p>
+  ${ts.length?ts.map(t=>{ const {al,aj,vienen,lb}=info(t); const sp=susp(t);
+    return `<section class="w-card sem-t"${sp?' style="opacity:.6"':""}><div class="sem-h"><b class="num">${t.hora}</b><span class="tag ${t.club}">${clubN(t.club)}</span>${t.al.length?`<button class="sem-cat" data-act="turnoCat" data-club="${t.club}" data-dia="${t.dia}" data-hora="${t.hora}">${t.nivel?esc(nivelTxt(t.nivel)):"+ Categoría"}</button>`:`<span class="sem-cat">${t.punta?"Vacío · solo si hace falta":"Vacío"}</span>`}<span class="sem-cupo ${lb&&!sp?"":"full"}">${sp?"Suspendida":`${vienen}/${CUPO}`}</span></div>
+      <div class="sem-al">${al.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(a=>{ const no=aj.aus.has(a.id); return `<button data-act="editA" data-id="${a.id}"${no?' style="background:#fbe9e7;color:#9c3a31"':""}>${no?`<s>${esc(a.nombre)}</s> <small style="color:#b3261e">No viene</small>`:esc(a.nombre)}${!no&&esNuevo(a)&&!(arranqueDe(a)>hoyISO)?` <small style="color:#13834f">Nuevo · desde ${fechaDM(arranqueDe(a))}</small>`:""}${fija?(()=>{ const hh=(a.horarios||[]).find(x=>x.dia===t.dia&&x.hora===t.hora&&clubH(a,x)===t.club); const ds=[a.inicio,hh&&hh.desde].filter(Boolean).sort().pop(); return ds&&ds>hoyISO?` <small>empieza ${fechaDM(ds)}</small>`:""; })():""}</button>`; }).join("")}${aj.rec.map(a=>`<button data-act="editA" data-id="${a.id}" style="background:#e8eefb;color:#2f4f8a">${esc(a.nombre)} <small style="color:#2f4f8a">Recupera</small></button>`).join("")}${sp?'<span class="full">Suspendida · recuperan</span>':lb?`<span class="lib">${lb} lugar${lb===1?"":"es"} libre${lb===1?"":"s"}</span>`:'<span class="full">Completo</span>'}</div></section>`; }).join(""):`<p class="w-empty">No hay turnos los ${DIAS_LARGO[d].toLowerCase()}${cl?` en ${clubN(cl)}`:""}.</p>`}
+  <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="tab" data-t="hoy">Ver el día completo (asistencia y lluvia) ›</button></section>`;
 }
 /* ---------- Pedido de un alumno para sumar un día: Gabriel lo aprueba y elige desde cuándo ---------- */
 document.addEventListener("change",e=>{ if(e.target&&e.target.id==="solDesde"&&S.solId){ S.solDesde=e.target.value; openSolicitud(S.solId); } });
@@ -1658,6 +1668,8 @@ document.addEventListener("click",async e=>{
     case "cfgOpen": openCfg(); break;
     case "libresClub": LIB.club=b.dataset.c; openLibres(); break;
     case "semDia": S.semDia=Number(b.dataset.d); render(); break;
+    case "semOff": S.semOff=Math.max(-4,Math.min(8,(S.semOff||0)+Number(b.dataset.d))); render(); break;
+    case "semFija": S.semFija=!S.semFija; render(); break;
     case "semClub": S.semClub=b.dataset.v; render(); break;
     case "solVer": S.solDesde=null; S.solId=b.dataset.id; openSolicitud(b.dataset.id); break;
     case "solOk": await aprobarSolicitud(b.dataset.id); break;

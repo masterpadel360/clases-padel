@@ -198,6 +198,7 @@ async function iniciarStaff(perfil, u) {
   if (S.esOwner) db.collection("comprobantes").onSnapshot(snap => { S.comps = {}; snap.docs.forEach(d => { S.comps[d.id] = { id: d.id, ...d.data() }; }); aplicarComprobantes(); vis(); }, () => {});
   db.collection("alumnos").onSnapshot(snap => { S.alumnos = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.a = true; S.dbState = "ok"; if (!snap.metadata.fromCache) publicarTurnos(); aplicarComprobantes(); aplicarAumentosVencidos(); repararPlanes(); vis(); }, e => { console.error(e); S.dbState = "sin-db"; render(); });
   db.doc("config/general").onSnapshot(d => { S.cfg = d.exists ? d.data() : {}; publicarInfo(); }, () => {});
+  db.doc("publico/suspendidas").onSnapshot(d => { S.suspT = (d.exists && d.data().t) || {}; vis(); }, () => {});
   refrescarNotif({ rol: perfil.rol });
 }
 
