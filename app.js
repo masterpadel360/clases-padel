@@ -427,7 +427,7 @@ let OJO=true; try{ OJO=localStorage.getItem("ojoPlata")!=="0"; }catch(e){}
 function semLunes(){ const x=new Date(now); x.setHours(12,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)+7*(S.semOff||0)); return x; }
 function semFecha(dia){ const x=semLunes(); x.setDate(x.getDate()+((dia+6)%7)); return toISO(x); }
 function vSemana(){
-  const cl=S.semClub||""; const todos=turnosGrilla("").filter(t=>!cl||t.club===cl); const fija=!!S.semFija;
+  const cl=S.semClub||""; const todos=turnosGrilla("").filter(t=>!cl||t.club===cl); const fija=S.semFija!==false; // por defecto, la grilla fija; "Ver por fecha" muestra los avisos de cada día
   const dias=[1,2,3,4,5,6,0].filter(d=>turnosGrilla("").some(t=>t.dia===d));
   if(S.semDia===undefined||!dias.includes(S.semDia)) S.semDia=dias.includes(now.getDay())?now.getDay():(dias[0]??1);
   const d=S.semDia; const f=semFecha(d); const ts=todos.filter(t=>t.dia===d).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
@@ -439,7 +439,7 @@ function vSemana(){
   const dm=x=>`${x.getDate()}/${x.getMonth()+1}`;
   const fD=x=>{ const y=new Date(lun); y.setDate(y.getDate()+((x+6)%7)); return y; };
   return `
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 8px">${fija?`<b class="small">Grilla fija (sin avisos)</b>`:`<span style="display:flex;align-items:center;gap:4px"><button class="mini" data-act="semOff" data-d="-1" aria-label="Semana anterior">‹</button><b class="small" style="min-width:118px;text-align:center">${(S.semOff||0)===0?"Esta semana":(S.semOff===1?"Semana que viene":"Semana")} · ${dm(lun)} al ${dm(vie)}</b><button class="mini" data-act="semOff" data-d="1" aria-label="Semana siguiente">›</button></span>`}<button class="linkish" data-act="semFija" style="font-size:12.5px">${fija?"‹ Ver por fecha":"Grilla fija"}</button></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 8px">${fija?`<b class="small">Grilla fija (sin avisos)</b>`:`<span style="display:flex;align-items:center;gap:4px"><button class="mini" data-act="semOff" data-d="-1" aria-label="Semana anterior">‹</button><b class="small" style="min-width:118px;text-align:center">${(S.semOff||0)===0?"Esta semana":(S.semOff===1?"Semana que viene":"Semana")} · ${dm(lun)} al ${dm(vie)}</b><button class="mini" data-act="semOff" data-d="1" aria-label="Semana siguiente">›</button></span>`}<button class="linkish" data-act="semFija" style="font-size:12.5px">${fija?"Ver por fecha ›":"‹ Grilla fija"}</button></div>
   <div class="w-seg sem-dias">${dias.map(x=>`<button data-act="semDia" data-d="${x}" aria-pressed="${x===d}"><b>${DIAS[x]}${fija?"":` ${dm(fD(x))}`}</b><small>${n(x)} turno${n(x)===1?"":"s"}</small></button>`).join("")}</div>
   <div class="w-seg">${[["","Todos"],["JUMP","Jump"],["ESPACIO","Espacio"]].map(([v,l])=>`<button data-act="semClub" data-v="${v}" aria-pressed="${cl===v}">${l}</button>`).join("")}</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 8px"><button class="mini lluvia-btn" data-act="suspender" data-f="${f<hoyISO?hoyISO:f}">⛔ Suspender clases (feriado, etc.)</button><button class="mini lluvia-btn" data-act="lluvia" data-f="${f<hoyISO?hoyISO:f}">🌧 Por lluvia</button></div>
@@ -1669,7 +1669,7 @@ document.addEventListener("click",async e=>{
     case "libresClub": LIB.club=b.dataset.c; openLibres(); break;
     case "semDia": S.semDia=Number(b.dataset.d); render(); break;
     case "semOff": S.semOff=Math.max(-4,Math.min(8,(S.semOff||0)+Number(b.dataset.d))); render(); break;
-    case "semFija": S.semFija=!S.semFija; render(); break;
+    case "semFija": S.semFija=S.semFija===false; render(); break;
     case "semClub": S.semClub=b.dataset.v; render(); break;
     case "solVer": S.solDesde=null; S.solId=b.dataset.id; openSolicitud(b.dataset.id); break;
     case "solOk": await aprobarSolicitud(b.dataset.id); break;
