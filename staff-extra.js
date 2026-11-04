@@ -346,6 +346,7 @@ function pintarResetPrueba() {
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Borrar pruebas</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Queda como si nunca hubiera usado la app. Su usuario y contraseña siguen iguales, y la asistencia que tomaron ustedes no se toca.</span></div>
     ${items.length ? `<div class="field"><span class="flabel">Se borra (${items.length})</span><div style="display:grid;gap:6px;font-size:14px">${items.map(x => `<span>• ${x}</span>`).join("")}</div></div>` : `<div class="empty">No hay nada de la app para borrar.</div>`}
     <div class="field"><span class="flabel">Clases para recuperar al terminar</span><div style="display:flex;align-items:center;gap:14px"><button type="button" class="mini" data-act="resetN" data-id="${a.id}" data-d="-1">−</button><b class="num" style="font-size:22px">${RP.n}</b><button type="button" class="mini" data-act="resetN" data-id="${a.id}" data-d="1">+</button></div><span class="small muted">Ahora tiene ${recN(a)}. Dejá las que de verdad le quedan (las faltas reales que venía arrastrando).</span></div>
+    ${a.uid ? `<label class="small" style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" id="rpIngreso" checked style="margin-top:3px"> <span><b>Que empiece de cero en la app</b>: borra que "entró" y las notificaciones registradas (las de tu celu si entraste con su usuario). Cuando entre, le va a pedir activar las notificaciones en su celu.</span></label>` : ""}
     <div class="btns"><span></span><span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button type="button" class="btn pri" data-act="resetOk" data-id="${a.id}">Borrar y dejar en cero</button></span></div>`);
 }
 async function hacerResetPrueba(a, b) {
@@ -369,6 +370,12 @@ async function hacerResetPrueba(a, b) {
     const upd = { recuperar: RP.n, recVence, ultimoAviso: FV.delete() };
     RP.comp.filter(c => c.aplicado && a.pagos && a.pagos[c.mes] && a.pagos[c.mes].comprobante).forEach(c => { upd["pagos." + c.mes] = FV.delete(); });
     ops.push(bt => bt.update(fdb.doc("alumnos/" + a.id), upd));
+    // Que vuelva a empezar de cero: sin "entró a la app" ni notificaciones registradas (ni las de los hijos que maneja).
+    if (a.uid && ($("#rpIngreso") || {}).checked) {
+      ops.push(bt => bt.delete(fdb.doc("ingresos/" + a.uid)));
+      ops.push(bt => bt.delete(fdb.doc("tokens/" + a.uid)));
+      S.alumnos.filter(x => x.manejaUid === a.uid).forEach(x => ops.push(bt => bt.delete(fdb.doc("tokens/" + a.uid + "__" + x.id))));
+    }
     for (let i = 0; i < ops.length; i += 400) { const bt = fdb.batch(); ops.slice(i, i + 400).forEach(f => f(bt)); await bt.commit(); }
     closeSheet(); toast(`${a.nombre} quedó en cero`);
   } catch (e) { console.error(e); b.disabled = false; b.textContent = "Borrar y dejar en cero"; toast("No se pudo borrar. Probá de nuevo."); }
