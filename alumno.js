@@ -147,7 +147,19 @@ function libresDe(club, fecha, hora) {
   return cupo - (t.n || 0) + (c.aus || 0) - (c.rec || 0);
 }
 // Clases para recuperar del alumno, con hasta cuándo valen (incluye las que acaba de avisar).
-function recAl() { return P.a ? recBuckets(P.a) : []; }
+// Cuenta familiar (ej. Carla y Fran): las clases para recuperar son de todos, cualquiera de los dos las usa.
+function recPropias() { return P.a ? recBuckets(P.a) : []; }
+function recAl() {
+  if (!P.a) return []; const fam = (typeof famLista === "function" ? famLista() : []); if (!fam.length) return recPropias();
+  const m = {}; [P.a, ...fam.map(o => o.a)].forEach(a => recBuckets(a).forEach(b => { m[b.vence] = (m[b.vence] || 0) + b.n; }));
+  return Object.keys(m).filter(k => k >= hoyISO).sort().map(k => ({ vence: k, n: m[k] }));
+}
+// De quién sale la clase que se usa: primero la propia; si no tiene, la del familiar que la tenga por vencer antes.
+function donanteRec(a = P.a) {
+  if (recBuckets(a).reduce((s, x) => s + x.n, 0) > 0) return null;
+  const c = [{ a: P.a }, ...famLista()].filter(o => o.a && o.a.id !== a.id).map(o => ({ o, bk: recBuckets(o.a) })).filter(x => x.bk.length).sort((x, y) => x.bk[0].vence.localeCompare(y.bk[0].vence));
+  return c.length ? c[0].o : null;
+}
 // Un turno sin alumnos fijos (vacío en la grilla) se ofrece a cualquier nivel. Cuando alguien reserva ahí,
 // el turno queda con el nivel de ese alumno para esa fecha, y solo lo ven los de su mismo nivel.
 function nivelCupo(club, fecha, hora) { const c = P.cupos[cupoId(club, fecha, hora)] || {}; return (c.rec || 0) - (c.aus || 0) > 0 ? (c.nivel || "") : ""; }
@@ -516,13 +528,14 @@ async function avisarNoVoy(fecha, hora, tipo, ctx) {
   return res.verificado ? !!res.r.conRecupero : res.r;
 }
 async function reservarRec(fecha, hora, clubElegido, ctx) {
-  const a = ctx ? ctx.a : P.a; const avs = ctx ? ctx.avisos : P.avisos; const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
+  const a = ctx ? ctx.a : P.a; const avs = ctx ? ctx.avisos : P.avisos;
+  const don = donanteRec(a); const pa = don ? don.a : a; // de quién se descuenta la clase const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(club, fecha, hora); const cupo = P.info.cupo || CUPO;
   if (esSusp(club, fecha, hora)) throw { code: "susp" };
   if (avs.some(v => v.id === avId)) throw { code: "ya" };
   const vRef = fdb.doc("avisos/" + avId);
   await guardarSeguro(vRef, "recupera", () => fdb.runTransaction(async tx => {
-    const aRef = fdb.doc("alumnos/" + a.id), cRef = fdb.doc("cupos/" + cid), tRef = fdb.doc("publico/turnos");
+    const aRef = fdb.doc("alumnos/" + pa.id), cRef = fdb.doc("cupos/" + cid), tRef = fdb.doc("publico/turnos");
     const [aS, cS, tS] = [await tx.get(aRef), await tx.get(cRef), await tx.get(tRef)];
     const rec = (aS.data() || {}).recuperar || 0; if (rec < 1) throw { code: "sin-clases" };
     const base = ((tS.data() || {}).t || {})[`${club}|${d.getDay()}|${hora}`]; const c = cS.exists ? cS.data() : {};
@@ -530,7 +543,7 @@ async function reservarRec(fecha, hora, clubElegido, ctx) {
     // Punta vacía que se abre con esta reserva: hace falta más anticipación y se avisa al profe y a los de su nivel.
     const abrePunta = !!base.punta && !((c.rec || 0) - (c.aus || 0) > 0);
     if (inicioDe(fecha, hora).getTime() - Date.now() < anticipacionMs(abrePunta)) throw { code: abrePunta ? "tarde-punta" : "tarde" };
-    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: ((ctx ? recBuckets(a) : recAl())[0] || {}).vence || venceDe(hoyISO), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false, ...(abrePunta ? { abrePunta: true } : {}) });
+    tx.set(vRef, { alumnoId: a.id, uid: P.uid, nombre: a.nombre, club, fecha, hora, hhmm: hhmmDe(hora), dia: d.getDay(), nivel: t.nivel || "", tipo: "recupera", conRecupero: false, vence: (recBuckets(pa)[0] || {}).vence || venceDe(hoyISO), ...(don ? { usaDe: pa.id } : {}), inicio: firebase.firestore.Timestamp.fromDate(inicioDe(fecha, hora)), creado: firebase.firestore.FieldValue.serverTimestamp(), visto: false, contado: false, ...(abrePunta ? { abrePunta: true } : {}) });
     // Turno vacío: el primero que reserva le pone su nivel para esa fecha (no se muestra a los alumnos).
     const nivelC = c.nivel || (!base.n && !base.nivel ? ([...catsDe(a)][0] || "") : "");
     tx.set(cRef, { club, fecha, hora, dia: d.getDay(), aus: c.aus || 0, rec: (c.rec || 0) + 1, ultimo: avId, ...(nivelC ? { nivel: nivelC } : {}) });
@@ -547,7 +560,7 @@ function hermanosNoVoy(f, h) {
     const t = o.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === h) ? "recupera" : (o.a.horarios || []).some(x => Number(x.dia) === dia && x.hora === h) ? "fija" : null;
     return t ? { o, t } : null; }).filter(Boolean);
 }
-function hermanosRec(f, h) { return famLista().filter(o => (o.a.recuperar || 0) > 0 && !o.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === h)).map(o => ({ o })); }
+function hermanosRec(f, h) { const pool = recAl().reduce((s, x) => s + x.n, 0); return famLista().filter(o => ((o.a.recuperar || 0) > 0 || pool >= 2) && !o.avisos.some(v => v.tipo === "recupera" && v.fecha === f && v.hora === h)).map(o => ({ o })); }
 function famChecks(l, txt) { return l.length ? `<div class="msg" style="gap:6px;margin-top:10px"><span class="small"><b>${txt}</b></span>${l.map((x, i) => `<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="famChk" data-i="${i}" checked> ${esc(nombreCorto(x.o.a.nombre))}</label>`).join("")}</div>` : ""; }
 const famElegidos = l => [...document.querySelectorAll(".famChk:checked")].map(x => l[+x.dataset.i]).filter(Boolean);
 const ERR_AL = { susp: "Esa clase está suspendida: no hace falta avisar, ya te queda para recuperar.", ocupado: "Tu lugar ya lo tomó otra persona. Hablá con Gabriel.", ya: "Ya estaba avisado.", lleno: "Justo se ocupó ese lugar. Elegí otro.", tarde: "Ese horario ya cerró: se puede reservar hasta 10 minutos antes. Elegí otro.", "tarde-punta": "Ese horario se tenía que reservar con 3 horas de anticipación. Elegí otro.", "sin-clases": "No tenés clases para recuperar.", "permission-denied": "No se pudo: quizás ya pasó el horario. Recargá la página.", unavailable: "Sin conexión. Probá de nuevo.", lento: "La señal está lenta y no se pudo confirmar. Revisá la conexión y tocá Reintentar.", "deadline-exceeded": "La señal está lenta. Tocá Reintentar." };
@@ -594,7 +607,8 @@ document.addEventListener("click", async e => {
   if (pa === "reservar") {
     const { f, h, c } = b.dataset; const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;
     const hermR = hermanosRec(f, h);
-    confirmar(`¿Recuperás ${cuando}?`, `Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.`, "Reservar", async () => {
+    const donR = donanteRec();
+    confirmar(`¿Recuperás ${cuando}?`, donR ? `Se usa una de las clases para recuperar de <b>${esc(nombreCorto(donR.a.nombre))}</b> (las comparten) y te guardamos el lugar.` : `Se te descuenta una clase de las que tenés para recuperar y te guardamos el lugar.`, "Reservar", async () => {
       const famR = famElegidos(hermR), famOk = [], famMal = [];
       if (famR.length) await reservarRec(f, h, c);
       for (const x of famR) { try { await reservarRec(f, h, c, x.o); famOk.push(x.o.a); } catch (e) { console.error(e); famMal.push([x.o.a, e && e.code]); } }

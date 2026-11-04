@@ -35,9 +35,9 @@ service cloud.firestore {
       let av = getAfter(doc('avisos', d.ultimoAviso)).data;
       return d.diff(o).affectedKeys().hasOnly(['recuperar', 'ultimoAviso'])
         && !exists(doc('avisos', d.ultimoAviso))
-        && av.alumnoId == id
-        && ((av.tipo == 'ausencia' && av.conRecupero == true && d.recuperar == o.get('recuperar', 0) + 1)
-          || (av.tipo == 'recupera' && o.get('recuperar', 0) >= 1 && d.recuperar == o.get('recuperar', 0) - 1));
+        // Cuenta familiar: una recuperación puede usar la clase de otro alumno de la misma cuenta ("usaDe").
+        && ((av.tipo == 'ausencia' && av.alumnoId == id && av.conRecupero == true && d.recuperar == o.get('recuperar', 0) + 1)
+          || (av.tipo == 'recupera' && av.get('usaDe', av.alumnoId) == id && o.get('recuperar', 0) >= 1 && d.recuperar == o.get('recuperar', 0) - 1));
     }
     match /alumnos/{id} {
       allow read: if esStaff() || esMio(id);
@@ -60,7 +60,7 @@ service cloud.firestore {
         && d.visto == false
         && (d.tipo != 'ausencia' || d.conRecupero == false || d.inicio > request.time + duration.value(24, 'h'))
         && ((d.tipo == 'ausencia' && d.conRecupero == false)
-          || getAfter(doc('alumnos', d.alumnoId)).data.ultimoAviso == id)
+          || (esMio(d.get('usaDe', d.alumnoId)) && getAfter(doc('alumnos', d.get('usaDe', d.alumnoId))).data.ultimoAviso == id))
         && getAfter(doc('cupos', d.club + '_' + d.fecha + '_' + d.hhmm)).data.ultimo == id
         && (d.tipo == 'ausencia' || lugaresOk(d));
     }
