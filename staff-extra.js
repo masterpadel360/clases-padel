@@ -233,6 +233,8 @@ window.accionExtra = async (act, b, A) => {
     case "resetOk": if (A) await hacerResetPrueba(A, b); break;
     case "resetN": RP.n = Math.max(0, RP.n + Number(b.dataset.d)); pintarResetPrueba(); break;
     case "avisoDeshacer": await deshacerAviso(b.dataset.av); break;
+    case "ausCargar": if (A) { const [f, h, club] = (($("#ausSel") || {}).value || "").split("|"); if (!f) break; b.disabled = true;
+      if (await cargarAusencia(A, f, h, club, ($("#ausRec") || {}).checked)) { const r = S.alumnos.find(x => x.id === A.id) || A; closeSheet(); setTimeout(() => { formAlumno(r); cargarHist(r); }, 400); } else b.disabled = false; } break;
     case "profeCrear": openAcceso(null, "profe"); break;
     case "accClave": await claveNuevaPara(b.dataset.uid, A); break;
     case "telGSave": { const v = $("#cTelG").value.trim(); if (await safe(() => fdb.doc("config/general").update({ ...S.cfg, telGabriel: v }), "Guardado")) S.cfg = { ...S.cfg, telGabriel: v }; break; }
@@ -240,10 +242,42 @@ window.accionExtra = async (act, b, A) => {
 };
 
 /* ---------- Deshacer un aviso (el alumno al final sí va / no va a recuperar) ---------- */
+// Próximas clases fijas del alumno (2 semanas) que todavía no avisó: para cargarle Gabriel que no viene.
+function proximasClases(a) {
+  const out = []; const d = new Date(now); d.setHours(0, 0, 0, 0);
+  for (let i = 0; i < 15; i++, d.setDate(d.getDate() + 1)) { const f = toISO(d);
+    (a.horarios || []).filter(h => Number(h.dia) === d.getDay() && !(h.desde && h.desde > f) && !(a.inicio && a.inicio > f)).forEach(h => {
+      if (inicioDeF(f, h.hora) <= Date.now()) return;
+      if (S.avisos.some(v => v.alumnoId === a.id && v.fecha === f && v.hora === h.hora && v.tipo === "ausencia")) return;
+      out.push({ f, h: h.hora, club: clubH(a, h) }); }); }
+  return out.sort((x, y) => (x.f + x.h).localeCompare(y.f + y.h));
+}
+const inicioDeF = (f, h) => new Date(`${f}T${h}:00-03:00`).getTime();
+function cargarAusHTML(a) {
+  if (!S.esOwner || a.activo === false) return ""; const l = proximasClases(a); if (!l.length) return "";
+  return `<div class="field"><span class="flabel">Avisó por WhatsApp que no viene</span><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="ausSel" style="flex:1;min-width:0">${l.map(c => `<option value="${c.f}|${c.h}|${c.club}">${fechaCorta(c.f)} ${c.h}${c.club === "ESPACIO" ? " · Espacio" : " · Jump"}</option>`).join("")}</select><button type="button" class="mini go" data-act="ausCargar" data-id="${a.id}">Cargar</button></div>
+    <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ausRec" checked> Le queda para recuperar (avisó con tiempo)</label>
+    <span class="small muted">Queda igual que si avisara por la app: a ${a.club === "ESPACIO" ? "vos" : "Esteban"} le llega el aviso, ese lugar se libera para recuperar y se ve "No viene" en la agenda.</span></div>`;
+}
+async function cargarAusencia(a, f, h, club, conRec) {
+  const hh = hhmmDe(h), id = `${a.id}_${f}_${hh}_ausencia`; const d = isoDate(f); const FV = firebase.firestore.FieldValue;
+  try {
+    await fdb.runTransaction(async tx => {
+      const vRef = fdb.doc("avisos/" + id), cRef = fdb.doc(`cupos/${club}_${f}_${hh}`), aRef = fdb.doc("alumnos/" + a.id);
+      const [vS, cS, aS] = [await tx.get(vRef), await tx.get(cRef), await tx.get(aRef)]; if (vS.exists) throw { code: "ya" };
+      const c = cS.exists ? cS.data() : {}; const ad = { ...(aS.data() || {}), id: a.id };
+      tx.set(vRef, { alumnoId: a.id, uid: S.uid || "", nombre: a.nombre, club, fecha: f, hora: h, hhmm: hh, dia: d.getDay(), nivel: "", tipo: "ausencia", conRecupero: !!conRec, inicio: firebase.firestore.Timestamp.fromDate(new Date(inicioDeF(f, h))), creado: FV.serverTimestamp(), visto: true, contado: true, cargadoPor: "Gabriel" });
+      tx.set(cRef, { club, fecha: f, hora: h, dia: d.getDay(), aus: (c.aus || 0) + 1, rec: c.rec || 0, ultimo: id, ...(c.nivel ? { nivel: c.nivel } : {}) });
+      if (conRec) tx.update(aRef, recCambio(ad, 1, f));
+    });
+    try { if (window.AVISOS_URL) fetch(window.AVISOS_URL, { method: "POST", keepalive: true }).catch(() => {}); } catch (e) {}
+    toast(`Listo: ${nombreCorto(a.nombre)} no viene el ${fechaCorta(f)} ${h}${conRec ? " · le queda para recuperar" : ""}`); return true;
+  } catch (e) { console.error(e); toast(e && e.code === "ya" ? "Ya estaba cargado." : "No se pudo cargar. Probá de nuevo."); return false; }
+}
 function avisosFichaHTML(a) {
   const av = S.avisos.filter(v => v.alumnoId === a.id && v.fecha >= hoyISO).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
-  if (!av.length) return "";
-  return `<div class="field"><span class="flabel">Avisos por la app</span><div style="display:grid;gap:6px">${av.map(v => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px"><span>${v.tipo === "ausencia" ? `No va el <b>${fechaCorta(v.fecha)} ${v.hora}</b>${v.conRecupero ? " · recupera" : " · sin recupero"}` : `Recupera el <b>${fechaCorta(v.fecha)} ${v.hora}</b>`}</span><button type="button" class="mini" style="font-size:12px;padding:4px 10px" data-act="avisoDeshacer" data-av="${v.id}">Deshacer</button></div>`).join("")}</div>
+  if (!av.length) return cargarAusHTML(a);
+  return cargarAusHTML(a) + `<div class="field"><span class="flabel">Avisos por la app</span><div style="display:grid;gap:6px">${av.map(v => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px"><span>${v.tipo === "ausencia" ? `No va el <b>${fechaCorta(v.fecha)} ${v.hora}</b>${v.conRecupero ? " · recupera" : " · sin recupero"}` : `Recupera el <b>${fechaCorta(v.fecha)} ${v.hora}</b>`}</span><button type="button" class="mini" style="font-size:12px;padding:4px 10px" data-act="avisoDeshacer" data-av="${v.id}">Deshacer</button></div>`).join("")}</div>
     <span class="small muted">Deshacer: si al final sí viene (o no viene a recuperar). La clase para recuperar se ajusta sola.</span></div>`;
 }
 async function deshacerAviso(id) {
