@@ -112,11 +112,20 @@
 
     const mes = mesKey(now); const mesTx = MESES[Number(mes.slice(5, 7)) - 1];
     const est = intentar(() => estPago(a, mes), "");
-    const monto = intentar(() => montoMes(a, mes), 0); const ncl = intentar(() => clasesMes(a, mes), 0);
+    const monto = intentar(() => montoMes(a, mes), 0); const ncl = intentar(() => (typeof clasesCobro === "function" ? clasesCobro(a, mes) : clasesMes(a, mes)), 0);
     L.push(`Cuota de ${mesTx}: ${{ pagado: "PAGADA", vencido: "VENCIDA", rechazado: "comprobante rechazado, tiene que volver a mandarlo", pendiente: "pendiente" }[est] || est}${monto ? `, ${money(monto)}` : ""}${ncl ? ` (${ncl} clases)` : ""}${intentar(() => conPlazo(mes), false) ? `, se paga hasta el ${pagoVence(mes)}` : ", este mes lo arregla directo con Gabriel (desde noviembre 2026 se paga por la app)"}`);
     const deuda = intentar(() => mesesPago().filter(m => m !== mes && estPago(a, m) !== "pagado"), []);
     if (deuda.length) L.push(`Meses anteriores sin pagar: ${deuda.map(m => MESES[Number(m.slice(5, 7)) - 1] + " " + m.slice(0, 4)).join(", ")}`);
     if (P.info && P.info.alias) L.push(`Alias para transferir: ${P.info.alias}`);
+    // Cuenta familiar: los otros alumnos que maneja esta misma cuenta (ej. una mamá y su hijo).
+    const fam = intentar(() => famLista(), []);
+    if (fam.length) {
+      L.push(`CUENTA FAMILIAR: esta persona maneja también a ${fam.map(o => o.a.nombre).join(" y ")} con el mismo usuario. Ahora está viendo la cuenta de ${a.nombre}. Si pregunta por otro, respondé con sus datos de abajo. Para avisar que no va, reservar o pagar por el otro, tiene que tocar el botón con su nombre ARRIBA DE TODO de la app (también, al avisar "no voy", la app le pregunta si tampoco va el otro, y al pagar puede pagar a todos juntos con una sola transferencia). Las clases para recuperar son compartidas: cualquiera de los dos puede usar las del otro (el total de arriba ya las suma).`);
+      fam.forEach(o => { const b = o.a; const hs2 = (b.horarios || []).map(h => `${DIAS[h.dia]} ${h.hora} en ${club(intentar(() => clubH(b, h), b.club))}`);
+        const avs = (o.avisos || []).filter(v => v.fecha >= hoyISO).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora)).slice(0, 6).map(v => `${fechaTx(v.fecha)} ${v.hora}: ${v.tipo === "ausencia" ? (v.conRecupero ? "avisó que no va (recupera)" : "avisó tarde que no va") : "recupera"}`);
+        const mt = intentar(() => montoMes(b, mes), 0); const pg = !!((b.pagos || {})[mes] || {}).pagado;
+        L.push(`DATOS DE ${String(b.nombre || "").toUpperCase()}: horarios fijos: ${hs2.join("; ") || "ninguno"}${avs.length ? `; avisos: ${avs.join("; ")}` : ""}; cuota de ${mesTx}: ${pg ? "PAGADA" : "pendiente"}${mt ? `, ${money(mt)}` : ""}.`); });
+    }
     return L.join("\n");
   }
 
