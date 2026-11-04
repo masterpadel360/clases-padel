@@ -584,7 +584,7 @@ document.addEventListener("click", async e => {
   if (pa === "sumarCancelar") { const id = b.dataset.id; confirmar("¿Cancelás el pedido?", "Gabriel ya no lo va a ver.", "Sí, cancelar", async () => { await conTope(fdb.doc("solicitudes/" + id).delete()); return { titulo: "Pedido cancelado" }; }); return; }
   if (pa === "sumarVisto") { try { await fdb.doc("solicitudes/" + b.dataset.id).delete(); } catch (x) {} return; }
   if (pa === "pagarOk") { await mandarComprobante(b.dataset.m, b); return; }
-  if (pa === "alias") { try { await navigator.clipboard.writeText(P.info.alias); toast("Alias copiado"); } catch (x) { toast(P.info.alias); } return; }
+  if (pa === "alias") { const al = String(P.info.alias || "").trim(); try { await navigator.clipboard.writeText(al); toast(`Alias copiado: ${al}`); } catch (x) { prompt("Copiá el alias:", al); } return; }
   if (pa === "novoy") {
     const { f, h, t } = b.dataset; const con = conRecuperoSi(f, h, t); const herm = hermanosNoVoy(f, h);
     const cuando = `${fechaRel(f).toLowerCase() === "hoy" ? "hoy" : "el " + fechaLarga(f).toLowerCase()} a las ${h}`;

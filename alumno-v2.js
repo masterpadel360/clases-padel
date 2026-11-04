@@ -375,7 +375,7 @@
     const otros = meses.filter(m => m !== mes && conPlazo(m));
     return `<div class="v2">${cabecera(a, estPago(a, mes))}${avisosArriba(a, "pagos")}
       <section class="v2-sec"><div class="v2-head"><h2>Tu cuota</h2><span class="k">${MESN[now.getMonth()]}</span></div>${cuota(a)}
-        ${P.info.alias ? `<div class="v2-alias"><span><span class="k">Alias para transferir</span><b>${esc(P.info.alias)}</b></span><button class="v2-mini" data-pa="alias">Copiar</button></div>` : ""}
+        ${P.info.alias ? `<div class="v2-alias"><span><span class="k">Alias para transferir</span><b>${esc(P.info.alias)}</b></span><button class="v2-mini" data-pa="alias">Copiar alias</button></div>` : ""}
       </section>
       ${otros.length ? `<section class="v2-sec"><div class="v2-head"><h2>Meses anteriores</h2><span class="k">${otros.length} sin pagar</span></div>
         <div class="v2-fichas">${otros.map(m => { const est = estPago(a, m); const n = clasesMes(a, m); const aj = ajusteDe(a, m) !== null; const p = (a.pagos || {})[m] || {}; const c = P.comps[m];
@@ -384,7 +384,7 @@
               ${est === "vencido" ? `<span class="st falta">Vencida el ${pagoVence(m)}</span>` : c && c.estado === "rechazado" ? '<span class="st falta">No se pudo confirmar el comprobante</span>' : ""}</div>
             <div class="v2-ficha-acc"><button class="v2-mini rojo" data-pa="pagar" data-m="${m}">Pagar</button></div></div>`; }).join("")}</div></section>` : ""}
       <section class="v2-sec"><div class="v2-head"><h2>Cómo pagar</h2></div>
-        <div class="v2-pasos"><div><b>1</b><span>Transferí el total al alias${P.info.alias ? ` <b>${esc(P.info.alias)}</b>` : ""}.</span></div><div><b>2</b><span>Tocá <b>Pagar ahora</b> y subí la captura del comprobante.</span></div><div><b>3</b><span>Listo: el mes queda <b class="fuitx">pagado</b> y a Gabriel le llega el aviso.</span></div></div>
+        <div class="v2-pasos"><div><b>1</b><span>Transferí el total al alias${P.info.alias ? `: <b style="white-space:nowrap">${esc(P.info.alias)}</b> <button class="v2-mini" data-pa="alias" style="margin-left:4px;vertical-align:middle">Copiar alias</button>` : ""}</span></div><div><b>2</b><span>Tocá <b>Pagar ahora</b> y subí la captura del comprobante.</span></div><div><b>3</b><span>Listo: el mes queda <b class="fuitx">pagado</b> y a Gabriel le llega el aviso.</span></div></div>
         <p class="v2-sub">Se paga del 1 al 14 de cada mes.${wa ? ` ¿Dudas? <a href="${waURL(P.info.telGabriel, `Hola Gabi! Soy ${a.nombre}. Tengo una consulta sobre el pago de ${mesSolo(mes)}.`)}" target="_blank" rel="noopener">Escribile a Gabriel</a>.` : ""}</p>
       </section>
     </div>`;
