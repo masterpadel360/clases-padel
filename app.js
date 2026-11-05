@@ -299,9 +299,17 @@ function msgCard(k,titulo,a,texto,extraBtn=""){
       <button class="mini" data-act="copy" data-text="${esc(texto)}">Copiar</button>${extraBtn}
     </div></div>`;
 }
+// Para los que recibieron el acceso y todavía no entraron (o entraron sin activar las notificaciones).
+function msgAppRec(a,notif){
+  const n=nombreCorto(a.nombre);
+  return notif
+    ? `Hola ${n}! ¿Cómo estás? Vi que entraste a la app de las clases 🙌 Te falta un pasito: activar las notificaciones, que sin eso no te deja usarla.\n\n📱 *iPhone:* abrí el link en Safari → Compartir → *Agregar a inicio* → abrí la app desde el ícono → *Activar notificaciones*.\n📱 *Android:* abrila en Chrome y tocá *Activar notificaciones* → *Permitir*.\n\nSi te traba algo, avisame y lo vemos 😊`
+    : `Hola ${n}! ¿Cómo estás? Te había mandado el acceso a la app de las clases 🎾 ¿Pudiste entrar?\n\nDesde noviembre la cuota, los avisos y las recuperaciones se manejan por ahí. Si tuviste algún problema, perdiste el usuario o no te llegó el mensaje, avisame y te lo paso de nuevo 😊`;
+}
 function openMensajes(a){
   openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Mensajes para</span><h2 class="disp">${esc(a.nombre)}</h2>
     <span class="small muted">${a.tel?esc(a.tel):"Sin teléfono cargado"} · ${[...clubsDe(a)].map(c=>CLUB_LBL[c]).join(" y ")}</span></div>
+    ${(()=>{ const ae=accesoEst(a); return ae==="creado"?msgCard("appRec","¿Pudo entrar a la app?",a,msgAppRec(a,false)):ae==="notif"?msgCard("appRec","Le falta activar las notificaciones",a,msgAppRec(a,true)):""; })()}
     ${msgCard("cobro","Cobro de "+mesSolo(S.mes),a,msgCobro(a))}
     ${msgCard("lluvia","Suspensión por lluvia",a,msgLluvia(a),`<button class="mini" data-act="recMas" data-id="${a.id}">Sumar clase a recuperar</button>`)}
     ${msgCard("recupera","Recuperar clase",a,msgRecupera(a))}
@@ -556,7 +564,7 @@ function alRow(a){
   const p=pago(a); const c=montoMes(a); const aj=ajusteDe(a)!==null; const ex=extraDias(a).length; const ae=accesoEst(a);
   return `<div class="row ${a.activo===false?"is-pausa":p?"is-ok":c>0?"is-debe":""}" data-k="${a.id}"${ae&&ae!=="sin"?' style="background:#e4e8dc"':""}><button class="main" data-act="editA" data-id="${a.id}">
     <span class="name">${esc(a.nombre)}</span>
-    <span class="meta">${ae&&S.fPago!=="app"&&S.fPago!=="notif"?ACC_TAG[ae]:""}${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${a.activo!==false&&(S.modo==="profe"?sinCat(a):faltaDe(a).length)?`<span class="tag" style="background:var(--k-amb,#b86e00);color:#fff">${S.modo==="profe"||(faltaDe(a).length===1&&sinCat(a))?"Sin categoría":"Falta "+faltaDe(a).join(", ")}</span>`:""}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
+    <span class="meta">${ae&&S.fPago!=="notif"?ACC_TAG[ae]:""}${esNuevo(a)?`<span class="tag" style="background:#13834f;color:#fff">Nuevo · arrancó ${fechaDM(arranqueDe(a))}</span>`:""}${tagsClub(a)}${a.activo!==false&&(S.modo==="profe"?sinCat(a):faltaDe(a).length)?`<span class="tag" style="background:var(--k-amb,#b86e00);color:#fff">${S.modo==="profe"||(faltaDe(a).length===1&&sinCat(a))?"Sin categoría":"Falta "+faltaDe(a).join(", ")}</span>`:""}${recN(a)>0?`<span class="tag rec">Recupera ${recN(a)}</span>`:""}<span>${esc(horarioTxt(a))}</span>${ex&&!aj&&c?"<span>Con clase extra</span>":""}${aj?'<span style="color:var(--sun)">Monto ajustado</span>':""}${a.activo===false?"<span>· Pausado</span>":""}${S.fPago==="app"?`<span class="tag no">${(S.usuarios||[]).some(u=>u.alumnoId===a.id)?"No entró":"Sin usuario"}</span>`:""}${S.fPago==="notif"?'<span class="tag no">🔕 Sin notificaciones</span>':""}</span>
   </button>
   <div class="row-act">${a.activo===false?"":`<button class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes para ${esc(a.nombre)}">${WA_ICON}</button><button class="amt num ${aj?"aj":""}" data-act="ajuste" data-id="${a.id}" aria-label="Cambiar monto de ${esc(a.nombre)}">${c?money(c):"Sin precio"}</button>${compDe(a)?`<button class="msg-btn" data-act="verComp" data-id="${a.id}" aria-label="Ver comprobante de ${esc(a.nombre)}" title="Comprobante" style="font-size:15px">🧾</button>`:""}<button class="pay ${p?"ok":"no"}" data-act="pago" data-id="${a.id}">${p?"Pagó":S.mes>="2026-11"&&(S.mes<mesKey(now)||(S.mes===mesKey(now)&&now.getDate()>13))?"Vencido":"Debe"}</button>`}</div></div>`;
 }
@@ -571,7 +579,7 @@ function vAlumnos(){
   const fp=S.fPago||""; if(fp==="debe") list=deben; else if(fp==="pago") list=pagaron;
   const ING=S.ingresos||{}, conUsr=new Set((S.usuarios||[]).filter(u=>u.rol==="alumno"&&u.alumnoId).map(u=>u.alumnoId));
   const actv=list.filter(a=>a.activo!==false), sinEntrar=S.esOwner&&S.modo!=="profe"?S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&!ING[a.id]):[], sinNotif=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&ING[a.id]&&!ING[a.id].notif);
-  if(fp==="app") list=sinEntrar.filter(a=>!S.q||(a.nombre||"").toLowerCase().includes(S.q.toLowerCase())); else if(fp==="notif") list=sinNotif;
+  if(fp==="app") list=sinEntrar.filter(a=>!S.q||(a.nombre||"").toLowerCase().includes(S.q.toLowerCase())).sort((x,y)=>(accesoEst(x)==="creado"?0:1)-(accesoEst(y)==="creado"?0:1)||(x.nombre||"").localeCompare(y.nombre||"")); else if(fp==="notif") list=sinNotif;
   const nAlu=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)).length, nEnt=nAlu-sinEntrar.length;
   const sinAcc=S.alumnos.filter(a=>a.activo!==false&&enClub(a,S.club)&&!a.usuario).length;
   const appRes=S.esOwner&&S.modo!=="profe"?`<div class="app-res">📱 App: <b class="num">${nEnt}</b> de ${nAlu} entraron${sinAcc?` · <button class="linkish" data-act="accMasivo">Mandar accesos (${sinAcc} sin usuario)</button>`:""}${sinEntrar.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="app"?"":"app"}">${fp==="app"?"Ver todos":`Ver quién falta (${sinEntrar.length})`}</button>`:" 🎉"}${sinNotif.length?` · <button class="linkish" data-act="fPago" data-v="${fp==="notif"?"":"notif"}">${fp==="notif"?"Ver todos":`${sinNotif.length} sin notificaciones`}</button>`:""}</div>`:"";
@@ -585,7 +593,7 @@ function vAlumnos(){
       <span style="display:flex;gap:12px;align-items:center"><button class="linkish" data-act="mes" data-d="-1" aria-label="Mes anterior">‹</button><span class="small" style="text-transform:capitalize">${mesLbl(S.mes)}</span><button class="linkish" data-act="mes" data-d="1" aria-label="Mes siguiente">›</button></span></div>
     <div class="seg fp" role="group" aria-label="Filtrar por pago"><button type="button" class="seg-b" data-act="fPago" data-v="" aria-pressed="${!fp}">Todos</button><button type="button" class="seg-b fp-debe" data-act="fPago" data-v="debe" aria-pressed="${fp==="debe"}">No pagaron · ${deben.length}</button><button type="button" class="seg-b fp-pago" data-act="fPago" data-v="pago" aria-pressed="${fp==="pago"}">Pagaron · ${pagaron.length}</button></div>
     ${appRes}
-    ${fp==="app"?`<div class="fp-res debe">Estos alumnos todavía no entraron a la app. Mandales el link y su usuario desde el botón de WhatsApp.${sinEntrar.some(a=>!conUsr.has(a.id))?" Los que dicen <b>Sin usuario</b> todavía no tienen acceso: crealo desde su ficha.":""}</div>`:fp==="notif"?`<div class="fp-res debe">Entraron a la app pero no activaron las notificaciones: no les van a llegar los recordatorios. Pediles que toquen la campanita en la app.</div>`:""}
+    ${fp==="app"?`<div class="fp-res debe">Estos alumnos todavía no entraron a la app. A los que dicen <b>🔑 Acceso creado · no entró</b>, tocá el ícono de WhatsApp: el primer mensaje es para preguntarles si pudieron entrar.${sinEntrar.some(a=>!conUsr.has(a.id))?" Los que dicen <b>Sin usuario</b> todavía no tienen acceso: crealo desde su ficha.":""}</div>`:fp==="notif"?`<div class="fp-res debe">Entraron a la app pero no activaron las notificaciones: no les van a llegar los recordatorios. Pediles que toquen la campanita en la app.</div>`:""}
     ${resumen}
     ${S.esOwner&&S.modo!=="profe"&&!fp?`<button type="button" class="mini aum-btn" data-act="aumento">📈 Cargar aumento de cuota</button>`:""}
     ${list.length?`<div class="list">${list.map(alRow).join("")}</div>`:fp?"":(S.alumnos.length?`<div class="empty">Nadie coincide con “${esc(S.q)}”.</div>`:emptyAlumnos())}
