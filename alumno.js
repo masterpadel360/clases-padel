@@ -550,7 +550,8 @@ async function avisarNoVoy(fecha, hora, tipo, ctx) {
 }
 async function reservarRec(fecha, hora, clubElegido, ctx) {
   const a = ctx ? ctx.a : P.a; const avs = ctx ? ctx.avisos : P.avisos;
-  const don = donanteRec(a); const pa = don ? don.a : a; // de quién se descuenta la clase const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
+  const don = donanteRec(a); const pa = don ? don.a : a; // de quién se descuenta la clase
+  const d = isoDate(fecha); const club = clubElegido || a.club; const t = P.turnos[`${club}|${d.getDay()}|${hora}`] || {};
   const avId = `${a.id}_${fecha}_${hhmmDe(hora)}_recupera`; const cid = cupoId(club, fecha, hora); const cupo = P.info.cupo || CUPO;
   if (esSusp(club, fecha, hora)) throw { code: "susp" };
   if (avs.some(v => v.id === avId)) throw { code: "ya" };
