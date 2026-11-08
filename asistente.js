@@ -177,7 +177,7 @@
         .map(v => (S.alumnos || []).find(x => x.id === v.alumnoId)).filter(Boolean);
       const vienen = fijos.filter(a => !aus.includes(a)).concat(recs);
       const cats = [...new Set(vienen.concat(fijos).map(a => String(a.categoria || "").trim().toLowerCase()).filter(Boolean))];
-      return { fijos, aus, recs, vienen, nivel: t.nivel ? String(t.nivel).toLowerCase() : cats.join("/"), susp: !!susp[`${t.club}|${f}|${t.hora}`] };
+      return { fijos, aus, recs, vienen, nivel: t.nivel ? String(t.nivel).toLowerCase() : cats.join("/"), susp: !!susp[`${t.club}|${f}|${t.hora}`] || !!susp[`${t.club}|${f}|*`] };
     }
     const dia0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     L.push(`\nLUGARES LIBRES PARA RECUPERAR O SUMAR GENTE (próximas 2 semanas; grupos de hasta ${CUPO}; ya descuenta a los que avisaron que no van y suma a los que reservaron recuperar). Un turno vacío sirve para cualquier nivel; uno con gente, solo para su nivel:`);

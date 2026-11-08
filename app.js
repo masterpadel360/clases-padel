@@ -440,7 +440,7 @@ function vSemana(){
   if(S.semDia===undefined||!dias.includes(S.semDia)) S.semDia=dias.includes(now.getDay())?now.getDay():(dias[0]??1);
   const d=S.semDia; const f=semFecha(d); const ts=todos.filter(t=>t.dia===d).sort((a,b)=>a.hora.localeCompare(b.hora)||a.club.localeCompare(b.club));
   const n=x=>todos.filter(t=>t.dia===x).length;
-  const susp=t=>!fija&&!!(S.suspT||{})[suspKey(t.club,f,t.hora)];
+  const susp=t=>!fija&&(!!(S.suspT||{})[suspKey(t.club,f,t.hora)]||!!(S.suspT||{})[suspKey(t.club,f,"*")]);
   const info=t=>{ const al=fija?t.al:t.al.filter(a=>vaEn(a,t,f)); const aj=fija?{aus:new Set(),rec:[]}:ajusteTurno(t,f); const vienen=susp(t)?0:al.length-al.filter(a=>aj.aus.has(a.id)).length+aj.rec.length; return {al,aj,vienen,lb:Math.max(0,CUPO-vienen)}; };
   const tot=ts.reduce((s,t)=>{ const i=info(t); return {al:s.al+i.vienen,lib:s.lib+(susp(t)?0:i.lb)}; },{al:0,lib:0});
   const lun=semLunes(), vie=new Date(lun); vie.setDate(vie.getDate()+4);
@@ -1199,7 +1199,7 @@ async function llCargarYa(){ LL.ya=new Set();
 function llSelTodo(){ const ya=new Date(); const ahora=`${pad(ya.getHours())}:${pad(ya.getMinutes())}`;
   LL.sel=new Set(lluviaTurnos().filter(t=>!LL.ya.has(t.k)&&(t.fecha>hoyISO||t.hora>ahora)).map(t=>t.k)); }
 function lluviaTurnos(){ const out=[]; llFechas().forEach(f=>{ const dow=isoDate(f).getDay();
-    turnos(LL.club).filter(t=>t.dia===dow).forEach(t=>out.push({...t,fecha:f,k:`${f}|${t.club}|${t.hora}`,al:t.al.filter(a=>vaEn(a,t,f))})); });
+    turnosGrilla(LL.club).filter(t=>t.dia===dow).forEach(t=>out.push({...t,fecha:f,k:`${f}|${t.club}|${t.hora}`,al:t.al.filter(a=>vaEn(a,t,f))})); });
   return out.sort((x,y)=>x.fecha.localeCompare(y.fecha)||x.hora.localeCompare(y.hora)||x.club.localeCompare(y.club)); }
 function pintarLluvia(){ const ts=lluviaTurnos(); const elegidos=ts.filter(t=>LL.sel.has(t.k)); const n=elegidos.reduce((s,t)=>s+t.al.length,0); const nt=elegidos.length; const ll=LL.motivo==="lluvia";
   const porDia={}; ts.forEach(t=>(porDia[t.fecha]=porDia[t.fecha]||[]).push(t));
@@ -1208,7 +1208,7 @@ function pintarLluvia(){ const ts=lluviaTurnos(); const elegidos=ts.filter(t=>LL
     <div class="two"><div class="field"><label for="llF">Desde</label><input id="llF" type="date" value="${LL.desde}" min="${hoyISO}"></div><div class="field"><label for="llH">Hasta</label><input id="llH" type="date" value="${LL.hasta||LL.desde}" min="${LL.desde}"></div></div>
     <div class="field"><label>Club</label><div class="seg" style="grid-template-columns:repeat(${S.modo==="profe"?1:3},1fr);margin:0">${(S.modo==="profe"?[["JUMP","Jump"]]:[["","Los dos"],["JUMP","Jump"],["ESPACIO","Espacio"]]).map(([v,l])=>`<button type="button" class="seg-b" data-act="llClub" data-v="${v}" aria-pressed="${LL.club===v}">${l}</button>`).join("")}</div></div>
     <div class="aum-list">${ts.length?Object.keys(porDia).map(f=>{ const d=isoDate(f); return `<span class="flabel" style="margin:6px 0 2px">${DIAS_LARGO[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</span>${porDia[f].map(t=>{ const ya=LL.ya.has(t.k), on=LL.sel.has(t.k);
-      return `<label class="aum-row ${on||ya?"on":""}"><input type="checkbox" data-act="llT" data-k="${t.k}" ${on||ya?"checked":""} ${ya?"disabled":""}><span class="aum-n"><b>${t.hora} · ${t.club==="ESPACIO"?"Espacio":"Jump"}</b><small>${ya?"Ya está suspendida":`${t.al.length} alumno${t.al.length===1?"":"s"}${t.nivel?" · "+esc(t.nivel):""}`}</small></span><span class="tag ${t.club}">${t.club==="ESPACIO"?"Espacio":"Jump"}</span></label>`; }).join("")}`; }).join(""):`<div class="empty">No hay turnos en esas fechas.</div>`}</div>
+      return `<label class="aum-row ${on||ya?"on":""}"><input type="checkbox" data-act="llT" data-k="${t.k}" ${on||ya?"checked":""} ${ya?"disabled":""}><span class="aum-n"><b>${t.hora} · ${t.club==="ESPACIO"?"Espacio":"Jump"}</b><small>${ya?"Ya está suspendida":t.al.length?`${t.al.length} alumno${t.al.length===1?"":"s"}${t.nivel?" · "+esc(t.nivel):""}`:"Vacío · nadie reserva ahí"}</small></span><span class="tag ${t.club}">${t.club==="ESPACIO"?"Espacio":"Jump"}</span></label>`; }).join("")}`; }).join(""):`<div class="empty">No hay turnos en esas fechas.</div>`}</div>
     <p class="small aum-exp">A cada alumno de los turnos elegidos se le suma <b>una clase para recuperar</b> (2 semanas), le llega una <b>notificación</b> al celular y esos turnos <b>no aparecen para recuperar</b>. Al final te armo el mensaje para el grupo.</p>
     <div class="btns"><button class="btn sec2" data-act="close">Cancelar</button><button class="btn pri" data-act="llOk" ${nt?"":"disabled"}>Suspender ${nt} turno${nt===1?"":"s"} · ${n} alumnos</button></div>`); }
 const fechaTxtLL=f=>{ const d=isoDate(f); return f===hoyISO?"hoy":`el ${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}`; };
@@ -1221,11 +1221,14 @@ async function confirmarLluvia(b){ const ts=lluviaTurnos().filter(t=>LL.sel.has(
   b.disabled=true; b.textContent="Suspendiendo…"; let tot=0; const lineas=[], items=[]; const ll=LL.motivo==="lluvia"; const FV=firebase.firestore.FieldValue;
   // Primero se marcan como suspendidos, así nadie los reserva para recuperar mientras tanto. Y se limpian los viejos.
   { const t={}; ts.forEach(x=>t[suspKey(x.club,x.fecha,x.hora)]=LL.motivo);
+    // Si quedan suspendidos TODOS los turnos de un club ese día, se marca el día entero (club|fecha|*): así tampoco se puede reservar en un turno que se agregue después.
+    const todos=lluviaTurnos(); new Set(todos.map(x=>`${x.fecha}|${x.club}`)).forEach(fc=>{ const [f,c]=fc.split("|"); const delDia=todos.filter(x=>x.fecha===f&&x.club===c);
+      if(delDia.every(x=>LL.sel.has(x.k)||LL.ya.has(x.k))) t[suspKey(c,f,"*")]=LL.motivo; });
     try{ const d=await suspRef().get(); const lim=toISO(new Date(now.getFullYear(),now.getMonth(),now.getDate()-7)); Object.keys((d.exists&&d.data().t)||{}).forEach(k=>{ if(k.split("|")[1]<lim) t[k]=FV.delete(); }); }catch(e){}
     if(!(await safe(()=>suspRef().set({t},{merge:true})))){ b.disabled=false; b.textContent="Reintentar"; return; } }
   const fallaron=[];
   for(const t of ts){ const ids=await lluviaTurno(t.club,t.fecha,t.hora,true); if(!ids){ fallaron.push(t); continue; } tot+=ids.length; lineas.push(`${t.fecha}|${t.hora} (${t.club==="ESPACIO"?"Espacio La 10":"Jump"})`); if(ids.length) items.push({club:t.club,fecha:t.fecha,hora:t.hora,alumnos:ids});
-    if(ll) await safe(()=>S.db.doc(`lluvias/${t.fecha}_${t.club}_${hhmmDe(t.hora)}`).set({club:t.club,fecha:t.fecha,hora:t.hora,alumnos:ids,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})); }
+    if(ll&&ids.length) await safe(()=>S.db.doc(`lluvias/${t.fecha}_${t.club}_${hhmmDe(t.hora)}`).set({club:t.club,fecha:t.fecha,hora:t.hora,alumnos:ids,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})); }
   if(fallaron.length){ const t={}; fallaron.forEach(x=>t[suspKey(x.club,x.fecha,x.hora)]=FV.delete()); await safe(()=>suspRef().set({t},{merge:true})); fallaron.forEach(x=>LL.ya.delete&&LL.ya.delete(x.k)); }
   if(!ll&&items.length) await safe(()=>S.db.collection("suspensiones").doc(`${Date.now().toString(36)}`).set({items,notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()}));
   const fechas=[...new Set(ts.map(t=>t.fecha))].sort(); const dias=listaY(fechas.map(fechaTxtLL)); const club=LL.club?` en ${LL.club==="ESPACIO"?"Espacio La 10":"Jump"}`:"";
@@ -1260,7 +1263,7 @@ async function lluviaTurno(club,fecha,hora,auto=false){
     const yo=S.esOwner?"Gabriel":"Esteban", dq={}; Object.keys(dm).forEach(k=>dq[k]=mk[k]==="lluvia"?yo:FV.delete());
     if(Object.keys(dm).length&&!(await safe(()=>ref.set({fecha,club,marcas:dm,quien:dq},{merge:true})))) return; }
   for(const [a,d] of cambios) await setRec(a,d,fecha);
-  if(!auto){ const FV=firebase.firestore.FieldValue; await safe(()=>suspRef().set({t:{[suspKey(club,fecha,hora)]:quitar?FV.delete():"lluvia"}},{merge:true})); }
+  if(!auto){ const FV=firebase.firestore.FieldValue; await safe(()=>suspRef().set({t:quitar?{[suspKey(club,fecha,hora)]:FV.delete(),[suspKey(club,fecha,"*")]:FV.delete()}:{[suspKey(club,fecha,hora)]:"lluvia"}},{merge:true})); }
   if(quitar) { try{ const lr=S.db.doc(`lluvias/${fecha}_${club}_${hhmmDe(hora)}`); const ld=await lr.get(); if(ld.exists&&!ld.data().notificado) await lr.delete(); }catch(e){} }
   if(auto) return [...t.al.filter(a=>{ const v=avisoApp(a.id,fecha,hora,"ausencia"); return !(v&&v.conRecupero&&!vuelveApp(a.id,fecha,hora)); }),...recs].map(a=>a.id);
   render(); toast(quitar?`Se quitó la lluvia de las ${hora}`:`${hora} suspendida por lluvia · ${cambios.length} con clase para recuperar`);

@@ -3,7 +3,7 @@ const P = { susp: {}, tab: "inicio", perfil: null, uid: null, a: null, turnos: {
 const DIA_MS = 86400000;
 const inicioDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`);
 // Turnos suspendidos por Gabriel (lluvia o día sin clases): no se reservan ni se avisan.
-const esSusp = (club, fecha, hora) => !!(P.susp || {})[`${club}|${fecha}|${hora}`];
+const esSusp = (club, fecha, hora) => !!(P.susp || {})[`${club}|${fecha}|${hora}`] || !!(P.susp || {})[`${club}|${fecha}|*`];
 const cupoId = (club, fecha, hora) => `${club}_${fecha}_${hhmmDe(hora)}`;
 const fechaLarga = f => { const d = isoDate(f); return `${DIAS_LARGO[d.getDay()]} ${d.getDate()}`; };
 const fechaRel = f => { const ayer = new Date(now); ayer.setDate(ayer.getDate() - 1); if (f === toISO(ayer)) return "Ayer"; const man = new Date(now); man.setDate(man.getDate() + 1); return f === hoyISO ? "Hoy" : f === toISO(man) ? "Mañana" : fechaLarga(f); };

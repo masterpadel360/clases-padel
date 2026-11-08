@@ -180,7 +180,7 @@
     }
     { const mk = marcasAl(a); const ks = new Set(Object.keys(mk).filter(k => mk[k] === "lluvia" && k.slice(0, 10) >= hoyISO));
       misClases(21).filter(c => c.susp).forEach(c => ks.add(`${c.fecha}|${c.hora}`));
-      [...ks].sort().forEach(k => { const [f, h] = k.split("|"); const d = isoDate(f); const mot = Object.entries(P.susp || {}).find(([x]) => x.endsWith(`|${f}|${h}`)); const ll = !mot || mot[1] === "lluvia";
+      [...ks].sort().forEach(k => { const [f, h] = k.split("|"); const d = isoDate(f); const mot = Object.entries(P.susp || {}).find(([x]) => (x.endsWith(`|${f}|${h}`) || x.endsWith(`|${f}|*`))); const ll = !mot || mot[1] === "lluvia";
         out.push(`<div class="v2-recordar suave"><span class="ico" style="font-size:20px">${ll ? "🌧" : "📢"}</span><span class="tx"><b>${ll ? "Se suspendió tu clase" : "No hay clase"} ${f === hoyISO ? "de hoy" : `el ${DC[d.getDay()].toLowerCase()} ${d.getDate()}`} ${h}</b><small>${ll ? "Por lluvia. " : ""}Te queda para recuperar en otro horario.</small></span></div>`); }); }
     { const px = aumentoProx(a); if (px && (tab === "inicio" || tab === "pagos")) out.push(`<div class="v2-recordar suave v2-aum">${icoP}<span class="tx"><b>Desde ${MESN[Number(px.desde.slice(5, 7)) - 1]} la clase pasa a ${money(px.precio).replace(/\$\s+/, "$")}</b><small>Hasta entonces seguís pagando ${money(px.antes).replace(/\$\s+/, "$")} por clase.</small></span></div>`); }
     if (rec) out.push(`<button class="v2-recordar" data-pa="${tab === "inicio" ? "irRec" : "v2irRec"}">${ico}<span class="tx"><b>${rec} ${rec === 1 ? "clase" : "clases"} para recuperar</b><small>Recuperala antes del ${fechaDM(bk[0].vence)} o se pierde</small></span><span class="v2-cta">Recuperar</span></button>`);
