@@ -220,7 +220,7 @@ if (alumnosConApp.length) {
   const cupos = {}; (await db.collection("cupos").where("fecha", "in", [hoy, manana]).get()).docs.forEach(d => { cupos[d.id] = d.data(); });
   // Turnos suspendidos (lluvia o día sin clases): ni recordatorio ni ofrecerlos para recuperar.
   const susp = ((await db.doc("publico/suspendidas").get()).data() || {}).t || {};
-  const suspendida = (club, f, h) => !!susp[`${club}|${f}|${h}`];
+  const suspendida = (club, f, h) => !!susp[`${club}|${f}|${h}`] || !!susp[`${club}|${f}|*`];
   const yaEnviado = async id => (await db.doc("recordatorios/" + id).get()).exists;
   const marcar = (id, extra = {}) => db.doc("recordatorios/" + id).set({ enviado: admin.firestore.FieldValue.serverTimestamp(), ...extra });
   const lugarTxt = c => CLUB[c] || c;
@@ -329,7 +329,7 @@ if (alumnosConApp.length) {
   if (horaAR > 22 || (horaAR === 22 && minAR >= 45)) revisar.push({ f: hoy, id: "noche", cuando: "hoy" });
   if (horaAR >= 10 && horaAR < 20) revisar.push({ f: sumarDias(hoy, -1), id: "manana", cuando: "ayer" });
   if (profes.length && revisar.length) {
-    let alumnos = null;
+    let alumnos = null, suspR = null;
     for (const uid of profes) for (const r of revisar) {
       if (r.f < INICIO_PROFE) continue;
       const ref = db.doc(`recordatorios/profe_${uid}_${r.f}_${r.id}`); if ((await ref.get()).exists) continue;
@@ -339,7 +339,9 @@ if (alumnosConApp.length) {
       const avs = (await db.collection("avisos").where("fecha", "==", r.f).get()).docs.map(d => d.data());
       const avisoNoVa = (id, h) => avs.some(v => v.alumnoId === id && v.hora === h && v.tipo === "ausencia") && !avs.some(v => v.alumnoId === id && v.hora === h && v.tipo === "recupera");
       alumnos.forEach(a => { if (a.inicio && a.inicio > r.f) return; (a.horarios || []).forEach(h => { if (h.dia === dow && clubH(a, h) === "JUMP" && !(h.desde && h.desde > r.f) && !avisoNoVa(a.id, h.hora)) (turnos[h.hora] = turnos[h.hora] || []).push(a.id); }); });
-      const horas = Object.keys(turnos).sort(); if (!horas.length) { await ref.set({ enviado: admin.firestore.FieldValue.serverTimestamp(), nada: true }); continue; }
+      if (!suspR) suspR = ((await db.doc("publico/suspendidas").get()).data() || {}).t || {};
+      // Turnos suspendidos (lluvia o feriado) no cuentan: ese día no hay que cargar asistencia ni horas de esos turnos.
+      const horas = Object.keys(turnos).filter(h => !suspR[`JUMP|${r.f}|${h}`] && !suspR[`JUMP|${r.f}|*`]).sort(); if (!horas.length) { await ref.set({ enviado: admin.firestore.FieldValue.serverTimestamp(), nada: true }); continue; }
       const marcas = ((await db.doc(`asistencia/${r.f}_JUMP`).get()).data() || {}).marcas || {};
       const sinAsist = horas.filter(h => turnos[h].some(id => !marcas[`${id}|${h}`]));
       const sinHoras = !((((await db.doc("horas/" + uid).get()).data() || {}).dias || {})[r.f]);
@@ -378,7 +380,7 @@ try {
     avsHoy.filter(v => v.tipo === "recupera" && !tieneAv(v.alumnoId, v.hora, "ausencia")).forEach(v => { const a = porId[v.alumnoId] || { nombre: v.nombre }; t(v.hora).recs.push(a); });
     extras.forEach(x => t(x.hora).otros.push((x.nombre || "Prueba") + (x.tipo === "invitado" ? " (invitado)" : " (prueba)")));
     for (const [hora, tt] of Object.entries(turnos)) {
-      if (susp[`JUMP|${hoy}|${hora}`]) continue;
+      if ((susp[`JUMP|${hoy}|${hora}`] || susp[`JUMP|${hoy}|*`])) continue;
       const empieza = inicioDe(hoy, hora).getTime(); const falta = (empieza - nowMs) / 60e3;
       if (falta > 20 || falta < -5) continue; // sale unos 15 min antes (el proceso corre cada 10 min)
       const vienen = [], noVan = [];
@@ -405,8 +407,8 @@ try {
     {
       const cuenta = hora => { const tt = turnos[hora]; let n = tt.recs.length + tt.otros.length;
         tt.fijos.forEach(a => { if (!(tieneAv(a.id, hora, "ausencia") && !tieneAv(a.id, hora, "recupera")) || reemp.some(x => x.alumnoId === a.id && x.hora === hora)) n++; }); return n; };
-      const conFijos = Object.keys(turnos).filter(h => turnos[h].fijos.length && !susp[`JUMP|${hoy}|${h}`]).sort();
-      const conClase = Object.keys(turnos).filter(h => !susp[`JUMP|${hoy}|${h}`] && cuenta(h) > 0).sort();
+      const conFijos = Object.keys(turnos).filter(h => turnos[h].fijos.length && !(susp[`JUMP|${hoy}|${h}`] || susp[`JUMP|${hoy}|*`])).sort();
+      const conClase = Object.keys(turnos).filter(h => !(susp[`JUMP|${hoy}|${h}`] || susp[`JUMP|${hoy}|*`]) && cuenta(h) > 0).sort();
       for (const hora of conFijos) {
         if (inicioDe(hoy, hora).getTime() <= nowMs) continue;
         const vacio = cuenta(hora) === 0;
@@ -436,7 +438,7 @@ try {
     if (horaJ >= 10 && horaJ < 16) {
       const cuantos = hora => { const tt = turnos[hora]; let n = tt.recs.length + tt.otros.length;
         tt.fijos.forEach(a => { if (!(tieneAv(a.id, hora, "ausencia") && !tieneAv(a.id, hora, "recupera")) || reemp.some(x => x.alumnoId === a.id && x.hora === hora)) n++; }); return n; };
-      const horas = Object.keys(turnos).filter(h => !susp[`JUMP|${hoy}|${h}`] && cuantos(h) > 0).sort();
+      const horas = Object.keys(turnos).filter(h => !(susp[`JUMP|${hoy}|${h}`] || susp[`JUMP|${hoy}|*`]) && cuantos(h) > 0).sort();
       for (const uid of profesJ) {
         const ref = db.doc(`recordatorios/jornada_${uid}_${hoy}`);
         const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp(), horas }); return true; });
