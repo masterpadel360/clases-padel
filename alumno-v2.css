@@ -1050,3 +1050,247 @@ html.v2.v2-staff:has(#staffApp.w-home) body{background:linear-gradient(180deg,#0
 #overlay #sheet.fa2-sheet input.fa2-sw{width:50px!important;min-width:50px;height:30px!important;min-height:0!important;padding:0!important;border:0!important;border-radius:99px!important;background:#D9D5CB!important}
 #overlay #sheet.fa2-sheet input.fa2-sw:checked{background:var(--fa-ok)!important}
 #overlay #sheet.fa2-sheet .hrow input[type=time]::-webkit-calendar-picker-indicator{display:none}
+
+/* =====================================================================
+   PANEL ENTERO (Gabriel y Esteban) con el diseño "A" de la ficha
+   Crema + verde bosque, Outfit, tarjetas blancas, pastillas, barra de abajo blanca.
+   Todo empieza con html.v2.v2-staff (solo existe con el panel abierto):
+   la app del alumno y el login no cambian. La ficha (#sheet.fa2-sheet) queda como está.
+   ===================================================================== */
+html.v2.v2-staff{--s-bg:#F4F1E8;--s-card:#fff;--s-ink:#18211C;--s-dim:#6B7368;--s-line:#E8E5DA;--s-olive:#1F3D2E;--s-cream:#F4F1E8;
+  --s-brass:#C9A445;--s-brass-l:#F2DB98;--s-rojo:#A8432F;--s-rojo-l:#C0563F;--s-lima:#E4E9DD;--s-lima-d:#2F7A4D;--s-fui:#2F7A4D;--s-falta:#A8432F;
+  --s-sport:Outfit,system-ui,-apple-system,sans-serif;--s-body:Outfit,system-ui,-apple-system,sans-serif;
+  --f-display:Outfit,system-ui,sans-serif;--f-body:Outfit,system-ui,sans-serif;
+  --ink:#18211C;--muted:#6B7368;--paper:#18211C;--btn:#1F3D2E;--btn-ink:#fff;--sun:#A8432F;--ok:#2F7A4D;--ok-soft:#E3F0E5;--warn:#A8432F;--warn-soft:#F6E3DC;
+  --jump:#2C5240;--jump-soft:#E4E9DD;--espacio:#7A5418;--espacio-soft:#EFE6D3;--wa:#1F9D55;
+  --glass:#fff;--glass-2:#F6F4EE;--glass-strong:#fff;--surface:#fff;--surface-2:#F6F4EE;--line:#E8E5DA;--line-2:#E8E5DA;
+  --pa-shadow:0 1px 2px rgba(24,33,28,.04),0 10px 24px -20px rgba(24,33,28,.35)}
+html.v2.v2-staff #staffApp,html.v2.v2-staff #staffApp.w{--s-bg:#F4F1E8;--s-card:#fff;--s-ink:#18211C;--s-dim:#6B7368;--s-line:#E8E5DA;
+  --k-bg:#F4F1E8;--k-card:#fff;--k-line:#E8E5DA;--k-ink:#18211C;--k-dim:#6B7368;--k-ok:#2F7A4D;--k-ok-s:#E3F0E5;--k-no:#A8432F;--k-no-s:#F6E3DC;--k-amb:#7A5E14;--k-amb-s:#F3EAD0;--k-jump:#2C5240;--k-jump-s:#E4E9DD;--k-esp:#7A5418;--k-esp-s:#EFE6D3;
+  --w-bg:#F4F1E8;--w-card:#fff;--w-line:#E8E5DA;--w-ink:#18211C;--w-dim:#6B7368;--w-pri:#1F3D2E;--w-pri-s:#E4E9DD;--w-acc:#E4E9DD;
+  --glass:#fff;--glass-2:#F6F4EE;--glass-strong:#fff;--surface:#fff;--surface-2:#F6F4EE;--line:#E8E5DA;--line-2:#E8E5DA;--ink:#18211C;--muted:#6B7368;--paper:#18211C}
+html.v2.v2-staff,html.v2.v2-staff body,html.v2.v2-staff:has(#staffApp.w),html.v2.v2-staff:has(#staffApp.w) body,html.v2.v2-staff:has(#staffApp.w-home) body{background:#F4F1E8!important}
+html.v2.v2-staff body{color:#18211C;font-family:Outfit,system-ui,-apple-system,sans-serif!important;-webkit-font-smoothing:antialiased}
+html.v2.v2-staff #staffApp :is(button,input,select,textarea),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(button,input,select,textarea){font-family:Outfit,system-ui,sans-serif!important}
+html.v2.v2-staff #staffApp :is(.mega,.disp,.big-num,.stat .val,.hero-title,.wm,.day b,.slot .h,.msg-k b,.tab),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.mega,.disp,.big-num,.msg-k b){font-family:Outfit,system-ui,sans-serif!important;font-stretch:100%!important;font-style:normal!important;text-transform:none!important;letter-spacing:-.01em!important}
+html.v2.v2-staff #staffApp .num{font-variant-numeric:tabular-nums}
+
+/* ---------- cabecera verde (todas las pestañas menos Inicio) ---------- */
+html.v2.v2-staff #staffApp .top{background:radial-gradient(120% 140% at 100% 0%,#2C5240 0%,#1F3D2E 60%)!important;color:#F4F1E8;margin:0 -16px;padding:12px 16px 16px!important;border-radius:0 0 28px 28px;box-shadow:0 12px 26px -22px rgba(24,33,28,.7)}
+html.v2.v2-staff #staffApp .brand{border:0!important;padding:4px 0 2px!important;background:transparent!important;box-shadow:none!important}
+html.v2.v2-staff #staffApp .wm{color:#F4F1E8!important;font-size:26px!important;font-weight:600!important;display:flex;align-items:center}
+html.v2.v2-staff #staffApp .wm::before{background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><g transform='rotate(-32 32 32)'><path d='M32 5c10.5 0 17 7.6 17 18 0 8.6-4.6 14.4-10.4 18.2L35.5 43h-7l-3.1-1.8C19.6 37.4 15 31.6 15 23 15 12.6 21.5 5 32 5z' fill='none' stroke='%231F3D2E' stroke-width='3.4' stroke-linejoin='round'/><circle cx='27' cy='15' r='1.6' fill='%231F3D2E'/><circle cx='32' cy='13' r='1.6' fill='%231F3D2E'/><circle cx='37' cy='15' r='1.6' fill='%231F3D2E'/><circle cx='25' cy='21' r='1.6' fill='%231F3D2E'/><circle cx='30' cy='20' r='1.6' fill='%231F3D2E'/><circle cx='35' cy='20' r='1.6' fill='%231F3D2E'/><circle cx='40' cy='21' r='1.6' fill='%231F3D2E'/><circle cx='27' cy='27' r='1.6' fill='%231F3D2E'/><circle cx='32' cy='26' r='1.6' fill='%231F3D2E'/><circle cx='37' cy='27' r='1.6' fill='%231F3D2E'/><circle cx='30' cy='33' r='1.6' fill='%231F3D2E'/><circle cx='35' cy='33' r='1.6' fill='%231F3D2E'/><path d='M29 43l3 6 3-6' fill='none' stroke='%231F3D2E' stroke-width='3.4' stroke-linejoin='round'/><rect x='29.3' y='48' width='5.4' height='13' rx='2.2' fill='%231F3D2E'/></g></svg>") center/68% no-repeat,#F4F1E8!important;border-radius:50%!important;width:40px!important;height:40px!important;margin-right:12px!important;flex:none}
+html.v2.v2-staff #staffApp .wm-sub,html.v2.v2-staff #staffApp #todayLbl,html.v2.v2-staff #staffApp .sub{color:#C9D6CC!important}
+html.v2.v2-staff #staffApp .top .icon-btn{width:44px;height:44px;background:rgba(244,241,232,.12)!important;border:0!important;box-shadow:none!important}
+html.v2.v2-staff #staffApp .top .icon-btn svg{stroke:#F4F1E8!important}
+html.v2.v2-staff #staffApp .top .clubs{gap:6px}
+html.v2.v2-staff #staffApp .top .chip{min-height:40px;padding:0 16px!important;border:0!important;border-radius:99px!important;background:rgba(244,241,232,.12)!important;color:#DCE5DD!important;font-size:14px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;box-shadow:none!important}
+html.v2.v2-staff #staffApp .top .chip[aria-pressed="true"]{background:#F4F1E8!important;color:#1F3D2E!important}
+html.v2.v2-staff #staffApp #view{padding-top:6px}
+
+/* ---------- Inicio: cabecera verde redondeada detrás del saludo y el resumen ---------- */
+html.v2.v2-staff #staffApp.w-home #view{position:relative;isolation:isolate;padding-top:0}
+html.v2.v2-staff #staffApp.w-home #view::before{content:"";position:absolute;z-index:-1;left:-16px;right:-16px;top:calc(-1 * env(safe-area-inset-top,0px) - 20px);height:calc(env(safe-area-inset-top,0px) + 172px);background:radial-gradient(120% 100% at 100% 0%,#2C5240 0%,#1F3D2E 55%);border-radius:0 0 30px 30px}
+html.v2.v2-staff #staffApp .w-head{color:#F4F1E8;padding-top:12px}
+html.v2.v2-staff #staffApp .w-av{background:#F4F1E8;color:#1F3D2E;font-weight:600;width:50px;height:50px;font-size:19px}
+html.v2.v2-staff #staffApp .w-hola b{font-size:25px;font-weight:600;letter-spacing:-.02em;color:#F4F1E8}
+html.v2.v2-staff #staffApp .w-hola small{color:#C9D6CC;opacity:1;font-weight:500;font-size:13.5px}
+html.v2.v2-staff #staffApp .w-bell{width:44px;height:44px;border-radius:50%;background:rgba(244,241,232,.12);color:#F4F1E8}
+html.v2.v2-staff #staffApp .w-dot{background:#F0967D;box-shadow:0 0 0 2px #1F3D2E}
+html.v2.v2-staff #staffApp .w-res{background:#fff;border-radius:20px;box-shadow:0 10px 24px -14px rgba(24,33,28,.4);padding:12px;gap:10px}
+html.v2.v2-staff #staffApp .w-k{background:#F6F4EE;border-radius:16px}
+html.v2.v2-staff #staffApp .w-k small{color:#6B7368;font-weight:600}
+html.v2.v2-staff #staffApp .w-k b{font-weight:600;letter-spacing:-.03em;color:#1F3D2E;font-size:30px}
+html.v2.v2-staff #staffApp .w-k b span{color:#6B7368;font-weight:500}
+html.v2.v2-staff #staffApp .w-k em,html.v2.v2-staff #staffApp .w-k em.up{color:#2F7A4D}
+html.v2.v2-staff #staffApp .w-k.no{background:#FBF1EE}
+html.v2.v2-staff #staffApp .w-k.no b,html.v2.v2-staff #staffApp .w-k.no em,html.v2.v2-staff #staffApp .w-k em.down{color:#A8432F}
+html.v2.v2-staff #staffApp .w-bar{background:#E3E6DC;height:6px}
+html.v2.v2-staff #staffApp .w-bar i{background:#1F3D2E}
+html.v2.v2-staff #staffApp .w-res-ant b{color:#1F3D2E}
+
+/* ---------- títulos de sección ---------- */
+html.v2.v2-staff #staffApp :is(.sec-head h2,.sec-head h3,h2.disp,.w-card-h b){font-size:18px!important;font-weight:600!important;letter-spacing:-.01em!important;color:#18211C!important;text-shadow:none!important}
+html.v2.v2-staff #staffApp .sec-head::after{display:none}
+html.v2.v2-staff #staffApp :is(.sec-head .linkish,.w-card-h button){color:#1F3D2E!important;font-weight:600!important;font-size:14px!important;text-decoration:none!important;min-height:44px;display:inline-flex;align-items:center}
+html.v2.v2-staff #staffApp :is(.sec>p.small.muted,.app>main>p.small.muted,.sec-head .small.muted,.sec-head>span.small){color:#6B7368!important;text-shadow:none!important}
+
+/* ---------- tarjetas blancas ---------- */
+html.v2.v2-staff #staffApp :is(.list,.empty,.msg,.notice,.obj,.w-card,.w-banner,.w-hcard,.tu,.as2,.notif-card,.app-res,.day,.sem-t){background:#fff!important;border:0!important;border-radius:20px!important;box-shadow:var(--pa-shadow)!important}
+html.v2.v2-staff #staffApp .list:has(> .tu){background:transparent!important;box-shadow:none!important}
+html.v2.v2-staff #staffApp .notice{color:#18211C}
+html.v2.v2-staff #staffApp :is(.row,.w-cl,.w-lib,.pd-i){border-color:#E8E5DA!important}
+html.v2.v2-staff #staffApp .w-card{padding:2px 0}
+html.v2.v2-staff #staffApp .search{background:#fff!important;border:1px solid #E8E5DA!important;border-radius:14px!important;min-height:48px;box-shadow:none!important;font-size:16px}
+html.v2.v2-staff #staffApp .hero,html.v2.v2-staff #staffApp .pl-big,html.v2.v2-staff #staffApp .hoy-now{background:radial-gradient(120% 120% at 100% 0%,#2C5240 0%,#1F3D2E 60%)!important;color:#F4F1E8;border-radius:22px!important;box-shadow:0 14px 30px -20px rgba(24,33,28,.7)!important}
+html.v2.v2-staff #staffApp .hero::after{display:none}
+html.v2.v2-staff #staffApp .hero :is(.spec-k,.stat .lbl){color:#C9D6CC!important}
+html.v2.v2-staff #staffApp .hero :is(.btn,.mini,.cta){background:#F4F1E8!important;color:#1F3D2E!important}
+
+/* ---------- etiquetas: pocas y siempre con el mismo color ---------- */
+html.v2.v2-staff #staffApp .tag,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .tag{border-radius:99px!important;font-size:11.5px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;padding:3px 9px!important;border:0!important}
+html.v2.v2-staff #staffApp .tag.JUMP,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .tag.JUMP{background:#E4E9DD!important;color:#1F3D2E!important}
+html.v2.v2-staff #staffApp .tag.ESPACIO,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .tag.ESPACIO{background:#EFE6D3!important;color:#7A5418!important}
+html.v2.v2-staff #staffApp .tag.rec{background:#F3EAD0!important;color:#7A5E14!important}
+html.v2.v2-staff #staffApp .tag.lluvia{background:#E6ECEF!important;color:#3E5A6B!important}
+html.v2.v2-staff #staffApp .pill{background:#F4F2EC!important;border:0!important;border-radius:99px!important}
+html.v2.v2-staff #staffApp .pill.rec{background:#F3EAD0!important;color:#7A5E14}
+html.v2.v2-staff #staffApp .pill.nuevo{background:#E3F0E5!important;color:#2F7A4D;box-shadow:none!important}
+html.v2.v2-staff #staffApp :is(.w-cl-al span,.w-lib>div span,.sem-al button){background:#F4F2EC;border-radius:99px;color:#18211C}
+html.v2.v2-staff #staffApp .w-cl-al span.rec{background:#F3EAD0;color:#7A5E14}
+html.v2.v2-staff #staffApp .sem-al small{color:#7A5E14}
+html.v2.v2-staff #staffApp .w-cl-al span.aus{background:#F6E3DC;color:#A8432F}
+html.v2.v2-staff #staffApp :is(.w-cl-al span.lib,.sem-al .lib){background:transparent;border:1.5px dashed #CFCCBF;color:#6B7368;border-radius:99px}
+html.v2.v2-staff #staffApp :is(.w-lib i,.sem-res b){color:#1F3D2E}
+html.v2.v2-staff #staffApp :is(.w-lib-n,.w-lib>b span){background:#E4E9DD;color:#1F3D2E}
+html.v2.v2-staff #staffApp :is(.w-cl-h b,.sem-h>b,.as2-h b){font-weight:600;color:#1F3D2E;letter-spacing:-.02em;font-size:22px}
+html.v2.v2-staff #staffApp .w-st{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:99px;background:#EFEDE6;color:#6B7368}
+html.v2.v2-staff #staffApp .w-st.ok{background:#E3F0E5;color:#2F7A4D}
+html.v2.v2-staff #staffApp .w-st.no{background:#1F3D2E;color:#fff}
+html.v2.v2-staff #staffApp .sem-cupo{background:#E4E9DD;color:#1F3D2E;font-weight:600}
+html.v2.v2-staff #staffApp .sem-cupo.full{background:#EFEDE6;color:#6B7368}
+
+/* ---------- botones ---------- */
+html.v2.v2-staff #staffApp :is(.btn.pri,.mini.go,.cta),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.btn.pri,.mini.go,.cta){background:#1F3D2E!important;color:#fff!important;border:0!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;box-shadow:none}
+html.v2.v2-staff #staffApp :is(.btn,.mini),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.btn,.mini){border-radius:14px!important;min-height:44px;font-weight:600}
+html.v2.v2-staff #staffApp :is(.mini,.btn.sec2),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.mini,.btn.sec2){background:#E4E9DD!important;border:0!important;color:#1F3D2E!important}
+html.v2.v2-staff #staffApp .btn.del,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .btn.del{background:none!important;color:#A8432F!important}
+html.v2.v2-staff #staffApp .btn.del.armed,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .btn.del.armed{background:#A8432F!important;color:#fff!important}
+html.v2.v2-staff #staffApp .cta i,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .cta i{background:rgba(244,241,232,.18)!important;color:#fff!important}
+html.v2.v2-staff #staffApp .linkish,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .linkish{color:#1F3D2E!important;font-weight:600;text-underline-offset:3px}
+html.v2.v2-staff #staffApp .msg-btn{width:44px;height:44px;background:#F6F4EE!important;border:0!important}
+html.v2.v2-staff #staffApp .pay{border-radius:14px!important;min-height:44px;font-weight:600!important}
+html.v2.v2-staff #staffApp .pay.ok{background:#2F7A4D!important}
+html.v2.v2-staff #staffApp .pay.no{background:#A8432F!important}
+html.v2.v2-staff #staffApp .amt{border-radius:12px!important;border:1px solid #E8E5DA!important;background:#F6F4EE!important;min-height:40px}
+html.v2.v2-staff #staffApp .amt.aj{border-color:#C9A445!important;color:#7A5E14!important;background:#FBF6E8!important}
+html.v2.v2-staff #staffApp .row.is-debe{box-shadow:inset 4px 0 0 #A8432F}
+html.v2.v2-staff #staffApp .row.is-ok{box-shadow:inset 4px 0 0 #2F7A4D}
+
+/* ---------- pastillas (segmentos y filtros) ---------- */
+html.v2.v2-staff #staffApp .seg{background:#fff;border-radius:99px;padding:4px;gap:4px;box-shadow:var(--pa-shadow)}
+html.v2.v2-staff #staffApp .seg-b{border:0!important;border-radius:99px!important;background:transparent!important;color:#6B7368!important;font-weight:600!important;font-size:14px!important;min-height:44px;padding:0 6px!important;letter-spacing:0!important;text-transform:none!important;box-shadow:none!important}
+html.v2.v2-staff #staffApp .seg-b[aria-pressed="true"]{background:#1F3D2E!important;color:#fff!important}
+html.v2.v2-staff #staffApp .seg.fp .fp-debe[aria-pressed="true"]{background:#A8432F!important}
+html.v2.v2-staff #staffApp .seg.fp .fp-pago[aria-pressed="true"]{background:#2F7A4D!important}
+html.v2.v2-staff #staffApp .seg.fp .fp-debe:not([aria-pressed="true"]){color:#A8432F!important}
+html.v2.v2-staff #staffApp .seg.fp .fp-pago:not([aria-pressed="true"]){color:#2F7A4D!important}
+html.v2.v2-staff #staffApp :is(.chip,.w-seg button){border:1px solid #E8E5DA!important;background:#fff!important;color:#18211C!important;border-radius:99px!important;font-weight:600!important;min-height:40px;box-shadow:none!important}
+html.v2.v2-staff #staffApp :is(.chip,.w-seg button)[aria-pressed="true"]{background:#1F3D2E!important;border-color:#1F3D2E!important;color:#fff!important}
+html.v2.v2-staff #staffApp .day{border-radius:16px!important}
+html.v2.v2-staff #staffApp :is(.day,.sem-dias button)[aria-pressed="true"]{background:#1F3D2E!important;color:#fff!important}
+
+/* ---------- asistencia ---------- */
+html.v2.v2-staff #staffApp .as2.cerrado.ok{background:#F3F8F2!important}
+html.v2.v2-staff #staffApp .as2.cerrado.ll{background:#F1F4F5!important}
+html.v2.v2-staff #staffApp .as2-cat{background:#E4E9DD;color:#1F3D2E;font-weight:600}
+html.v2.v2-staff #staffApp .as2-st{background:#EFEDE6;color:#6B7368;font-weight:700}
+html.v2.v2-staff #staffApp .as2-st.ok{background:#2F7A4D;color:#fff}
+html.v2.v2-staff #staffApp .as2-st.no{background:#A8432F;color:#fff}
+html.v2.v2-staff #staffApp .as2-st.ll{background:#3E5A6B;color:#fff}
+html.v2.v2-staff #staffApp .as2-todos{border:0;background:#1F3D2E;color:#fff;font-weight:600;border-radius:16px;min-height:50px}
+html.v2.v2-staff #staffApp .as2-row{background:#fff;border:1px solid #E8E5DA;border-radius:16px}
+html.v2.v2-staff #staffApp .as2-txt b{color:#18211C;font-weight:600}
+html.v2.v2-staff #staffApp .as2-x{border-left-color:#E8E5DA;color:#9AA096}
+html.v2.v2-staff #staffApp .as2-row.st-ok{background:#E3F0E5;border-color:#2F7A4D}
+html.v2.v2-staff #staffApp .as2-row.st-ok .as2-dot{background:#2F7A4D;border-color:#2F7A4D}
+html.v2.v2-staff #staffApp .as2-row.st-no{background:#F6E3DC;border-color:#A8432F}
+html.v2.v2-staff #staffApp :is(.as2-row.st-no .as2-dot,.as2-row.st-no .as2-x){background:#A8432F;border-color:#A8432F}
+html.v2.v2-staff #staffApp .as2-row.st-ll{background:#F1F4F5;border-color:#C5D1D8}
+html.v2.v2-staff #staffApp .as2-mini{min-height:44px;border-radius:12px;border:0;background:#E4E9DD;color:#1F3D2E;font-weight:600}
+html.v2.v2-staff #staffApp .as2-link{color:#1F3D2E;min-height:44px;font-weight:600}
+html.v2.v2-staff #staffApp .as2-nv{background:#1F3D2E}
+
+/* ---------- barra de abajo blanca, Asistencia al medio en verde bosque ---------- */
+html.v2.v2-staff #staffApp #tabs{background:#fff!important;border:0!important;border-radius:24px!important;box-shadow:0 10px 30px -12px rgba(24,33,28,.35)!important;padding:6px 4px!important;overflow:visible}
+html.v2.v2-staff #staffApp #tabs .tab{color:#9AA096!important;background:none!important;font-size:11px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;min-height:52px;border-radius:16px}
+html.v2.v2-staff #staffApp #tabs .tab[aria-selected="true"]{color:#1F3D2E!important}
+html.v2.v2-staff #staffApp #tabs .tab[data-tab="asist"] svg{background:#fff;stroke:#1F3D2E!important;box-shadow:0 0 0 2px #1F3D2E,0 0 0 7px #fff,0 6px 16px -6px rgba(24,33,28,.6)!important}
+html.v2.v2-staff #staffApp #tabs .tab[data-tab="asist"][aria-selected="true"] svg{background:#1F3D2E;stroke:#fff!important}
+html.v2.v2-staff #staffApp .fab{background:#1F3D2E!important;color:#fff!important;border-radius:99px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;min-height:50px;box-shadow:0 10px 24px -10px rgba(24,33,28,.6)!important}
+html.v2.v2-staff #staffApp .fab i{background:rgba(244,241,232,.18)!important;color:#fff!important;border-radius:50%!important}
+
+/* ---------- campos ---------- */
+html.v2.v2-staff #staffApp :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]),select,textarea):not(.search),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=range]),select,textarea){background-color:#F6F4EE!important;border:1px solid #E8E5DA!important;border-radius:14px!important;min-height:46px;font-size:16px!important;color:#18211C!important;box-shadow:none!important}
+html.v2.v2-staff #staffApp :is(input,select,textarea):focus,html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(input,select,textarea):focus{outline:2px solid #1F3D2E;outline-offset:1px}
+html.v2.v2-staff #staffApp :is(input[type=checkbox],input[type=radio]),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(input[type=checkbox],input[type=radio]){accent-color:#1F3D2E}
+html.v2.v2-staff #staffApp :is(.field label,.flabel),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.field label,.flabel){font-size:13px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;color:#6B7368!important;font-family:Outfit,system-ui,sans-serif!important}
+
+/* ---------- hojas que suben desde abajo (todas menos la ficha) ---------- */
+html.v2.v2-staff #overlay{background:rgba(24,33,28,.5)}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet){background:#F4F1E8!important;color:#18211C!important;border:0!important;border-radius:26px 26px 0 0!important;font-family:Outfit,system-ui,-apple-system,sans-serif;font-size:15px;padding-top:26px!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(h2,h3,.disp){font-family:Outfit,system-ui,sans-serif!important;color:#18211C!important;text-transform:none!important;letter-spacing:-.02em!important;font-weight:600!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) h2.disp{font-size:25px!important;line-height:1.1!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.list,.msg,.empty,.notice,.w-card,.w-tile,.app-res){background:#fff!important;border:0!important;border-radius:20px!important;box-shadow:var(--pa-shadow)!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .w-ic{background:#E4E9DD;color:#1F3D2E}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .row{border-color:#E8E5DA!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .seg{background:#fff;border-radius:99px;padding:4px;gap:4px;box-shadow:var(--pa-shadow)}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .seg-b{border:0!important;border-radius:99px!important;background:transparent!important;color:#6B7368!important;font-weight:600!important;min-height:44px;letter-spacing:0!important;text-transform:none!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .seg-b[aria-pressed="true"]{background:#1F3D2E!important;color:#fff!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .chip{border:1px solid #E8E5DA!important;background:#fff!important;color:#18211C!important;border-radius:99px!important;font-size:14px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;min-height:40px;box-shadow:none!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .chip[aria-pressed="true"]{background:#1F3D2E!important;border-color:#1F3D2E!important;color:#fff!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .msg-k b{font-size:15px!important;font-weight:600!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .btns .btn{flex:1;min-height:50px;border-radius:16px!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.btns .btn.sec2,.btn[data-act="close"]){background:#fff!important;border:1px solid #E8E5DA!important;color:#18211C!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.small.muted,.muted){color:#6B7368!important}
+/* ---------- ajustes finos ---------- */
+html.v2.v2-staff #staffApp.w-home #view::before{height:calc(env(safe-area-inset-top,0px) + 196px)}
+html.v2.v2-staff #staffApp .hero :is(.btn.pri,.btn,.mini.go,.mini,.cta),html.v2.v2-staff #staffApp .gc-tot :is(.btn.pri,.btn){background:#F4F1E8!important;color:#1F3D2E!important}
+html.v2.v2-staff #staffApp .gc-tot{background:radial-gradient(120% 120% at 100% 0%,#2C5240 0%,#1F3D2E 60%);border-radius:20px;color:#F4F1E8}
+html.v2.v2-staff #staffApp .gc-tot.ok{background:#2F7A4D}
+html.v2.v2-staff #staffApp :is(.gc-tot small,.pl-k){text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:#C9D6CC;opacity:1}
+html.v2.v2-staff #staffApp :is(.gc-tot b,.pl-big>b){font-weight:600;letter-spacing:-.03em;color:#fff}
+html.v2.v2-staff #staffApp .stat .val{font-size:clamp(22px,7.4vw,30px)!important;font-weight:600!important;letter-spacing:-.03em!important;color:#1F3D2E;overflow-wrap:anywhere}
+html.v2.v2-staff #staffApp .hero .stat .val{color:#F4F1E8}
+html.v2.v2-staff #staffApp .stat .lbl{font-size:12px!important;letter-spacing:0!important;text-transform:none!important;font-weight:600!important}
+html.v2.v2-staff #staffApp .hero-stats{gap:8px}
+html.v2.v2-staff #staffApp .hero-stats .stat{min-width:0}
+html.v2.v2-staff #staffApp :is(.linkish,.as2-link){display:inline-flex;align-items:center;min-height:44px}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .btns .linkish{display:inline-flex;align-items:center;min-height:44px}
+html.v2.v2-staff #staffApp summary{display:list-item;padding-block:12px;font-weight:600}
+/* lista de alumnos: nombre y etiquetas arriba a lo ancho; WhatsApp, monto y pago abajo a la derecha */
+html.v2.v2-staff #staffApp .list>.row:has(>.row-act>.pay),html.v2.v2-staff #staffApp .list>.row:has(>.row-act:empty){grid-template-columns:minmax(0,1fr);gap:8px;padding:12px 14px 12px 16px;background:#fff!important}
+html.v2.v2-staff #staffApp .list>.row:has(>.row-act>.pay)>.row-act{justify-content:flex-end;gap:8px}
+html.v2.v2-staff #staffApp .list>.row .name{font-size:16px;font-weight:600}
+html.v2.v2-staff #staffApp .row .meta{gap:5px 6px}
+html.v2.v2-staff #staffApp .row .meta .tag{white-space:nowrap}
+html.v2.v2-staff #staffApp .row.acc-on{background:#fff!important}
+html.v2.v2-staff #staffApp .tag.t-ok{background:#E3F0E5!important;color:#2F7A4D!important}
+html.v2.v2-staff #staffApp .tag.t-bad{background:#F6E3DC!important;color:#A8432F!important}
+html.v2.v2-staff #staffApp .tag.t-info{background:#E6ECEF!important;color:#3E5A6B!important}
+html.v2.v2-staff #staffApp .tag.t-sin{background:transparent!important;color:#6B7368!important;border:1px dashed #CFCCBF!important}
+html.v2.v2-staff #staffApp .tag.t-nuevo{background:#1F3D2E!important;color:#fff!important}
+html.v2.v2-staff #staffApp .tag.t-falta{background:#F3EAD0!important;color:#7A5E14!important}
+html.v2.v2-staff #staffApp .row .pay{min-width:88px}
+html.v2.v2-staff #staffApp .hero-stats{grid-template-columns:auto minmax(0,1fr) minmax(0,1fr)!important}
+html.v2.v2-staff #staffApp .hero-stats .stat .val{font-size:clamp(20px,6.2vw,26px)!important;white-space:nowrap}
+/* sin mayúsculas forzadas ni letras separadas, como en la ficha */
+html.v2.v2-staff #staffApp :not(svg):not(path),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :not(svg):not(path){text-transform:none!important;letter-spacing:normal}
+html.v2.v2-staff #staffApp :is(.tu-sumar,.tu-pie button){font-weight:600!important;border-radius:14px!important;min-height:44px}
+html.v2.v2-staff #staffApp .tu-h{background:radial-gradient(120% 120% at 100% 0%,#2C5240 0%,#1F3D2E 60%);border-radius:14px}
+html.v2.v2-staff #staffApp .tu-h .vivo{background:#F4F1E8;color:#1F3D2E}
+html.v2.v2-staff #staffApp .tu-cupo{color:#2F7A4D}
+html.v2.v2-staff #staffApp .tu-cupo i.si{background:#1F3D2E}
+html.v2.v2-staff #staffApp .tu-sumar{font-size:14px!important;padding:0 16px!important;background:#1F3D2E!important;color:#fff!important}
+html.v2.v2-staff #staffApp .tu-al .av{background:#E4E9DD;color:#1F3D2E;font-weight:600}
+html.v2.v2-staff #staffApp .tu-al.rec .av{background:#F3EAD0;color:#7A5E14}
+html.v2.v2-staff #staffApp .tu-al.ext .av{background:#E3F0E5;color:#2F7A4D}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .aum-list{background:#fff;border:0;border-radius:20px;box-shadow:var(--pa-shadow)}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .aum-row{border-color:#E8E5DA!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is(.aum-exp,.notice){border-radius:16px!important;background:#E4E9DD!important;color:#18211C!important;border:0!important}
+html.v2.v2-staff #staffApp .hero .hero-stats .stat .val{font-size:clamp(17px,5.2vw,24px)!important}
+html.v2.v2-staff #staffApp .wm-sub{margin:-4px 0 0 52px!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .gc-tot{background:radial-gradient(120% 120% at 100% 0%,#2C5240 0%,#1F3D2E 60%);border-radius:20px;color:#F4F1E8}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .gc-tot.ok{background:#2F7A4D}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .gc-tot :is(.btn.pri,.btn){background:#F4F1E8!important;color:#1F3D2E!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .gc-tot small{color:#C9D6CC;opacity:1;font-size:13px}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .gc-tot b{font-weight:600;color:#fff}
+html.v2.v2-staff #staffApp:not(.w) .wm{font-size:21px!important}
+/* toques de 44px como mínimo */
+html.v2.v2-staff #staffApp :is([data-act="asDia"],[data-act="rgMes"],[data-act="mes"],[data-act="hDia"],[data-act="hStep"],[data-act="finMes"],[data-act="gcStep"]),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) [data-act="gcStep"]{min-width:44px;min-height:44px}
+html.v2.v2-staff #staffApp :is([data-act="turnoCat"],.sem-al button){min-height:44px}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) :is([data-act="avisoDeshacer"],[data-act="avisosTodos"],[data-act="salir"],[data-act="aumQ"]){min-height:44px;display:inline-flex;align-items:center}
+html.v2.v2-staff #staffApp .sec-head:has([data-act="mes"]){flex-wrap:wrap;row-gap:0}
+html.v2.v2-staff #staffApp .sec-head:has([data-act="mes"]) h3{white-space:nowrap}
+html.v2.v2-staff #overlay .sec-head :is(h2,h3),html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .sec-head :is(h2,h3){font-size:17px!important;text-shadow:none!important;color:#18211C!important}
+html.v2.v2-staff #overlay .sheet:not(.fa2-sheet) .sec-head::after{display:none}
