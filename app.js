@@ -190,12 +190,17 @@ function elegirCat(b){ const box=b.closest(".cat-pick"); const inp=box&&document
 /* Esteban (vista de profe): toca el nombre de un alumno de Jump en la agenda y le cambia la categoría.
    No ve lo que paga ni nada más de la ficha, y no cambia horarios (eso lo maneja Gabriel). Cada cambio le llega a Gabriel. */
 function openCatAlumno(a){
-  const hs=(a.horarios||[]).map((h,i)=>({h,i})).filter(x=>clubH(a,x.h)==="JUMP");
-  const fila=({h,i})=>`<div class="hrow-p" data-i="${i}" style="display:flex;gap:8px"><select class="hp-d" aria-label="Día" style="flex:1">${GRILLA.dias.map(d=>`<option value="${d}" ${h.dia===d?"selected":""}>${DIAS_LARGO[d]}</option>`).join("")}</select><select class="hp-h" aria-label="Hora" style="flex:1">${[...new Set([...GRILLA.horas,h.hora])].sort().map(x=>`<option ${h.hora===x?"selected":""}>${x}</option>`).join("")}</select></div>`;
-  openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumno de Jump</span><h2 class="disp">${esc(a.nombre)}</h2><span class="small muted">Lo que cambies le llega a Gabriel. El alumno no ve su categoría.</span></div>
-    <div class="field"><span class="flabel">Categoría</span>${catPicker("cAl",a.categoria)}</div>
-    <span class="small muted">Si quiere cambiar de horario, que le escriba a Gabriel.</span>
-    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="mini" data-act="close">Cancelar</button><button class="mini go" data-act="catAlOk" data-id="${a.id}">Guardar</button></div>`);
+  const hs=(a.horarios||[]).filter(h=>clubH(a,h)==="JUMP").slice().sort((x,y)=>((x.dia+6)%7)-((y.dia+6)%7)||String(x.hora).localeCompare(String(y.hora)));
+  openSheet(`<div class="fa2 fa2-cat">
+    <header class="fa2-hd fa2-hd-mini"><div class="fa2-who"><span class="fa2-ava">${esc(iniciales(a.nombre))}</span><div class="fa2-who-m"><span class="fa2-sub">Alumno de Jump</span><h2 class="fa2-nm">${esc(a.nombre)}</h2></div><button type="button" class="fa2-x" data-act="close" aria-label="Cerrar">${fi("x")}</button></div></header>
+    <div class="fa2-body">
+      <h3 class="fa2-sh">Categoría</h3><div class="fa2-card">${catPicker("cAl",a.categoria)}</div>
+      <p class="fa2-hint">${fi("info")}<span>Lo que cambies le llega a Gabriel. El alumno no ve su categoría.</span></p>
+      ${hs.length?`<h3 class="fa2-sh">Sus horarios en Jump</h3><div class="fa2-card fa2-ls">${hs.map(h=>`<div class="fa2-li"><span class="fa2-ic">${fi("cal")}</span><span class="fa2-m"><b class="num">${DIAS_LARGO[h.dia]} · ${esc(h.hora)}</b></span></div>`).join("")}</div>`:""}
+      <p class="fa2-hint">${fi("info")}<span>Si quiere cambiar de horario, que le escriba a Gabriel.</span></p>
+    </div>
+    <footer class="fa2-foot"><div class="fa2-btns"><button type="button" class="fa2-cancel" data-act="close">Cancelar</button><button type="button" class="fa2-save" data-act="catAlOk" data-id="${a.id}">Guardar</button></div></footer>
+  </div>`,null,"fa2-sheet fa2-mini");
 }
 async function guardarCatAlumno(a){
   if(S.modo==="profe"&&!clubsDe(a).has("JUMP")){ toast("Solo podés cambiar alumnos de Jump"); return; }
@@ -1467,9 +1472,11 @@ function morph(a,b){
 
 /* ---------- Sheets ---------- */
 let sheetRefresh=null;
-function openSheet(html,refresh=null){ $("#sheet").innerHTML=html; $("#overlay").hidden=false; sheetRefresh=refresh; }
-function closeSheet(){ $("#overlay").hidden=true; $("#sheet").innerHTML=""; sheetRefresh=null; }
-$("#overlay").addEventListener("click",e=>{ if(e.target.id==="overlay") closeSheet(); });
+// cls: clase extra para la hoja (la ficha del alumno usa "fa2-sheet", con su propio diseño).
+function openSheet(html,refresh=null,cls=""){ $("#sheet").className="sheet"+(cls?" "+cls:""); $("#sheet").innerHTML=html; $("#overlay").hidden=false; sheetRefresh=refresh; }
+function closeSheet(){ $("#overlay").hidden=true; $("#sheet").innerHTML=""; $("#sheet").className="sheet"; sheetRefresh=null; }
+// Tocar afuera cierra; si la ficha tiene cambios sin guardar, primero pregunta.
+$("#overlay").addEventListener("click",e=>{ if(e.target.id==="overlay"){ if(typeof faPreguntar==="function"&&faPreguntar(closeSheet)) return; closeSheet(); } });
 
 function hRow(h={dia:1,hora:"18:00"},club){
   const c=h.club||club||($("#aClub")&&$("#aClub").value)||S.club||"JUMP";
@@ -1497,13 +1504,13 @@ async function cargarHist(a){
     el2.innerHTML=`No se pudo cargar el historial. <button type="button" class="linkish" id="histRe">Reintentar</button>`; const b=$("#histRe"); if(b) b.onclick=()=>{ el2.innerHTML="Cargando…"; cargarHist(a); }; }
 }
 function pintarHist(h){
-  if(!$("#histA")) return;
-  { $("#histA").dataset.cache="1";
-    if(!h.length){ $("#histA").innerHTML="Todavía no tiene asistencias marcadas (cuenta desde noviembre)."; return; }
-    const cnt=e=>h.filter(x=>x.estado===e).length;
-    $("#histA").innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;color:var(--ink)"><span><b class="num">${cnt("vino")+cnt("recuperando")}</b> vino</span><span style="color:var(--warn)"><b class="num">${cnt("falto")}</b> faltó</span><span style="color:var(--sun)"><b class="num">${cnt("recupera")}</b> avisó</span></div>
-      <div style="display:grid;gap:4px;max-height:220px;overflow:auto">${h.map(x=>{const d=isoDate(x.fecha); return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line-2)"><span style="color:var(--ink)"><span style="text-transform:capitalize">${DIAS[d.getDay()]}</span> ${d.getDate()}/${d.getMonth()+1} · ${x.hora}</span><span style="color:${EST_COL[x.estado]||"var(--muted)"};font-weight:700;text-align:right">${EST_TXT[x.estado]||x.estado}${x.quien?` <span class="muted" style="font-weight:500">· ${esc(x.quien)}</span>`:""}</span></div>`;}).join("")}</div>`;
-  }
+  const el=$("#histA"); if(!el) return; el.dataset.cache="1";
+  { const m=mesKey(now), hm=h.filter(x=>x.fecha.startsWith(m)), c=e=>hm.filter(x=>x.estado===e).length, put=(id,v)=>{ const x=document.getElementById(id); if(x) x.textContent=v; };
+    put("faAttV",c("vino")+c("recuperando")); put("faAttF",c("falto")); put("faAttA",c("recupera")); }
+  if(!h.length){ el.innerHTML='<p class="fa2-empty">Todavía no tiene asistencias marcadas (cuenta desde noviembre).</p>'; return; }
+  const cnt=e=>h.filter(x=>x.estado===e).length;
+  el.innerHTML=`<div class="fa2-tl-n"><span><b class="num">${cnt("vino")+cnt("recuperando")}</b> vino</span><span class="bad"><b class="num">${cnt("falto")}</b> faltó</span><span class="rec"><b class="num">${cnt("recupera")}</b> avisó</span></div>
+    ${h.map(x=>{ const d=isoDate(x.fecha); return `<div class="fa2-ev e-${esc(x.estado)}"><i></i><span><b class="num">${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1} · ${x.hora}</b><small>${EST_TXT[x.estado]||esc(x.estado)}${x.quien?` · ${esc(x.quien)}`:""}</small></span></div>`; }).join("")}`;
 }
 async function exportAsist(){
   const m=S.asFecha.slice(0,7); const snap=await S.db.collection("asistencia").get(); const rows=[["Fecha","Club","Hora","Alumno","Estado","Marcó"]];
@@ -1515,22 +1522,92 @@ function iniCampo(a){ const ini=a.antiguo?"":arranqueDe(a);
   return `<div class="field"><label for="aIni2">Empezó el</label><div style="display:flex;gap:8px;align-items:center"><input id="aIni2" type="date" value="${ini}" data-orig="${ini}" data-ant="${a.antiguo?1:0}" style="flex:1">
     <button type="button" class="seg-b" data-act="iniAnt" aria-pressed="${!!a.antiguo}" style="flex:0 0 auto;padding:10px 12px">Hace años</button></div>
     <span class="small muted" id="aIniTx">${a.antiguo?"Alumno de hace años (sin fecha exacta). ":ini?desdeTxt(a).replace(/^.*\(/,"Empezó ").replace(")",". "):"Cargá cuándo empezó. "}Queda fija aunque le aumentes.</span></div>`; }
+/* ---------- Ficha del alumno: cabecera fija, pestañas Resumen · Clases · Pagos · Cuenta y barra fija Cancelar · Guardar ----------
+   Solo cambia el diseño: los campos (ids) y los data-act son los mismos de siempre, así se guarda igual. */
+const FI={
+  chat:'<path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10.5h7"/>',
+  nov:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4M10 13l4 4M14 13l-4 4"/>',
+  cal:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+  rec:'<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/>',
+  key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l8.5-8.5M16.5 6.5l2.5 2.5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.5"/>',
+  up:'<path d="M4 17l6-6 4 4 6-7"/><path d="M15 8h5v5"/>',
+  chev:'<path d="M9 6l6 6-6 6"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  user:'<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20.5c1-3.8 4.2-5.8 7.5-5.8s6.5 2 7.5 5.8"/>',
+  fam:'<circle cx="9" cy="8" r="3.3"/><path d="M3 20c.8-3.3 3.2-5.2 6-5.2s5.2 1.9 6 5.2"/><circle cx="17" cy="10" r="2.4"/><path d="M16.5 14.8c2.2.3 3.6 1.9 4.2 4.7"/>',
+  pausa:'<circle cx="12" cy="12" r="8.5"/><path d="M10 9v6M14 9v6"/>',
+  reset:'<path d="M4 12a8 8 0 1 1 3 6.3"/><path d="M4 20v-5h5"/>',
+  broom:'<path d="M14 4l6 6M12 6l6 6-7 7H6v-5z"/><path d="M8 16l2 2"/>',
+  trash:'<path d="M5 7h14M9.5 7V4.5h5V7M7 7l1 13h8l1-13"/>',
+  cash:'<rect x="3" y="6" width="18" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/>'
+};
+const fi=k=>`<svg viewBox="0 0 24 24" aria-hidden="true">${FI[k]||""}</svg>`;
+const iniciales=n=>String(n||"").trim().split(/\s+/).filter(Boolean).slice(0,2).map(x=>x.charAt(0).toUpperCase()).join("")||"?";
+// Estado de la ficha abierta: si hay cambios sin guardar, y la pestaña que estaba mirando (para volver a la misma si la ficha se reabre sola).
+const FA={dirty:false,cont:null,pase:false,last:{id:"",tab:"res",t:0}};
+// Acciones que salen de la ficha (o la vuelven a abrir): con cambios sin guardar, primero pregunta.
+const FA_SALE=new Set(["close","msg","accClave","accesoCrear","resetPrueba","aumUno","accPruebaPago","accVincular","accDesvincular","ausCargar","avisoDeshacer","verComp"]);
+// Botones que cambian algo del formulario sin disparar "input" (cuentan como cambio sin guardar).
+const FA_CAMBIA=new Set(["stepRec","hadd","hdel","pmModo","pmDur","iniAnt","catPick"]);
+function faEstado(a){ const m=mesKey(now), out=[];
+  out.push(a.activo===false?`<span class="fa2-sp bad">En pausa</span>`:`<span class="fa2-sp ok">● Activo</span>`);
+  if(a.activo!==false&&montoMes(a,m)>0){ const c=S.mes===m?compDe(a):null;
+    out.push(pago(a,m)?`<span class="fa2-sp ok">Pagó ${mesSolo(m)}</span>`:c&&c.estado==="enviado"?`<span class="fa2-sp rec">Mandó comprobante</span>`:`<span class="fa2-sp bad">${now.getDate()>14?"Cuota vencida":"Debe "+mesSolo(m)}</span>`); }
+  const bk=recBuckets(a), n=bk.reduce((s,x)=>s+x.n,0); if(n) out.push(`<span class="fa2-sp rec">${n} para recuperar · hasta ${fechaDM(bk[0].vence)}</span>`);
+  if(esNuevo(a)) out.push(`<span class="fa2-sp nuevo">Nuevo</span>`);
+  return out.join(""); }
+function faCuota(a){ const m=mesKey(now), mt=montoMes(a,m), pr=precioEn(a,m), n=clasesCobro(a,m), pg=(a.pagos||{})[m]||{}, ok=pago(a,m), c=S.mes===m?compDe(a):null;
+  const tag=!mt?"":ok?`<span class="fa2-tag ok">Pagada</span>`:`<span class="fa2-tag bad">${now.getDate()>14?"Vencida":"Vence el 14"}</span>`;
+  return `<div class="fa2-cuota"><div class="fa2-cuota-t"><span>Cuota de ${mesSolo(m)}</span>${tag}</div>
+    <div class="fa2-big num">${money(mt)}</div>
+    <div class="fa2-calc num">${pr>0?`${n} clases × ${money(pr)}${Number(a.clasesFijas)>0?" · cobro fijo":""}`:"Sin precio por clase cargado"}${ajusteDe(a,m)!==null?" · monto ajustado":""}</div>
+    <div class="fa2-cuota-f"><span class="fa2-pay${ok?" ok":""}">${ok?`Pagó${pg.fecha?` el ${fechaDM(pg.fecha)}`:""}${pg.comprobante?" · con comprobante":""}`:c&&c.estado==="enviado"?"Mandó el comprobante":mt>0?"No pagó todavía":"No tiene cuota este mes"}</span>${c?`<button type="button" class="fa2-b2" data-act="verComp" data-id="${a.id}">Ver comprobante</button>`:""}</div></div>`; }
+// Próximos 7 días: sus clases fijas (con "no viene" o "suspendida") y las recuperaciones que reservó.
+function faProximas(a){ const out=[]; const d=new Date(now); d.setHours(0,0,0,0); const ahora=Date.now(); const st=S.suspT||{};
+  for(let i=0;i<7;i++,d.setDate(d.getDate()+1)){ const f=toISO(d);
+    (a.horarios||[]).filter(h=>Number(h.dia)===d.getDay()&&!(h.desde&&h.desde>f)&&!(a.inicio&&a.inicio>f)).forEach(h=>{ const club=clubH(a,h);
+      if(new Date(`${f}T${h.hora}:00`).getTime()<ahora) return;
+      const aus=S.avisos.find(v=>v.alumnoId===a.id&&v.fecha===f&&v.hora===h.hora&&v.tipo==="ausencia");
+      let t=["Viene","ok","su horario fijo"];
+      if(st[suspKey(club,f,h.hora)]||st[suspKey(club,f,"*")]) t=["Suspendida","mute","clase suspendida"];
+      else if(aus&&!vuelveApp(a.id,f,h.hora)) t=aus.conRecupero?["No viene","rec","avisó · recupera"]:["No viene","bad","avisó tarde · no recupera"];
+      out.push({f,hora:h.hora,club,t,ic:"cal"}); });
+    S.avisos.filter(v=>v.alumnoId===a.id&&v.fecha===f&&v.tipo==="recupera"&&!esFijoDe(a,v.club,f,v.hora)&&!vuelveApp(a.id,f,v.hora)&&new Date(`${f}T${v.hora}:00`).getTime()>=ahora)
+      .forEach(v=>out.push({f,hora:v.hora,club:v.club,t:["Recupera","rec","viene a recuperar"],ic:"rec"})); }
+  out.sort((x,y)=>(x.f+x.hora).localeCompare(y.f+y.hora));
+  if(!out.length) return `<p class="fa2-empty">${a.activo===false?"Está en pausa: no tiene clases.":"No tiene clases en los próximos 7 días."}</p>`;
+  return `<div class="fa2-card fa2-ls">${out.map(x=>{ const dd=isoDate(x.f); return `<div class="fa2-li"><span class="fa2-ic">${fi(x.ic)}</span><span class="fa2-m"><b class="num">${DIAS[dd.getDay()]} ${fechaDM(x.f)} · ${x.hora}</b><small>${CLUB_LBL[x.club]||x.club} · ${x.t[2]}</small></span><span class="fa2-tag ${x.t[1]}">${x.t[0]}</span></div>`; }).join("")}</div>`; }
+function faTab(k){ const f=$("#fA"); if(!f) return;
+  f.querySelectorAll("[data-fa-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.faTab===k)));
+  f.querySelectorAll(".fa2-pane").forEach(p=>p.hidden=p.dataset.pane!==k);
+  const bd=f.querySelector(".fa2-body"); if(bd) bd.scrollTop=0;
+  if(FA.last.id===f.dataset.id) FA.last={...FA.last,tab:k,t:Date.now()}; }
+function faIr(k){ const t={aus:["cla","faAus"],rec:["cla","faRecH"],cuenta:["cue",""]}[k]; if(!t) return; faTab(t[0]);
+  const el=t[1]&&document.getElementById(t[1]), bd=$("#fA .fa2-body"); if(!el||!bd) return;
+  bd.scrollTop=Math.max(0,el.getBoundingClientRect().top-bd.getBoundingClientRect().top+bd.scrollTop-14);
+  const card=el.nextElementSibling; if(card){ card.classList.remove("fa2-flash"); void card.offsetWidth; card.classList.add("fa2-flash"); }
+  if(k==="aus"&&$("#ausSel")) $("#ausSel").focus({preventScroll:true}); }
+function faMarcar(){ FA.dirty=true; const f=$("#fA"); if(!f) return; const c=f.querySelector(".fa2-conf"); f.querySelector(".fa2-dirty").hidden=!!(c&&!c.hidden); }
+function faConf(on){ const f=$("#fA"); if(!f) return; f.querySelector(".fa2-conf").hidden=!on; f.querySelector(".fa2-main").hidden=on; f.querySelector(".fa2-dirty").hidden=on||!FA.dirty; if(!on) FA.cont=null; }
+// Cerrar o salir con cambios sin guardar: pregunta en la misma barra de abajo (true = ya se encargó).
+function faPreguntar(cont){ if(!$("#fA")||!FA.dirty) return false; FA.cont=cont; faConf(true); return true; }
+document.addEventListener("click",e=>{
+  if(!window.MODO_STAFF) return; const f=$("#fA"); if(!f||!f.contains(e.target)) return;
+  const c=e.target.closest("[data-fa-conf]");
+  if(c){ const k=FA.cont; faConf(false); if(c.dataset.faConf==="si"&&k) k(); return; }
+  const b=e.target.closest("[data-act]"); if(!b) return;
+  // Acciones peligrosas: el primer toque solo arma el botón; el segundo la hace.
+  if(b.dataset.arm&&!b.classList.contains("armed")){ e.preventDefault(); e.stopImmediatePropagation(); b.classList.add("armed"); const t=b.querySelector(".fa2-lbl"); if(t) t.textContent=b.dataset.arm; return; }
+  if(FA.dirty&&!FA.pase&&FA_SALE.has(b.dataset.act)){ e.preventDefault(); e.stopImmediatePropagation(); faPreguntar(()=>{ FA.pase=true; try{ b.click(); }finally{ FA.pase=false; } }); }
+},true);
 function formAlumno(a={},leadId=""){
-  openSheet(`<form id="fA" data-id="${a.id||""}" data-lead="${leadId}" style="display:grid;gap:14px">
-    <div class="btns"><h2 class="disp">${a.id?esc(a.nombre):"Nuevo alumno"}</h2>${a.id&&a.activo!==false?`<button type="button" class="msg-btn" data-act="msg" data-id="${a.id}" aria-label="Mensajes">${WA_ICON}</button>`:""}</div>
-    <div class="field"><label for="aNom">Nombre</label><input id="aNom" required value="${esc(a.nombre)}"></div>
-    <div class="two">
-      <div class="field"><label for="aClub">Club principal</label><select id="aClub">${["JUMP","ESPACIO"].map(c=>`<option ${(a.club||S.club||"JUMP")===c?"selected":""}>${c}</option>`).join("")}</select></div>
-      <div class="field"><label for="aTel">Teléfono</label><input id="aTel" inputmode="tel" value="${esc(a.tel)}"></div>
-    </div>
-    <div class="field"><span class="flabel">Categoría</span>${catPicker("aCat",a.categoria)}</div>
-    <div class="two">
-      <div class="field"><label for="aPrecio">Precio por clase</label><input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}">${(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`<span class="small muted">${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}</span>`:""; })()}</div>
-    </div>
-    <span class="small muted" id="aCalc" style="margin-top:-6px"></span>
-    <label class="small" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:-4px"><input type="checkbox" id="aFijoOn" ${Number(a.clasesFijas)>0?"checked":""}> Cobrarle siempre <input id="aFijo" type="number" inputmode="numeric" min="1" max="31" value="${Number(a.clasesFijas)||8}" style="width:64px;padding:6px 8px"> clases por mes <span class="muted">(sin clase extra, hasta que lo saques)</span></label>
-    ${a.id&&a.precioClase>0?`<button type="button" class="linkish" data-act="aumUno" data-id="${a.id}" style="justify-self:start;margin-top:-4px">+ Registrar un aumento a ${esc(nombreCorto(a.nombre))} ›</button>`:""}
-    ${(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&(pagoReal((a.pagos||{})[mesKey(now)])||a.antiguo||!esNuevo(a))){ /* alumno que ya venía: la fecha no toca las cuotas */
+  const nuevo=!a.id; FA.dirty=false; FA.cont=null; FA.pase=false;
+  const tab0=!nuevo&&FA.last.id===a.id&&Date.now()-FA.last.t<120000?FA.last.tab:"res";
+  if(!nuevo) FA.last={id:a.id,tab:tab0,t:Date.now()};
+  const arranque=(()=>{ const pm=planGuardado(a); if(a.id&&!pm&&(pagoReal((a.pagos||{})[mesKey(now)])||a.antiguo||!esNuevo(a))){ /* alumno que ya venía: la fecha no toca las cuotas */
         // Ya pagó el mes: la fecha de arranque igual se ve y se puede corregir (sirve para los aumentos y para marcarlo como nuevo).
         return iniCampo(a); }
       return `<div class="field promo"><span class="flabel">${a.id?"Fecha de arranque":"Primer mes"}</span>
@@ -1538,24 +1615,111 @@ function formAlumno(a={},leadId=""){
       <div class="field"><label for="aPromo">Precio promo por clase (opcional)</label><input id="aPromo" type="number" inputmode="numeric" min="0" step="250" placeholder="Sin promo" value="${pm&&pm.promo?pm.promo:""}"></div></div>
       <div class="field" id="aDurBox" hidden style="margin:0"><label>¿Cuántas cuotas dura la promo?</label><div class="seg" style="grid-template-columns:repeat(3,1fr);margin:0">${[1,2,3].map(n=>`<button type="button" class="seg-b" data-act="pmDur" data-n="${n}" aria-pressed="${n===((pm&&pm.dur)||1)}">${n===1?"1 mes":n+" meses"}</button>`).join("")}</div></div>
       <div class="seg" style="grid-template-columns:1fr 1fr;margin:0"><button type="button" class="seg-b" data-act="pmModo" data-m="este" aria-pressed="${!pm||pm.modo!=="sig"}">Las paga este mes</button><button type="button" class="seg-b" data-act="pmModo" data-m="sig" aria-pressed="${!!pm&&pm.modo==="sig"}">Las suma al mes siguiente</button></div>
-      <span class="small" id="aPromoCalc" style="line-height:1.5"></span>${a.id?'<span class="small muted">Si cambiás la fecha, la cuota del primer mes se recalcula sola (los meses que ya pagó no se tocan).</span>':""}</div>`; })()}
-    ${a.id&&aumentosDe(a).length?`<div class="field"><span class="flabel">Aumentos</span><span class="small">${aumHistTxt(a).map(esc).join("<br>")}</span></div>`:""}
-    <div class="field"><label>Horarios</label><div id="hList" style="display:grid;gap:8px">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div><button type="button" class="linkish" data-act="hadd" style="justify-self:start">+ Otro día</button><span class="small muted">Si va a los dos clubes, elegí el club de cada día. Recupera solo en los clubes donde entrena.</span></div>
-    <div class="field"><span class="flabel">Clases para recuperar${recN(a)?` <span style="text-transform:none;letter-spacing:0;color:var(--sun)">· ${recVenceTxt(a)}</span>`:""}</span><div class="stepper"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec" data-orig="${recN(a)||0}">${recN(a)||0}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></div></div>
-    <div class="field"><label for="aNota">Notas</label><textarea id="aNota" rows="2" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea></div>
-    ${a.id?accesoHTML(a):""}
-    ${a.id?avisosFichaHTML(a):""}
-    ${a.id&&S.esOwner&&S.modo!=="profe"?`<button type="button" class="linkish" data-act="resetPrueba" data-id="${a.id}" style="justify-self:start;font-size:13px">🧹 Borrar pruebas de la app (dejar en cero)</button>`:""}
-    ${a.id?`<div class="field"><span class="flabel">Historial de asistencia</span><div id="histA" class="small muted">Cargando…</div></div>`:""}
-    ${a.id?`<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="aAct" ${a.activo===false?"":"checked"}> Activo (sacalo si dejó o está en pausa)</label>`:""}
-    <div class="btns">${a.id?`<button type="button" class="btn del" data-act="delA">Borrar</button>`:"<span></span>"}<span style="display:flex;gap:8px"><button type="button" class="btn sec2" data-act="close">Cancelar</button><button class="btn pri">Guardar</button></span></div>
-  </form>`);
+      <span class="small" id="aPromoCalc" style="line-height:1.5"></span>${a.id?'<span class="small muted">Si cambiás la fecha, la cuota del primer mes se recalcula sola (los meses que ya pagó no se tocan).</span>':""}</div>`; })();
+  const datos=`<div class="fa2-card fa2-form">
+      <div class="fa2-f"><label for="aNom">Nombre</label><input id="aNom" required value="${esc(a.nombre)}" autocomplete="off"></div>
+      <div class="fa2-f2"><div class="fa2-f"><label for="aTel">Teléfono</label><input id="aTel" inputmode="tel" value="${esc(a.tel)}" autocomplete="off"></div>
+      <div class="fa2-f"><label for="aClub">Club principal</label><select id="aClub">${["JUMP","ESPACIO"].map(c=>`<option value="${c}" ${(a.club||S.club||"JUMP")===c?"selected":""}>${CLUB_LBL[c]}</option>`).join("")}</select></div></div>
+      <div class="fa2-f"><span class="fa2-lb">Categoría</span>${catPicker("aCat",a.categoria)}</div></div>`;
+  const horarios=`<h3 class="fa2-sh">Horarios fijos <button type="button" class="fa2-sh-a" data-act="hadd">${fi("plus")} Otro día</button></h3>
+    <div id="hList" class="fa2-card fa2-hl">${(a.horarios&&a.horarios.length?a.horarios:[{dia:1,hora:"18:00"}]).map(h=>hRow(h,a.club)).join("")}</div>
+    <p class="fa2-hint">${fi("info")}<span>Si va a los dos clubes, elegí el club de cada día. Recupera solo donde entrena.</span></p>`;
+  const aumTxt=(()=>{ const u=ultimoAumento(a), px=aumentoProx(a); return u||px?`${u?`Último aumento: ${mesCorto(u.desde)}${u.monto?` (+${money(u.monto)})`:""}`:""}${u&&px?" · ":""}${px?`<b>Desde ${mesCorto(px.desde)}: ${money(px.precio)}</b>`:""}`:""; })();
+  const precioIn=`<input id="aPrecio" type="number" inputmode="numeric" min="0" step="250" value="${a.precioClase||""}" placeholder="0">`;
+  const ini=arranque?`<h3 class="fa2-sh">${nuevo?"Primer mes":"Desde cuándo viene"}</h3><div class="fa2-card fa2-ini">${arranque}</div>`:"";
+  const notas=`<h3 class="fa2-sh"><label for="aNota">Notas</label></h3><textarea id="aNota" class="fa2-ta" rows="3" placeholder="Aumentos, lesiones, objetivos…">${esc(a.notas)}</textarea>`;
+  const pie=`<footer class="fa2-foot">
+      <p class="fa2-dirty" hidden>Cambios sin guardar</p>
+      <div class="fa2-conf" hidden><p>Tenés cambios sin guardar. ¿Salís igual?</p><div class="fa2-btns"><button type="button" class="fa2-cancel" data-fa-conf="no">Seguir editando</button><button type="button" class="fa2-save bad" data-fa-conf="si">Salir sin guardar</button></div></div>
+      <div class="fa2-btns fa2-main"><button type="button" class="fa2-cancel" data-act="close">Cancelar</button><button class="fa2-save">Guardar</button></div>
+    </footer>`;
+  let html;
+  if(nuevo){
+    html=`<header class="fa2-hd fa2-hd-new"><div class="fa2-who"><span class="fa2-ava">${fi("user")}</span><div class="fa2-who-m"><h2 class="fa2-nm">${a.nombre?esc(a.nombre):"Nuevo alumno"}</h2><p class="fa2-sub">${a.nombre?"Nuevo alumno · ":""}Lo necesario para darlo de alta</p></div><button type="button" class="fa2-x" data-act="close" aria-label="Cerrar">${fi("x")}</button></div></header>
+    <div class="fa2-body">
+      <h3 class="fa2-sh">Datos</h3>${datos}
+      ${horarios}
+      <h3 class="fa2-sh">Precio</h3>
+      <div class="fa2-card fa2-precio"><label class="fa2-kc" for="aPrecio"><span>Precio por clase</span><span class="fa2-money"><i>$</i>${precioIn}</span></label><p class="fa2-calc2 num" id="aCalc"></p></div>
+      ${ini}
+      ${notas}
+    </div>${pie}`;
+  } else {
+    const avH=avisosFichaHTML(a); const ausOk=avH.includes('id="ausSel"'); const rn=recN(a)||0;
+    const qClave=!S.esOwner?"":a.manejaUid?`<button type="button" class="fa2-q" data-fa-go="cuenta"><span class="fa2-qi">${fi("fam")}</span><span>Cuenta</span></button>`
+      :a.usuario?`<button type="button" class="fa2-q" data-act="accClave" data-uid="${a.uid||""}" data-id="${a.id}"><span class="fa2-qi">${fi("key")}</span><span>Contraseña</span></button>`
+      :`<button type="button" class="fa2-q" data-act="accesoCrear" data-id="${a.id}"><span class="fa2-qi">${fi("user")}</span><span>Crear acceso</span></button>`;
+    const acc=accesoHTML(a);
+    const tabs=[["res","Resumen"],["cla","Clases"],["pag","Pagos"],["cue","Cuenta"]];
+    html=`<header class="fa2-hd">
+      <div class="fa2-who"><span class="fa2-ava">${esc(iniciales(a.nombre))}</span><div class="fa2-who-m"><h2 class="fa2-nm">${esc(a.nombre)}</h2><div class="fa2-chips">${[...clubsDe(a)].map(c=>`<span class="fa2-ch">${CLUB_LBL[c]||esc(c)}</span>`).join("")}<span class="fa2-ch">${esc(capCat(a.categoria))}</span></div></div><button type="button" class="fa2-x" data-act="close" aria-label="Cerrar">${fi("x")}</button></div>
+      <div class="fa2-st">${faEstado(a)}</div>
+      <div class="fa2-qa">
+        <button type="button" class="fa2-q" ${a.activo!==false?`data-act="msg" data-id="${a.id}"`:"disabled"}><span class="fa2-qi wa">${fi("chat")}</span><span>WhatsApp</span></button>
+        <button type="button" class="fa2-q" data-fa-go="aus" ${ausOk?"":"disabled"}><span class="fa2-qi">${fi("nov")}</span><span>No viene</span></button>
+        <button type="button" class="fa2-q" data-fa-go="rec"><span class="fa2-qi">${fi("rec")}</span><span>Recupera ±</span></button>
+        ${qClave}
+      </div>
+    </header>
+    <nav class="fa2-tabs" role="tablist">${tabs.map(([k,l])=>`<button type="button" role="tab" data-fa-tab="${k}" aria-selected="${k===tab0}">${l}</button>`).join("")}</nav>
+    <div class="fa2-body">
+      <section class="fa2-pane" data-pane="res" ${tab0==="res"?"":"hidden"}>
+        ${faCuota(a)}
+        <h3 class="fa2-sh">Próximos 7 días</h3>${faProximas(a)}
+        <h3 class="fa2-sh">Asistencia de ${mesSolo(mesKey(now))}</h3>
+        <div class="fa2-att"><div><b class="num" id="faAttV">–</b><span>Vino</span></div><div class="bad"><b class="num" id="faAttF">–</b><span>Faltó</span></div><div class="rec"><b class="num" id="faAttA">–</b><span>Avisó</span></div></div>
+      </section>
+      <section class="fa2-pane" data-pane="cla" ${tab0==="cla"?"":"hidden"}>
+        ${horarios}
+        <h3 class="fa2-sh" id="faRecH">Para recuperar</h3>
+        <div class="fa2-card fa2-step"><span class="fa2-m"><b>Clases para recuperar</b><small>${rn?esc(recVenceTxt(a)):"No tiene pendientes"}</small></span><span class="fa2-stp"><button type="button" data-act="stepRec" data-d="-1" aria-label="Restar">−</button><b class="num" id="aRec" data-orig="${rn}">${rn}</b><button type="button" data-act="stepRec" data-d="1" aria-label="Sumar">+</button></span></div>
+        ${avH}
+        <h3 class="fa2-sh">Historial de asistencia</h3><div id="histA" class="fa2-card fa2-tl">Cargando…</div>
+      </section>
+      <section class="fa2-pane" data-pane="pag" ${tab0==="pag"?"":"hidden"}>
+        <div class="fa2-kv"><label class="fa2-kc" for="aPrecio"><span>Precio por clase</span><span class="fa2-money"><i>$</i>${precioIn}</span></label>
+          <div class="fa2-kc"><span>Cuota de ${mesSolo(S.mes)}</span><b class="num" id="faMesBig">${money(cuotaMes(a))}</b><small id="faMesSub"></small></div></div>
+        <p id="aCalc" hidden></p>
+        <label class="fa2-card fa2-chk" for="aFijoOn"><input type="checkbox" id="aFijoOn" ${Number(a.clasesFijas)>0?"checked":""}><span class="fa2-box">${fi("check")}</span><span>Cobrarle siempre <input id="aFijo" class="fa2-pill num" type="number" inputmode="numeric" min="1" max="31" value="${Number(a.clasesFijas)||8}" aria-label="Clases por mes"> clases por mes</span></label>
+        <p class="fa2-hint">${fi("info")}<span>Sin clase extra, hasta que lo saques.</span></p>
+        <h3 class="fa2-sh">Aumentos ${a.precioClase>0?`<button type="button" class="fa2-sh-a" data-act="aumUno" data-id="${a.id}">${fi("plus")} Registrar</button>`:""}</h3>
+        ${aumentosDe(a).length?`<div class="fa2-card fa2-ls">${aumHistTxt(a).reverse().map(t=>`<div class="fa2-li"><span class="fa2-ic">${fi("up")}</span><span class="fa2-m"><b class="num">${esc(t)}</b></span></div>`).join("")}</div>`:`<p class="fa2-empty">Todavía no tiene aumentos registrados.</p>`}
+        ${aumTxt?`<p class="fa2-hint">${fi("up")}<span>${aumTxt}</span></p>`:""}
+        ${ini}
+        ${notas}
+      </section>
+      <section class="fa2-pane" data-pane="cue" ${tab0==="cue"?"":"hidden"}>
+        <h3 class="fa2-sh">Datos</h3>${datos}
+        ${acc?`<h3 class="fa2-sh">App del alumno</h3>${acc}`:""}
+        <h3 class="fa2-sh fa2-dz-h">Zona de peligro</h3>
+        <div class="fa2-dz">
+          <label class="fa2-li" for="aAct"><span class="fa2-ic">${fi("pausa")}</span><span class="fa2-m"><b>Activo</b><small id="aActTx">${a.activo===false?"Está en pausa. Tildalo para que vuelva.":"Sacale el tilde si dejó o está en pausa."}</small></span><input type="checkbox" id="aAct" class="fa2-sw" ${a.activo===false?"":"checked"}></label>
+          ${a.usuario&&!a.manejaUid&&S.esOwner?`<button type="button" class="fa2-li" data-act="accesoCrear" data-id="${a.id}" data-arm="Tocá de nuevo para seguir"><span class="fa2-ic">${fi("reset")}</span><span class="fa2-m"><b class="fa2-lbl">Crear un acceso nuevo de cero</b><small>Le arma otro usuario y contraseña</small></span><span class="fa2-chv">${fi("chev")}</span></button>`:""}
+          ${S.esOwner&&S.modo!=="profe"?`<button type="button" class="fa2-li" data-act="resetPrueba" data-id="${a.id}" data-arm="Tocá de nuevo para seguir"><span class="fa2-ic">${fi("broom")}</span><span class="fa2-m"><b class="fa2-lbl">Borrar pruebas de la app</b><small>Deja su app en cero (antes te muestra qué borra)</small></span><span class="fa2-chv">${fi("chev")}</span></button>`:""}
+          <button type="button" class="fa2-li" data-act="delA"><span class="fa2-ic">${fi("trash")}</span><span class="fa2-m"><b class="fa2-lbl">Borrar alumno</b><small>Tocá dos veces. No se puede deshacer.</small></span></button>
+        </div>
+        <p class="fa2-hint">${fi("info")}<span>Cada una pide confirmación. Lo de Activo se aplica al tocar Guardar.</span></p>
+      </section>
+    </div>${pie}`;
+  }
+  openSheet(`<form id="fA" class="fa2${nuevo?" fa2-nuevo":""}" data-id="${a.id||""}" data-lead="${leadId}">${html}</form>`,null,"fa2-sheet");
   const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)})),clasesFijas:$("#aFijoOn")&&$("#aFijoOn").checked?Number($("#aFijo").value)||0:0};
     const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesCobro(tmp)} clases = ${money(cuotaMes(tmp))}${tmp.clasesFijas?" (cobro fijo)":""}${ex?" (incluye clase extra)":""}`:"";
+    if($("#faMesBig")){ $("#faMesBig").textContent=money(cuotaMes(tmp)); $("#faMesSub").textContent=tmp.precioClase?`${clasesCobro(tmp)} clases${tmp.clasesFijas?" · cobro fijo":""}${ex?" · con clase extra":""}`:"Sin precio cargado"; }
     const pr=$("#aPromo"); if(pr){ const ini=$("#aIni").value||hoyISO; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este";
       const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1; $("#aDurBox").hidden=!Number(pr.value);
       $("#aPromoCalc").textContent=(tmp.precioClase||Number(pr.value))&&tmp.horarios.length?planPrimerMes(tmp,ini,Number(pr.value)||0,modo,dur).txt:"Cargá el precio por clase y los horarios y te calculo el primer mes."; } };
   calc(); $("#fA").addEventListener("input",calc); $("#fA").addEventListener("change",calc); $("#fA").addEventListener("click",()=>setTimeout(calc,0));
+  const f=$("#fA");
+  const cambio=e=>{ const t=e.target; if(!t||["ausSel","ausRec","accManeja"].includes(t.id)) return;
+    if(t.id==="aAct") $("#aActTx").textContent=t.checked?(a.activo===false?"Vuelve a estar activo al tocar Guardar.":"Sacale el tilde si dejó o está en pausa."):"Queda en pausa al tocar Guardar.";
+    faMarcar(); };
+  f.addEventListener("input",cambio); f.addEventListener("change",cambio);
+  f.addEventListener("click",e=>{ const t=e.target.closest("[data-fa-tab]"); if(t){ faTab(t.dataset.faTab); return; }
+    const g=e.target.closest("[data-fa-go]"); if(g){ faIr(g.dataset.faGo); return; }
+    const b=e.target.closest("[data-act]"); if(b&&FA_CAMBIA.has(b.dataset.act)) faMarcar(); });
+  // Si falta el nombre (u otro campo obligatorio) en una pestaña escondida, la muestra para que se vea el aviso.
+  f.addEventListener("invalid",e=>{ const p=e.target.closest(".fa2-pane"); if(p&&p.hidden){ faTab(p.dataset.pane); setTimeout(()=>e.target.reportValidity(),50); } },true);
 }
 function formLead(l={}){
   openSheet(`<form id="fL" data-id="${l.id||""}" style="display:grid;gap:14px">
@@ -1786,7 +1950,7 @@ document.addEventListener("click",async e=>{
     case "hdel": b.parentElement.remove(); break;
     case "cfgReset": { $("#cCobro").value=TPL_DEF.cobro; $("#cLluvia").value=TPL_DEF.lluvia; $("#cRec").value=TPL_DEF.recupera; toast("Volvieron los textos originales. Tocá Guardar."); break; }
     case "delA": case "delL": {
-      if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="Tocá de nuevo para borrar"; return; }
+      if(!b.classList.contains("armed")){ b.classList.add("armed"); (b.querySelector(".fa2-lbl")||b).textContent="Tocá de nuevo para borrar"; return; }
       const f=b.closest("form"); const col=act==="delA"?colA():colL();
       if(await safe(()=>col.doc(f.dataset.id).delete(),"Borrado")) closeSheet(); break; }
     case "newL": formLead(); break;

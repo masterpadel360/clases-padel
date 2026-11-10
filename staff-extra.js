@@ -49,10 +49,12 @@ function avisosHoyHTML() {
 function nombreManeja(a) { const p = S.alumnos.find(x => x.id === a.manejaId) || S.alumnos.find(x => x.uid && x.uid === a.manejaUid); return (p && p.nombre) || "otra cuenta"; }
 function manejaHTML(a) {
   const hijos = S.alumnos.filter(x => x.manejaUid && a.uid && x.manejaUid === a.uid);
-  if (a.manejaUid) return `<div class="field"><span class="flabel">Lo maneja otra cuenta</span><span class="small">Entra desde la cuenta de <b>${esc(nombreManeja(a))}</b> y cambia entre los dos arriba de la app. Le llegan los avisos de ${esc(nombreCorto(a.nombre))} a ese celu.</span><button type="button" class="linkish" data-act="accDesvincular" data-id="${a.id}" style="justify-self:start">Desvincular</button></div>`;
+  if (a.manejaUid) return `<div class="fa2-li"><span class="fa2-ic">${fi("fam")}</span><span class="fa2-m"><small>Lo maneja otra cuenta</small><b>${esc(nombreManeja(a))}</b><small>Entra desde esa cuenta y le llegan sus avisos a ese celu.</small></span><button type="button" class="fa2-b2" data-act="accDesvincular" data-id="${a.id}">Desvincular</button></div>`;
   const ops = S.alumnos.filter(x => x.id !== a.id && x.uid && x.usuario && x.activo !== false && !x.manejaUid).sort((x, y) => x.nombre.localeCompare(y.nombre));
-  return `${hijos.length ? `<div class="field"><span class="flabel">También maneja</span><span class="small">${esc(hijos.map(x => x.nombre).join(", "))}</span></div>` : ""}
-    ${a.usuario && hijos.length ? "" : `<div class="field"><label class="flabel" for="accManeja">¿Lo maneja otra persona? (hijos, familia)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="accManeja" style="flex:1;min-width:0"><option value="">Elegí quién lo maneja…</option>${ops.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join("")}</select><button type="button" class="mini go" data-act="accVincular" data-id="${a.id}">Vincular</button></div><span class="small muted">Sirve para chicos: usa la misma app y el mismo usuario que esa persona.${a.usuario ? ` <b>Su usuario propio (${esc(a.usuario)}) se borra</b> y pasa a entrar desde la cuenta de esa persona.` : ""}</span></div>`}`;
+  return `${hijos.length ? `<div class="fa2-li"><span class="fa2-ic">${fi("fam")}</span><span class="fa2-m"><small>También maneja</small><b>${esc(hijos.map(x => x.nombre).join(", "))}</b></span></div>` : ""}
+    ${a.usuario && hijos.length ? "" : `<div class="fa2-li fa2-li-col"><span class="fa2-ic">${fi("fam")}</span><span class="fa2-m"><b>Cuenta familiar</b><small>¿Lo maneja otra persona? Sirve para chicos: usa la app y el usuario de esa persona.</small></span>
+      <div class="fa2-row2"><select id="accManeja" aria-label="Quién lo maneja"><option value="">Elegí quién lo maneja…</option>${ops.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join("")}</select><button type="button" class="fa2-b2" data-act="accVincular" data-id="${a.id}">Vincular</button></div>
+      ${a.usuario ? `<small class="fa2-warn">Si lo vinculás, <b>su usuario propio (${esc(a.usuario)}) se borra</b> y pasa a entrar desde la cuenta de esa persona.</small>` : ""}</div>`}`;
 }
 async function vincularManeja(a, pid) {
   const p = S.alumnos.find(x => x.id === pid); if (!p || !p.uid) { toast("Esa persona todavía no tiene acceso a la app. Creáselo primero."); return false; }
@@ -73,14 +75,16 @@ async function desvincularManeja(a) {
 }
 function pruebaPagoHTML(a) {
   if (mesKey(now) >= "2026-11" || !(a.usuario || a.manejaUid)) return "";
-  return `<div class="field"><span class="flabel">Prueba de pago</span><span class="small muted">${a.pruebaPagos ? "Activada: en su app ya puede pagar la cuota de noviembre para probar." : "Para probar el pago antes de noviembre con este alumno."}</span><button type="button" class="mini" data-act="accPruebaPago" data-id="${a.id}" style="justify-self:start">${a.pruebaPagos ? "Desactivar prueba" : "Dejar probar el pago de noviembre"}</button></div>`;
+  return `<div class="fa2-li"><span class="fa2-ic">${fi("cash")}</span><span class="fa2-m"><b>Prueba de pago</b><small>${a.pruebaPagos ? "Activada: en su app ya puede pagar noviembre para probar." : "Para probar el pago antes de noviembre."}</small></span><button type="button" class="fa2-b2" data-act="accPruebaPago" data-id="${a.id}">${a.pruebaPagos ? "Desactivar" : "Activar"}</button></div>`;
 }
+// Ficha del alumno, pestaña Cuenta: usuario, contraseña nueva, crear acceso y cuenta familiar ("Crear un acceso nuevo de cero" está en la zona de peligro).
 function accesoHTML(a) {
   if (!S.esOwner) return "";
-  if (a.manejaUid) return manejaHTML(a) + pruebaPagoHTML(a);
-  return manejaHTML(a) + pruebaPagoHTML(a) + `<div class="field"><span class="flabel">Acceso a la app del alumno</span>${a.usuario
-    ? `<span class="small">Usuario: <b>${esc(a.usuario)}</b> <span class="muted">(lo puede cambiar desde su app, en Mi cuenta)</span></span><span class="small muted">Si se olvidó la contraseña, generale una nueva y se la mandás por WhatsApp.</span><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" class="mini go" data-act="accClave" data-uid="${a.uid || ""}" data-id="${a.id}">Contraseña nueva</button><button type="button" class="linkish" style="font-size:12px" data-act="accesoCrear" data-id="${a.id}">Crear un acceso nuevo de cero</button></div>`
-    : `<span class="small muted">Con un usuario y contraseña ve sus clases, asistencia y pagos, avisa si no va y reserva para recuperar.</span><button type="button" class="mini go" data-act="accesoCrear" data-id="${a.id}" style="justify-self:start">Crear acceso</button>`}</div>`;
+  const acc = a.manejaUid ? "" : a.usuario
+    ? `<div class="fa2-li"><span class="fa2-ic">${fi("user")}</span><span class="fa2-m"><small>Usuario de la app</small><b>${esc(a.usuario)}</b><small>Lo puede cambiar desde su app, en Mi cuenta.</small></span></div>
+      <button type="button" class="fa2-li" data-act="accClave" data-uid="${a.uid || ""}" data-id="${a.id}"><span class="fa2-ic">${fi("key")}</span><span class="fa2-m"><b>Contraseña nueva</b><small>Si se la olvidó: se la mandás por WhatsApp</small></span><span class="fa2-chv">${fi("chev")}</span></button>`
+    : `<button type="button" class="fa2-li" data-act="accesoCrear" data-id="${a.id}"><span class="fa2-ic">${fi("user")}</span><span class="fa2-m"><b>Crear acceso a la app</b><small>Ve sus clases y pagos, avisa si no va y reserva para recuperar</small></span><span class="fa2-chv">${fi("chev")}</span></button>`;
+  return `<div class="fa2-card fa2-ls">${acc}${manejaHTML(a)}${pruebaPagoHTML(a)}</div>`;
 }
 function msgAcceso(nombre, usuario, clave, a) {
   const bk = a ? recBuckets(a) : []; const n = bk.reduce((t, b) => t + b.n, 0);
@@ -255,9 +259,11 @@ function proximasClases(a) {
 const inicioDeF = (f, h) => new Date(`${f}T${h}:00-03:00`).getTime();
 function cargarAusHTML(a) {
   if (!S.esOwner || a.activo === false) return ""; const l = proximasClases(a); if (!l.length) return "";
-  return `<div class="field"><span class="flabel">Avisó por WhatsApp que no viene</span><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="ausSel" style="flex:1;min-width:0">${l.map(c => `<option value="${c.f}|${c.h}|${c.club}">${fechaCorta(c.f)} ${c.h}${c.club === "ESPACIO" ? " · Espacio" : " · Jump"}</option>`).join("")}</select><button type="button" class="mini go" data-act="ausCargar" data-id="${a.id}">Cargar</button></div>
-    <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="ausRec" checked> Le queda para recuperar (avisó con tiempo)</label>
-    <span class="small muted">Queda igual que si avisara por la app: a ${a.club === "ESPACIO" ? "vos" : "Esteban"} le llega el aviso, ese lugar se libera para recuperar y se ve "No viene" en la agenda.</span></div>`;
+  return `<h3 class="fa2-sh" id="faAus">Avisó por WhatsApp que no viene</h3><div class="fa2-card fa2-aus">
+    <select id="ausSel" aria-label="Qué clase no viene">${l.map(c => `<option value="${c.f}|${c.h}|${c.club}">${fechaCorta(c.f)} · ${c.h}${c.club === "ESPACIO" ? " · Espacio" : " · Jump"}</option>`).join("")}</select>
+    <label class="fa2-chk" for="ausRec"><input type="checkbox" id="ausRec" checked><span class="fa2-box">${fi("check")}</span><span>Le queda para recuperar (avisó con tiempo)</span></label>
+    <button type="button" class="fa2-b1" data-act="ausCargar" data-id="${a.id}">Cargar aviso</button>
+    <p class="fa2-hint">${fi("info")}<span>Como si avisara por la app: a ${a.club === "ESPACIO" ? "vos" : "Esteban"} le llega el aviso y el lugar se libera.</span></p></div>`;
 }
 async function cargarAusencia(a, f, h, club, conRec) {
   const hh = hhmmDe(h), id = `${a.id}_${f}_${hh}_ausencia`; const d = isoDate(f); const FV = firebase.firestore.FieldValue;
@@ -277,8 +283,8 @@ async function cargarAusencia(a, f, h, club, conRec) {
 function avisosFichaHTML(a) {
   const av = S.avisos.filter(v => v.alumnoId === a.id && v.fecha >= hoyISO).sort((x, y) => (x.fecha + x.hora).localeCompare(y.fecha + y.hora));
   if (!av.length) return cargarAusHTML(a);
-  return cargarAusHTML(a) + `<div class="field"><span class="flabel">Avisos por la app</span><div style="display:grid;gap:6px">${av.map(v => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px"><span>${v.tipo === "ausencia" ? `No va el <b>${fechaCorta(v.fecha)} ${v.hora}</b>${v.conRecupero ? " · recupera" : " · sin recupero"}` : `Recupera el <b>${fechaCorta(v.fecha)} ${v.hora}</b>`}</span><button type="button" class="mini" style="font-size:12px;padding:4px 10px" data-act="avisoDeshacer" data-av="${v.id}">Deshacer</button></div>`).join("")}</div>
-    <span class="small muted">Deshacer: si al final sí viene (o no viene a recuperar). La clase para recuperar se ajusta sola.</span></div>`;
+  return cargarAusHTML(a) + `<h3 class="fa2-sh">Avisos por la app</h3><div class="fa2-card fa2-ls">${av.map(v => `<div class="fa2-li"><span class="fa2-ic">${fi(v.tipo === "ausencia" ? "nov" : "rec")}</span><span class="fa2-m"><b>${v.tipo === "ausencia" ? `No va el ${fechaCorta(v.fecha)} · ${v.hora}` : `Recupera el ${fechaCorta(v.fecha)} · ${v.hora}`}</b><small>${v.tipo === "ausencia" ? (v.conRecupero ? "Le queda para recuperar" : "Sin recupero") : "Reservó desde la app"}${v.cargadoPor ? ` · lo cargó ${esc(v.cargadoPor)}` : ""}</small></span><button type="button" class="fa2-b2" data-act="avisoDeshacer" data-av="${v.id}">Deshacer</button></div>`).join("")}</div>
+    <p class="fa2-hint">${fi("info")}<span>Deshacer: si al final sí viene (o no viene a recuperar). La clase para recuperar se ajusta sola.</span></p>`;
 }
 async function deshacerAviso(id) {
   const v = S.avisos.find(x => x.id === id); if (!v) return;
