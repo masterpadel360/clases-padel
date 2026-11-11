@@ -2,9 +2,10 @@
    Sirve para ver de un vistazo quién está solo y a quién se puede juntar. En cada celda: la categoría del turno y los alumnos,
    cada uno con su propia categoría. Tocar un nombre abre su ficha (y al cerrarla, la planilla sigue ahí y se actualiza). */
 (function () {
-  const PL = { open: false, club: "JUMP", cat: "" };
+  const PL = { open: false, club: "JUMP", cat: "", last: "" };
   const css = `
 #planilla{position:fixed;inset:0;z-index:19;background:#F4F0E8;color:#1D1916;display:flex;flex-direction:column;font-family:var(--f-body,system-ui,sans-serif)}
+#planilla[hidden]{display:none}
 #planilla .pl-hd{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 10px;background:#1F3D30;color:#F4F0E8}
 #planilla .pl-hd h2{margin:0;font-size:19px;font-weight:700;flex:1}
 #planilla .pl-x{border:0;background:rgba(255,255,255,.14);color:inherit;width:38px;height:38px;border-radius:50%;font-size:20px;line-height:1}
@@ -61,7 +62,7 @@
     const alDe = c => new Set(conGente.flatMap(t => t.al.filter(a => catNorm(a.categoria) === c).map(a => a.id)));
     const filtro = PL.cat ? (() => { const tc = conGente.filter(matchCat); return `<p class="pl-res pl-fil">${alDe(PL.cat).size} de ${esc(capW(PL.cat))} repartidos en <b>${tc.length} turno${tc.length === 1 ? "" : "s"}</b>${tc.filter(t => t.al.length === 1).length ? ` · ${tc.filter(t => t.al.length === 1).length} solos en su turno` : ""}</p>`; })() : "";
     const scroll = box.querySelector(".pl-wrap"); const sx = scroll ? scroll.scrollLeft : 0, sy = scroll ? scroll.scrollTop : 0;
-    box.innerHTML = `
+    const html = `
       <div class="pl-hd"><h2>Planilla de horarios</h2><button type="button" class="pl-x" data-pl="cerrar" aria-label="Cerrar">×</button></div>
       <div class="pl-bar">${["JUMP", "ESPACIO"].map(c => `<button type="button" data-pl="club" data-v="${c}" aria-pressed="${PL.club === c}">${CLUB_LBL[c]}</button>`).join("")}</div>
       <div class="pl-bar"><button type="button" data-pl="cat" data-v="" aria-pressed="${!PL.cat}">Todas</button>${cats.map(c => { const k = alDe(c).size; return `<button type="button" data-pl="cat" data-v="${esc(c)}" aria-pressed="${PL.cat === c}"${k ? "" : ' disabled style="opacity:.4"'}>${esc(capW(c))} <small>${k}</small></button>`; }).join("")}</div>
@@ -80,6 +81,8 @@
             return `<button type="button" class="pl-al${PL.cat && c === PL.cat ? " hl" : ""}" data-act="editA" data-id="${a.id}">${esc(a.nombre)} <small class="${c ? "" : "sin"}">· ${c ? esc(capW(a.categoria)) : "sin categoría"}</small></button>`; }).join("")}</td>`;
         }).join("")}</tr>`).join("")}</tbody>
       </table></div>`;
+    // Si no cambió nada, no se toca la pantalla: la app redibuja seguido (cada vez que llegan datos) y reemplazar los botones mientras los tocás hace que el toque se pierda.
+    if (html === PL.last) return; PL.last = html; box.innerHTML = html;
     const w = box.querySelector(".pl-wrap"); if (w) { w.scrollLeft = sx; w.scrollTop = sy; }
   }
 
@@ -90,7 +93,7 @@
     PL.open = true; PL.club = club || S.semClub || (S.club === "ESPACIO" ? "ESPACIO" : "JUMP"); box.hidden = false;
     document.documentElement.style.overflow = "hidden"; pintar();
   };
-  function cerrar() { PL.open = false; const box = document.getElementById("planilla"); if (box) { box.hidden = true; box.innerHTML = ""; } document.documentElement.style.overflow = ""; }
+  function cerrar() { PL.open = false; PL.last = ""; const box = document.getElementById("planilla"); if (box) { box.hidden = true; box.innerHTML = ""; } document.documentElement.style.overflow = ""; }
 
   document.addEventListener("click", e => {
     const ab = e.target.closest("[data-pl-abrir]");
