@@ -1702,7 +1702,7 @@ function formAlumno(a={},leadId=""){
       </section>
     </div>${pie}`;
   }
-  openSheet(`<form id="fA" class="fa2${nuevo?" fa2-nuevo":""}" data-id="${a.id||""}" data-lead="${leadId}">${html}</form>`,null,"fa2-sheet");
+  openSheet(`<form id="fA" novalidate class="fa2${nuevo?" fa2-nuevo":""}" data-id="${a.id||""}" data-lead="${leadId}">${html}</form>`,null,"fa2-sheet");
   const calc=()=>{ const f=$("#fA"); if(!f) return; const tmp={precioClase:Number($("#aPrecio").value)||0,horarios:[...f.querySelectorAll(".hrow .hd")].map(s=>({dia:Number(s.value)})),clasesFijas:$("#aFijoOn")&&$("#aFijoOn").checked?Number($("#aFijo").value)||0:0};
     const ex=extraDias(tmp).length; $("#aCalc").textContent=tmp.precioClase?`${mesLbl(S.mes)}: ${clasesCobro(tmp)} clases = ${money(cuotaMes(tmp))}${tmp.clasesFijas?" (cobro fijo)":""}${ex?" (incluye clase extra)":""}`:"";
     if($("#faMesBig")){ $("#faMesBig").textContent=money(cuotaMes(tmp)); $("#faMesSub").textContent=tmp.precioClase?`${clasesCobro(tmp)} clases${tmp.clasesFijas?" · cobro fijo":""}${ex?" · con clase extra":""}`:"Sin precio cargado"; }
@@ -1972,8 +1972,8 @@ document.addEventListener("submit",async e=>{
     const horarios=[...f.querySelectorAll(".hrow")].map(r=>{const h={dia:Number(r.querySelector(".hd").value),hora:r.querySelector("input").value,club:r.querySelector(".hc").value}; if(r.dataset.nivel) h.nivel=r.dataset.nivel; { const pa=S.alumnos.find(x=>x.id===f.dataset.id); const ph=pa&&(pa.horarios||[]).find(x=>x.dia===h.dia&&x.hora===h.hora&&clubH(pa,x)===h.club); if(ph&&ph.desde&&ph.desde>hoyISO.slice(0,8)+"01") h.desde=ph.desde; } return h;}).filter(h=>h.hora);
     const data={nombre:$("#aNom").value.trim(),club:$("#aClub").value,tel:$("#aTel").value.trim(),categoria:$("#aCat").value.trim(),precioClase:Number($("#aPrecio").value)||0,horarios,notas:$("#aNota").value.trim(),clasesFijas:$("#aFijoOn")&&$("#aFijoOn").checked?Math.max(1,Math.min(31,Number($("#aFijo").value)||8)):0};
     const prevA=S.alumnos.find(x=>x.id===f.dataset.id)||{}; const pendA=prevA.id?recPendAvisos(prevA):[];
-    { const el=$("#aRec"); const dRec=(Number(el.textContent)||0)-(Number(el.dataset.orig)||0); if(dRec) Object.assign(data,recCambio(prevA,dRec,hoyISO,null,true)); }
-    if(!data.nombre) return;
+    { const el=$("#aRec"); /* en el alta de un alumno nuevo no existe este contador */ if(el){ const dRec=(Number(el.textContent)||0)-(Number(el.dataset.orig)||0); if(dRec) Object.assign(data,recCambio(prevA,dRec,hoyISO,null,true)); } }
+    if(!data.nombre){ toast("Falta el nombre del alumno."); const n=$("#aNom"); if(n){ const p=n.closest(".fa2-pane"); if(p&&p.hidden) faTab(p.dataset.pane); n.scrollIntoView({block:"center",behavior:"smooth"}); setTimeout(()=>n.focus(),300); } return; }
     const id=f.dataset.id,lead=f.dataset.lead;
     if(id&&$("#aIni")){ const pm=planGuardado(prevA); const ini=$("#aIni").value||prevA.inicio; const pv=Number(($("#aPromo")||{}).value)||0; const modo=(f.querySelector('[data-act="pmModo"][aria-pressed="true"]')||{}).dataset.m||"este"; const dur=Number((f.querySelector('[data-act="pmDur"][aria-pressed="true"]')||{dataset:{n:1}}).dataset.n)||1;
       if(pm&&(ini!==pm.ini||pv!==pm.promo||modo!==pm.modo||(pv&&dur!==pm.dur)||data.precioClase!==prevA.precioClase||JSON.stringify(data.horarios)!==JSON.stringify(prevA.horarios))&&data.horarios.length&&(data.precioClase||pv)){
