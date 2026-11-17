@@ -85,6 +85,26 @@ function mostrarFaltaConfig() {
 }
 async function salir() { try { Object.keys(localStorage).filter(k => k.startsWith("portal_") || k.startsWith("perfil_")).forEach(k => localStorage.removeItem(k)); } catch (e) {} try { await fauth.signOut(); } catch (e) {} location.reload(); }
 
+/* ---------- Si la base se traba, recargar sola ----------
+   En el iPhone, cuando la app queda un rato en segundo plano, Firestore a veces se rompe
+   ("INTERNAL ASSERTION FAILED: Unexpected state") y ya no guarda nada hasta recargar. */
+function firestoreTrabado(e) { const m = String((e && (e.message || e.reason && e.reason.message || e.reason)) || e || ""); return /INTERNAL ASSERTION FAILED|Unexpected state/i.test(m); }
+function recargarPorTraba() {
+  let ult = 0; try { ult = Number(sessionStorage.getItem("trabaRecarga")) || 0; } catch (x) {}
+  if (Date.now() - ult < 20000) return false; // no entrar en un loop de recargas
+  try { sessionStorage.setItem("trabaRecarga", String(Date.now())); } catch (x) {}
+  try { if (typeof toast === "function") toast("Se trabó la conexión. Recargando…"); } catch (x) {}
+  setTimeout(() => location.reload(), 900); return true;
+}
+window.addEventListener("unhandledrejection", e => { if (firestoreTrabado(e.reason)) recargarPorTraba(); });
+window.addEventListener("error", e => { if (firestoreTrabado(e.error || e.message)) recargarPorTraba(); });
+// Si la app estuvo más de 20 minutos en segundo plano, al volver se recarga (si no hay nada abierto a medio llenar).
+(function () { let oculto = 0; document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { oculto = Date.now(); return; }
+  const ov = document.getElementById("overlay");
+  if (oculto && Date.now() - oculto > 20 * 60 * 1000 && (!ov || ov.hidden)) location.reload();
+}); })();
+
 /* ---------- Arranque ---------- */
 (function arrancar() {
   if (!window.FIREBASE_CONFIG) { mostrarFaltaConfig(); return; }
