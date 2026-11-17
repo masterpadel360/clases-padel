@@ -834,10 +834,17 @@ function taskRow(t, { compacto = false } = {}) {
     <button class="tbody" data-act="editTask" data-id="${t.id}"><span class="name">${t.prio === 'alta' ? '<i class="star" aria-label="Importante">✦</i>' : ''}${esc(t.title)}</span>${meta.length ? `<span class="meta">${meta.join('')}</span>` : ''}</button>
     ${fin}</div>`;
 }
+// ¿Para hoy o para cuando pueda? Si el texto dice el día ("mañana", "el jueves"), manda el texto.
+const dondeTarea = () => (ui.tdonde === 'cuando' ? 'cuando' : 'hoy');
+function tareaConDonde(txt, donde) {
+  const p = tareaDesdeTexto(txt, today(), nowMinutes(), S.settings.taskLists);
+  if (!p.date && donde === 'hoy') p.date = today();
+  return p;
+}
 function tareaPreview(txt) {
   if (!txt || !txt.trim()) return '';
-  const p = tareaDesdeTexto(txt, today(), nowMinutes(), S.settings.taskLists);
-  const partes = [`<b>${esc(p.title)}</b>`, p.date ? esc(cuandoTxt(p.date)) : 'sin fecha'];
+  const p = tareaConDonde(txt, dondeTarea());
+  const partes = [`<b>${esc(p.title)}</b>`, p.date ? esc(cuandoTxt(p.date)) : 'cuando pueda'];
   if (p.time) partes.push(`<span class="num">${p.time}</span>`);
   if (p.list) partes.push(esc(p.list));
   if (p.prio === 'alta') partes.push('importante');
@@ -846,10 +853,11 @@ function tareaPreview(txt) {
 function tareasHoyCard(k) {
   const lista = tareasDeHoy(S.tasks, k);
   const hechasHoy = S.tasks.filter((t) => t.done && t.doneAt === k).length;
-  if (!lista.length && !hechasHoy) return '';
   const muestra = lista.slice(0, 4);
-  return `<section class="card tasks-hoy"><div class="tasks-h"><h3>Pendientes</h3><span class="muted tiny num">${hechasHoy ? `${hechasHoy} ${hechasHoy === 1 ? 'hecha' : 'hechas'} hoy` : ''}</span></div>
-    ${muestra.length ? `<div class="tlist">${muestra.map((t) => taskRow(t, { compacto: true })).join('')}</div>` : '<p class="muted tiny" style="margin:4px 0 0">Todo hecho por hoy.</p>'}
+  return `<section class="card tasks-hoy"><div class="tasks-h"><h3>Para hoy</h3><span class="muted tiny num">${hechasHoy ? `${hechasHoy} ${hechasHoy === 1 ? 'hecha' : 'hechas'} hoy` : ''}</span></div>
+    <form class="quick quick-hoy" id="fTareaHoy" autocomplete="off"><input class="input" id="tHoy" placeholder="Agregar para hoy: lavar el auto…" aria-label="Agregar algo para hoy" enterkeyhint="done" maxlength="120">
+      <button class="btn primary sm" type="submit" aria-label="Agregar para hoy">${I.mas}</button></form>
+    ${muestra.length ? `<div class="tlist">${muestra.map((t) => taskRow(t, { compacto: true })).join('')}</div>` : `<p class="muted tiny" style="margin:4px 0 0">${hechasHoy ? 'Todo hecho por hoy.' : 'Nada para hoy todavía.'}</p>`}
     <button class="btn ghost block sm vermas" data-act="tab" data-tab="tareas">${lista.length > muestra.length ? `Ver ${lista.length - muestra.length} más` : 'Ver todas las tareas'}${I.der}</button></section>`;
 }
 function renderTareas() {
@@ -860,8 +868,9 @@ function renderTareas() {
   const sec = (titulo, items, nota = '') => items.length ? `<div class="section-t">${titulo}<small class="num">${nota || items.length}</small></div><div class="tlist">${items.map((t) => taskRow(t)).join('')}</div>` : '';
   const pendientes = g.vencida.length + g.hoy.length + g.manana.length + g.proxima.length + g.sinfecha.length;
   return `<header class="head"><div><div class="eyebrow">Tus pendientes</div><h1>Tareas</h1></div><div class="brand">${esc(APP.name)}</div></header>
-    <form class="quick" id="fTarea" autocomplete="off"><input class="input" id="tText" placeholder="Escribí: llamar a Ari mañana 10" aria-label="Agregar tarea" enterkeyhint="done" maxlength="120" value="${esc(ui.tquick || '')}">
+    <form class="quick" id="fTarea" autocomplete="off"><input class="input" id="tText" placeholder="${dondeTarea() === 'hoy' ? 'Ej: responder a Ari, llamar a papá 20 hs' : 'Ej: sacar turno con el dentista'}" aria-label="Agregar tarea" enterkeyhint="done" maxlength="120" value="${esc(ui.tquick || '')}">
       <button class="btn primary sm" type="submit" aria-label="Agregar tarea">${I.mas}</button></form>
+    <div class="seg donde" role="group" aria-label="Para cuándo"><button type="button" data-act="tdonde" data-v="hoy" aria-pressed="${dondeTarea() === 'hoy'}">Para hoy</button><button type="button" data-act="tdonde" data-v="cuando" aria-pressed="${dondeTarea() === 'cuando'}">Cuando pueda</button></div>
     <p class="quick-prev" id="tPrev" aria-live="polite">${tareaPreview(ui.tquick)}</p>
     <div class="chips filtros"><button class="chip ${filtro ? '' : 'on'}" data-act="tlista" data-v="">Todas</button>${ls.map((l) => `<button class="chip ${filtro === l ? 'on' : ''}" data-act="tlista" data-v="${esc(l)}">${esc(l)}</button>`).join('')}</div>
     ${pendientes ? '' : `<div class="card empty"><b>${filtro ? 'Nada en esta lista' : 'Nada pendiente'}</b>Escribí arriba lo que tengas que hacer.</div>`}
@@ -869,7 +878,7 @@ function renderTareas() {
     ${sec('Hoy', g.hoy)}
     ${sec('Mañana', g.manana)}
     ${sec('Próximas', g.proxima)}
-    ${sec('Cuando puedas', g.sinfecha)}
+    ${g.sinfecha.length ? `<section class="cuando-box"><div class="cuando-h"><span class="cuando-ico" aria-hidden="true">📌</span><div><b>Cuando pueda</b><span>Para no olvidarme · sin día fijo</span></div><small class="num">${g.sinfecha.length}</small></div><div class="tlist">${g.sinfecha.map((t) => taskRow(t)).join('')}</div></section>` : ''}
     ${g.hecha.length ? `<details class="other"><summary>Hechas · ${g.hecha.length}${I.abajo}</summary><div class="tlist">${g.hecha.slice(0, 30).map((t) => taskRow(t)).join('')}</div></details>` : ''}
     <p class="help">Tip: sumá <b>#liga</b> para la lista o “importante” para marcarla. Con hora, aparece en la Agenda.</p>
     <div class="set-list" style="margin-top:14px"><div class="set-row"><span class="lbl"><b>¿Venís de otra app?</b><span>Importá tus tareas desde un CSV</span></span><label class="btn sm">Importar<input type="file" accept=".csv,text/csv,text/plain" data-set="impTareas" class="sr"></label></div></div>
@@ -909,17 +918,18 @@ function saveTask(form) {
   commit(); closeSheet(); keepScroll(); toast(id ? 'Tarea actualizada' : 'Tarea agregada');
 }
 function saveTareaRapida(form) {
-  const txt = form.querySelector('#tText').value.trim();
+  const inp = form.querySelector('#tText, #tHoy');
+  const txt = inp.value.trim();
   if (!txt) return;
-  const p = tareaDesdeTexto(txt, today(), nowMinutes(), S.settings.taskLists);
+  const p = tareaConDonde(txt, form.id === 'fTareaHoy' ? 'hoy' : dondeTarea());
   if (p.list && !listas(S.settings.taskLists).includes(p.list)) S.settings.taskLists.push(p.list);
   const t = { id: newId('t'), ...p, done: false, doneAt: null, created: today() };
   S.tasks.push(t);
   commit();
   ui.tquick = '';
-  form.querySelector('#tText').blur();
+  inp.blur();
   render();
-  toast(`Anotada: ${t.title}${t.date ? ' · ' + cuandoTxt(t.date) : ''}`, () => { S.tasks = S.tasks.filter((x) => x !== t); commit(); ui.tquick = txt; render(); });
+  toast(`Anotada: ${t.title} · ${t.date ? cuandoTxt(t.date) : 'cuando pueda'}`, () => { S.tasks = S.tasks.filter((x) => x !== t); commit(); ui.tquick = txt; render(); });
 }
 const keepScroll = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
 
@@ -1401,6 +1411,7 @@ const actions = {
     commit(); closeSheet(); keepScroll();
     toast('Tarea borrada', () => { S.tasks.splice(i, 0, t); commit(); keepScroll(); });
   },
+  tdonde: (el) => { ui.tdonde = el.dataset.v; keepScroll(); const i = document.getElementById('tText'); if (i) i.focus(); },
   tlista: (el) => { ui.tlista = el.dataset.v || null; keepScroll(); },
   mes: (el) => { const d = Number(el.dataset.d); ui.mes = d ? mesSiguiente(ui.mes || mesDe(today()), d) : null; render(); },
   newGasto: () => gastoSheet(null),
@@ -1534,7 +1545,7 @@ document.addEventListener('submit', (e) => {
   if (e.target.id === 'fAgregar') saveAgregar(e.target);
   if (e.target.id === 'fDictar') saveDictar(e.target);
   if (e.target.id === 'fQuick') saveQuick(e.target);
-  if (e.target.id === 'fTarea') saveTareaRapida(e.target);
+  if (e.target.id === 'fTarea' || e.target.id === 'fTareaHoy') saveTareaRapida(e.target);
   if (e.target.id === 'fTask') saveTask(e.target);
   if (e.target.id === 'fBudget') {
     const v = parseMonto(e.target.querySelector('#bTope').value);

@@ -1132,3 +1132,17 @@ textarea.input.area { min-height: 68px; padding: 12px 14px; resize: vertical; li
 .mic-fab:active { transform: scale(.94); }
 :root[data-palette="vida"] .mic-fab { background: linear-gradient(180deg, #9277F0, var(--accent-fill) 60%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 14px 34px -8px var(--glow-btn), 0 2px 6px rgba(60, 30, 80, .15); }
 body.ob .mic-fab, body.open .mic-fab { display: none; }
+
+/* Mi Agenda: "para hoy" vs "cuando pueda" */
+.seg.donde { margin: -4px 0 12px; }
+.quick-hoy { margin: 4px 0 12px; }
+.quick-hoy .input { background: var(--surface-2); min-height: 46px; }
+.quick-hoy .btn { min-width: 46px; min-height: 46px; }
+.cuando-box { margin-top: 26px; padding: 14px 12px 12px; border-radius: 26px; border: 2px dashed color-mix(in srgb, var(--accent) 38%, transparent); background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.cuando-h { display: flex; align-items: center; gap: 12px; padding: 2px 6px 12px; }
+.cuando-h > div { flex: 1; display: grid; }
+.cuando-h b { font-family: var(--serif); font-size: 24px; line-height: 1.1; }
+.cuando-h span { font-size: 13px; color: var(--muted); }
+.cuando-h small { font-size: 14px; color: var(--muted); }
+.cuando-ico { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: var(--surface); font-size: 20px; }
+.cuando-box .task { background: color-mix(in srgb, var(--surface) 80%, transparent); }

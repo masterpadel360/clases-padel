@@ -21,7 +21,7 @@ self.addEventListener("notificationclick", e => {
 });
 
 // Cambiar VERSION en cada cambio publicado.
-const VERSION = "mi-agenda-v2";
+const VERSION = "mi-agenda-v3";
 const FUENTES = "mi-agenda-fuentes";
 const ARCHIVOS = ["./", "index.html", "css/app.css", "js/nube.js", "js/main.js", "js/logic.js", "js/store.js", "js/agregar.js", "js/calendario.js", "js/avisos.js", "js/finanzas.js", "js/tareas.js", "manifest.json", "icono.svg", "icono-180.png", "icono-192.png", "icono-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).catch(() => {}).then(() => self.skipWaiting())); });
