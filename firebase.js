@@ -173,7 +173,7 @@ async function iniciarStaff(perfil, u) {
   let visPend = false; const vis = () => { if (visPend) return; visPend = true; requestAnimationFrame(() => { visPend = false; if ($("#overlay").hidden) render(); }); };
   render();
   if (!S.esOwner) {
-    db.doc("horas/" + S.uid).onSnapshot(d => { if (hPend > 0) return; S.horas = { ...((d.exists && d.data().dias) || {}) }; S.hVal = { ...((d.exists && d.data().valores) || {}) }; S.hMovs = [...((d.exists && d.data().movs) || [])]; vis(); }, () => {});
+    db.doc("horas/" + S.uid).onSnapshot(d => { S.horas = { ...((d.exists && d.data().dias) || {}) }; S.hVal = { ...((d.exists && d.data().valores) || {}) }; S.hMovs = [...((d.exists && d.data().movs) || [])]; vis(); }, () => {});
     db.doc("finanzas/" + S.uid).onSnapshot(d => { if (fPend > 0) return; S.fin = [...((d.exists && d.data().movs) || [])]; vis(); }, () => {});
   }
   { const d = new Date(now); d.setDate(d.getDate() - 21);
@@ -187,8 +187,8 @@ async function iniciarStaff(perfil, u) {
     db.collection("ingresos").onSnapshot(snap => { S.ingresos = {}; snap.docs.forEach(x => { const v = x.data(); if (v.alumnoId) S.ingresos[v.alumnoId] = v; }); vis(); }, () => {});
     db.collection("usuarios").onSnapshot(snap => { S.usuarios = snap.docs.map(x => ({ id: x.id, ...x.data() })); nombresEquipo(); vis(); }, () => {});
     db.collection("finanzas").onSnapshot(snap => { if (fPend > 0) return; S.finEq = {}; snap.docs.forEach(d => S.finEq[d.id] = [...(d.data().movs || [])]); if (S.equipo[0]) S.fin = [...(S.finEq[S.equipo[0].id] || [])]; vis(); }, () => {});
-    db.collection("horas").onSnapshot(snap => { if (hPend > 0) return;
-      S.equipo = snap.docs.map(d => ({ id: d.id, dias: { ...(d.data().dias || {}) }, valores: { ...(d.data().valores || {}) }, movs: [...(d.data().movs || [])] }));
+    db.collection("horas").onSnapshot(snap => {
+      S.equipo = snap.docs.filter(d => d.id !== S.uid).map(d => ({ id: d.id, dias: { ...(d.data().dias || {}) }, valores: { ...(d.data().valores || {}) }, movs: [...(d.data().movs || [])] }));
       if (S.equipo[0]) { S.fin = [...(S.finEq[S.equipo[0].id] || [])]; S.horas = { ...S.equipo[0].dias }; S.hVal = { ...S.equipo[0].valores }; S.hMovs = [...S.equipo[0].movs]; }
       vis(); }, () => {});
     db.collection("interesados").onSnapshot(snap => { S.leads = snap.docs.map(d => ({ id: d.id, ...d.data() })); S.loaded.l = true; vis(); }, () => {});

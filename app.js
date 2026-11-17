@@ -544,7 +544,7 @@ function vDinero(){
   <section class="sec" style="display:flex;justify-content:center"><button class="linkish" data-act="aumento">Aumentos de cuota ›</button></section>`;
 }
 function openGasto(){ openSheet(`<div style="display:grid;gap:14px"><div style="display:grid;gap:4px"><span class="flabel">Plata</span><h2 class="disp">Otro gasto</h2></div>
-  <div class="two"><div class="field"><label for="gMonto">Monto</label><input id="gMonto" type="number" inputmode="numeric" min="0" step="500"></div><div class="field"><label for="gFecha">Fecha</label><input id="gFecha" type="date" value="${hoyISO}"></div></div>
+  <div class="two"><div class="field"><label for="gMonto">Monto</label><input id="gMonto" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 400.000" data-plata></div><div class="field"><label for="gFecha">Fecha</label><input id="gFecha" type="date" value="${hoyISO}"></div></div>
   <div class="field"><label for="gNota">En qué</label><input id="gNota" placeholder="Ej: pelotas, paletas, publicidad"></div>
   <div class="btns"><span></span><span style="display:flex;gap:8px"><button class="btn sec2" data-act="close">Cancelar</button><button class="btn pri" data-act="gastoOk">Guardar</button></span></div></div>`); setTimeout(()=>{ const e=$("#gMonto"); e&&e.focus(); },50); }
 async function guardarGastos(movs,msg){ S.gastosG=movs; render(); return safe(()=>S.db.doc("gestion/gastos").set({movs}),msg); }
@@ -860,16 +860,28 @@ function panelEquipo(){
 }
 function aumKV(vh,nv,h,np,tot){ return `<dt>Nuevo valor por hora</dt><dd class="num">${money(nv)} <span class="muted" style="font-weight:500">(antes ${money(vh)})</span></dd><dt>Con ${fmtH(h)} h le pagarías</dt><dd class="num">${money(np)}</dd><dt>Diferencia por mes</dt><dd class="num">+ ${money(np-h*vh)}</dd>`; }
 document.addEventListener("input",e=>{ if(e.target.id==="aumPct"){ aumPct=Number(e.target.value)||0; const vh=S.cfg.valorHora||0; const eq=S.equipo.length?S.equipo:[{dias:{}}]; const h=eq.reduce((s,x)=>s+horasMes(x.dias,S.mes),0); const tot=activos().reduce((s,a)=>s+montoMes(a),0); const nv=Math.round(vh*(1+aumPct/100)); $("#aumOut").innerHTML=aumKV(vh,nv,h,h*nv,tot); } });
+/* ---------- Montos de plata ----------
+   Se escriben como texto: "400.000", "400000" o "$ 400.000" valen 400000 (antes un campo numérico tomaba "400.000" como 400 y no guardaba). */
+const plata = v => Number(String(v||"").split(",")[0].replace(/[^0-9]/g,""))||0;
+const fmtPlata = n => n ? Number(n).toLocaleString("es-AR") : "";
+document.addEventListener("input",e=>{ const t=e.target; if(!t.matches||!t.matches("input[data-plata]")) return; const n=plata(t.value); t.value=fmtPlata(n); });
 /* ---------- Horas del profe ---------- */
 const mesAnt = m => { const [y,mm]=m.split("-").map(Number); return mesKey(new Date(y,mm-2,1)); };
 const horasMes = (dias,m) => Object.keys(dias||{}).filter(k=>k.startsWith(m)).reduce((s,k)=>s+(Number(dias[k])||0),0);
 const fmtH = n => String(Math.round(n*10)/10).replace(".",",");
 let hPend=0, hQueue=Promise.resolve();
 function targetId(){ return S.esOwner ? (S.equipo[0]&&S.equipo[0].id) : S.uid; }
-function guardarHorasDoc(){ const id=targetId(); if(!id){ toast(S.esOwner?"Esteban todavía no cargó nada desde su cuenta.":"No se pudo identificar tu usuario."); return; }
-  const data={dias:{...S.horas},valores:{...S.hVal},movs:[...S.hMovs]}; hPend++;
+// Guarda solo lo que cambió (un día de horas, un pago nuevo o uno borrado), así si Gabriel y Esteban
+// tocan la cuenta al mismo tiempo no se pisan. Sin "cambio" guarda todo (como antes).
+function guardarHorasDoc(cambio){ const id=targetId(); if(!id){ toast(S.esOwner?"Esteban todavía no cargó nada desde su cuenta.":"No se pudo identificar tu usuario."); return; }
+  const FV=firebase.firestore.FieldValue; let data, opts;
+  if(cambio&&cambio.dia){ const f=cambio.dia; data={dias:{[f]:S.horas[f]?S.horas[f]:FV.delete()},valores:{[f]:S.hVal[f]?S.hVal[f]:FV.delete()}}; opts={merge:true}; }
+  else if(cambio&&cambio.pago){ data={movs:FV.arrayUnion(cambio.pago)}; opts={merge:true}; }
+  else if(cambio&&cambio.borrar){ data={movs:FV.arrayRemove(cambio.borrar)}; opts={merge:true}; }
+  else data={dias:{...S.horas},valores:{...S.hVal},movs:[...S.hMovs]};
+  hPend++;
   if(S.esOwner&&S.equipo[0]){ S.equipo[0].dias={...S.horas}; S.equipo[0].valores={...S.hVal}; S.equipo[0].movs=[...S.hMovs]; }
-  const p=hQueue.then(()=>safe(()=>S.db.doc("horas/"+id).set(data))).finally(()=>{hPend--;}); hQueue=p.catch(()=>{}); return p; }
+  const p=hQueue.then(()=>safe(()=>opts?S.db.doc("horas/"+id).set(data,opts):S.db.doc("horas/"+id).set(data))).finally(()=>{hPend--;}); hQueue=p.catch(()=>{}); return p; }
 // Avisos para Gabriel de lo que hace Esteban (horas cargadas, faltas, recuperaciones). Llegan al instante.
 const nomProfe=()=>((S.perfil&&S.perfil.nombre)||"Esteban").split(" ")[0];
 const diaTxt=f=>{ const d=isoDate(f); return f===hoyISO?"hoy":`${DIAS_LARGO[d.getDay()].toLowerCase()} ${d.getDate()}/${d.getMonth()+1}`; };
@@ -877,7 +889,7 @@ function avisarDueno(titulo,cuerpo){ if(S.esOwner||!S.db) return;
   S.db.collection("staffAvisos").add({titulo,cuerpo,de:S.uid||"",notificado:false,creado:firebase.firestore.FieldValue.serverTimestamp()})
     .then(()=>{ try{ if(window.AVISOS_URL) fetch(window.AVISOS_URL,{method:"POST",keepalive:true}).catch(()=>{}); }catch(e){} }).catch(e=>console.error(e)); }
 const tHorasAviso={};
-function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Más acciones → Esteban y canchas.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc(); }
+function setHoras(f,n){ if(!S.esOwner){ clearTimeout(tHorasAviso[f]); tHorasAviso[f]=setTimeout(()=>{ const h=S.horas[f]||0; avisarDueno(h?`${nomProfe()} cargó ${fmtH(h)} h`:`${nomProfe()} borró sus horas`,`${f===hoyISO?"Hoy":"El "+diaTxt(f)}. Lo ves en Más acciones → Esteban y canchas.`); },8000); } if(n){ S.horas[f]=n; if(!S.hVal[f]) S.hVal[f]=S.cfg.valorHora||0; } else { delete S.horas[f]; delete S.hVal[f]; } render(); return guardarHorasDoc({dia:f}); }
 const valorDia = f => S.hVal[f] || S.cfg.valorHora || 0;
 function ganadoEn(pref){ return Object.keys(S.horas).filter(k=>k.startsWith(pref)).reduce((t,k)=>t+(Number(S.horas[k])||0)*valorDia(k),0); }
 // La cuenta de Esteban arranca de cero el 1/11/2026: lo de antes ya está saldado.
@@ -895,8 +907,8 @@ function cuentaHTML(enPanel){
 }
 function openPagoProfe(){
   const {saldo}=saldoProfe();
-  openSheet(`<form id="fPP" style="display:grid;gap:14px"><div style="display:grid;gap:4px"><h2 class="disp">Registrar pago</h2><span class="small muted">Saldo actual: ${money(saldo)}. Si pagás de más, queda como adelanto.</span></div>
-    <div class="two"><div class="field"><label for="ppMonto">Monto</label><input id="ppMonto" type="number" inputmode="numeric" min="0" step="1000" required></div>
+  openSheet(`<form id="fPP" style="display:grid;gap:14px"><div style="display:grid;gap:4px"><h2 class="disp">Registrar pago</h2><span class="small muted">${saldo>0?(S.esOwner?"Le debés ":"Te deben ")+money(saldo):saldo<0?"Adelantado: "+money(-saldo):"Al día"}. Podés poner cualquier monto: si es más de lo que se debe, queda como adelanto y se va descontando con las horas que se trabajen.</span></div>
+    <div class="two"><div class="field"><label for="ppMonto">Monto</label><input id="ppMonto" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 400.000" data-plata required></div>
     <div class="field"><label for="ppFecha">Fecha</label><input id="ppFecha" type="date" value="${hoyISO}"></div></div>
     <button type="button" class="mini" data-act="pagoTodo" style="justify-self:start">Pagar todo (${money(Math.max(0,saldo))})</button>
     <div class="field"><label for="ppNota">Nota (opcional)</label><input id="ppNota" placeholder="Ej: adelanto, transferencia"></div>
@@ -1020,7 +1032,7 @@ function vPlata(){
 function openFin(tipo){
   fTipo=tipo; const cats=tipo==="gasto"?CATS:CATS_ING; fCat=cats[0];
   openSheet(`<form id="fFin" style="display:grid;gap:14px"><h2 class="disp">${tipo==="gasto"?"Nuevo gasto":"Otro ingreso"}</h2>
-    <div class="two"><div class="field"><label for="finMonto">Monto</label><input id="finMonto" type="number" inputmode="numeric" min="0" step="100" required></div>
+    <div class="two"><div class="field"><label for="finMonto">Monto</label><input id="finMonto" type="text" inputmode="numeric" autocomplete="off" placeholder="Ej: 400.000" data-plata required></div>
     <div class="field"><label for="finFecha">Fecha</label><input id="finFecha" type="date" value="${hoyISO}"></div></div>
     <div class="field"><span class="flabel">Categoría</span><div style="display:flex;gap:6px;flex-wrap:wrap" id="finCats">${cats.map((c,i)=>`<button type="button" class="chip" data-act="finCat" data-c="${c}" aria-pressed="${i===0}" style="text-transform:none;letter-spacing:0;font-size:13px">${c}</button>`).join("")}</div></div>
     <div class="field"><label for="finNota">Detalle (opcional)</label><input id="finNota" placeholder="${tipo==="gasto"?"Ej: súper, nafta, cuota gimnasio":"Ej: torneo, venta de paleta"}"></div>
@@ -1852,7 +1864,7 @@ document.addEventListener("click",async e=>{
     case "hoyClub": S.hoyClub=b.dataset.v; render(); break;
     case "masAcc": openSheet(`<div style="display:grid;gap:4px"><h2 class="disp">Más acciones</h2></div><div class="w-sheet-grid">${[["admin","Esteban y canchas",'data-act="tab" data-t="admin"'],["cobrar","Mi plata",'data-act="tab" data-t="dinero"'],["alumnos","Mandar accesos",'data-act="accMasivo"'],["cobrar","Aumento de cuota",'data-act="aumento"'],["cobrar","Anotar gasto",'data-act="gastoNuevo"'],["gear","Planilla de horarios",'data-pl-abrir=""'],["gear","Ajustes y mensajes",'data-act="cfgOpen"']].map(([k,l,a])=>`<button class="w-tile" ${a}><span class="w-ic">${wico(k)}</span><span>${l}</span></button>`).join("")}</div><div class="btns"><span></span><button class="btn sec2" data-act="close">Cerrar</button></div>`); break;
     case "avisosVer": { const h=avisosHoyHTML(); openSheet(`<div style="display:grid;gap:4px"><span class="flabel">Alumnos</span><h2 class="disp">Avisos</h2></div>${h||'<div class="empty">No hay avisos nuevos.</div>'}<div class="btns"><span></span><button class="btn sec2" data-act="close">Listo</button></div>`); break; }
-    case "gastoOk": { const monto=Number($("#gMonto").value)||0; if(!monto){ toast("Poné el monto"); break; } const mv={id:Date.now().toString(36),monto,fecha:$("#gFecha").value||hoyISO,nota:($("#gNota").value||"").trim()}; closeSheet(); await guardarGastos([...(S.gastosG||[]),mv],"Gasto anotado"); break; }
+    case "gastoOk": { const monto=plata($("#gMonto").value); if(!monto){ toast("Poné el monto"); break; } const mv={id:Date.now().toString(36),monto,fecha:$("#gFecha").value||hoyISO,nota:($("#gNota").value||"").trim()}; closeSheet(); await guardarGastos([...(S.gastosG||[]),mv],"Gasto anotado"); break; }
     case "gastoDel": if(confirm("¿Borrar este gasto?")) await guardarGastos((S.gastosG||[]).filter(x=>x.id!==b.dataset.id),"Gasto borrado"); break;
     case "verDeben": S.fPago="debe"; S.tab="alumnos"; render(); scrollTo(0,0); break;
     case "aumento": AUM.sel=null; AUM.solo=null; openAumento(); break;
@@ -1895,8 +1907,8 @@ document.addEventListener("click",async e=>{
     case "finCat": { fCat=b.dataset.c; document.querySelectorAll("#finCats .chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.c===fCat)); break; }
     case "finDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.fin=S.fin.filter(x=>x.id!==b.dataset.id); await saveFin(); break; }
     case "finMes": { const [y,mm]=S.finMes.split("-").map(Number); S.finMes=mesKey(new Date(y,mm-1+Number(b.dataset.d),1)); render(); break; }
-    case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } S.hMovs=S.hMovs.filter(x=>x.id!==b.dataset.id); render(); await guardarHorasDoc(); break; }
-    case "pagoTodo": { $("#ppMonto").value=Math.max(0,saldoProfe().saldo); break; }
+    case "movDel": { if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="¿Borrar?"; return; } const mv=S.hMovs.find(x=>x.id===b.dataset.id); if(!mv) break; S.hMovs=S.hMovs.filter(x=>x.id!==mv.id); render(); await guardarHorasDoc({borrar:mv}); break; }
+    case "pagoTodo": { $("#ppMonto").value=fmtPlata(Math.max(0,saldoProfe().saldo)); break; }
     case "vhSave": { const v=Number($("#vh2").value)||0; if(await guardarValorHora(v,`Valor por hora: ${money(v)}`)) render(); break; }
     case "objetivo": if(objMin()) setObjMin(false); else openObjetivo(); break;
     case "objPick": { $("#objIn").value=b.dataset.v; b.parentElement.querySelectorAll(".seg-b").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false")); break; }
@@ -1999,14 +2011,16 @@ document.addEventListener("submit",async e=>{
     else { data.estado="nuevo"; data.alta=hoyISO; if(await safe(()=>colL().add(data),`${data.nombre} anotado`)) closeSheet(); }
   }
   if(f.id==="fFin"){
-    const monto=Number($("#finMonto").value)||0; if(!monto) return;
+    const monto=plata($("#finMonto").value); if(!monto){ toast("Poné el monto"); return; }
     S.fin=[...S.fin,{id:"f"+Date.now().toString(36),tipo:fTipo,monto,cat:fCat,fecha:$("#finFecha").value||hoyISO,nota:$("#finNota").value.trim()}];
     closeSheet(); await saveFin(); toast(fTipo==="gasto"?`Gasto de ${money(monto)} anotado`:`Ingreso de ${money(monto)} anotado`);
   }
   if(f.id==="fPP"){
-    const monto=Number($("#ppMonto").value)||0; if(!monto) return;
-    S.hMovs=[...S.hMovs,{id:"p"+Date.now().toString(36),fecha:$("#ppFecha").value||hoyISO,monto,nota:$("#ppNota").value.trim(),por:S.esOwner?"Gabriel":"Esteban"}];
-    closeSheet(); await guardarHorasDoc(); toast(`Pago de ${money(monto)} registrado`);
+    const monto=plata($("#ppMonto").value); if(!monto){ toast("Poné el monto"); return; }
+    const mv={id:"p"+Date.now().toString(36),fecha:$("#ppFecha").value||hoyISO,monto,nota:$("#ppNota").value.trim(),por:S.esOwner?"Gabriel":"Esteban"};
+    S.hMovs=[...S.hMovs,mv]; closeSheet(); render();
+    if(await guardarHorasDoc({pago:mv})){ const sal=saldoProfe().saldo; toast(sal<0?`Pago de ${money(monto)} registrado · quedan ${money(-sal)} adelantados`:`Pago de ${money(monto)} registrado`);
+      if(!S.esOwner) avisarDueno(`${nomProfe()} anotó un pago de ${money(monto)}`, sal<0?`Queda con ${money(-sal)} adelantado: se le va descontando con las horas.`:`Le quedás debiendo ${money(sal)}.`); }
   }
   if(f.id==="fAj"){
     const a=S.alumnos.find(x=>x.id===f.dataset.id); if(!a) return;
