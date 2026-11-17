@@ -66,6 +66,29 @@ export function avisosAgenda(items, cfg, nowMs, hoy) {
   return out;
 }
 
+// Hábitos (diseño Rutina): la app deja en items/_avisos un plan de los próximos días ya con hora y texto,
+// y qué hábitos ya se hicieron. Acá se manda lo que toca y se saltea lo ya hecho. (Copia de llenar() de agenda/js/avisos.js.)
+const VENTANA_HAB = 40 * 60e3;
+const plantilla = (tpl, v) => String(tpl || "").replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? String(v[k]) : m));
+const listaTxt = (n, max = 4) => !n.length ? "" : n.length > max ? `${n.slice(0, max - 1).join(", ")} y ${n.length - max + 1} más` : n.length === 1 ? n[0] : `${n.slice(0, -1).join(", ")} y ${n[n.length - 1]}`;
+export function llenarHabito(av, hechos) {
+  const h = new Set(hechos || []);
+  if (av.tipo === "habito") return h.has(av.hid) ? null : { title: av.title, body: av.body };
+  const faltan = (av.cand || []).filter(c => !h.has(c.id));
+  if (!faltan.length) return null;
+  const v = { faltan: faltan.length === 1 ? "1 hábito" : `${faltan.length} hábitos`, lista: listaTxt(faltan.map(c => c.name)) };
+  return { title: plantilla(av.title, v), body: plantilla(av.body, v) };
+}
+export function avisosHabitos(datos, nowMs) {
+  const out = [];
+  for (const a of (datos && datos.plan) || []) {
+    if (!a || typeof a.at !== "number" || !(a.at <= nowMs && a.at > nowMs - VENTANA_HAB)) continue;
+    const msg = llenarHabito(a, ((datos.hechos || {})[a.dia]) || []);
+    if (msg) out.push({ key: "h_" + String(a.id).replace(/[^\w-]/g, "_"), title: msg.title, body: msg.body, tag: "ag-" + (a.hid || a.tipo) });
+  }
+  return out;
+}
+
 export async function correrAgenda({ db, admin, enviar, uids, ahora, hoy, link }) {
   let n = 0;
   for (const uid of uids) {
@@ -75,8 +98,10 @@ export async function correrAgenda({ db, admin, enviar, uids, ahora, hoy, link }
     const [q1, q2] = await Promise.all([col.where("tipo", "in", ["evento", "pendiente", "hoy"]).get(), col.where("fecha", "==", hoy).get()]);
     const vistos = new Set(); const items = [];
     for (const d of [...q1.docs, ...q2.docs]) { if (vistos.has(d.id)) continue; vistos.add(d.id); items.push({ id: d.id, ...d.data() }); }
-    if (!cfgS.exists && !items.length) continue;
-    for (const a of avisosAgenda(items, cfgS.exists ? cfgS.data() : {}, ahora.getTime(), hoy)) {
+    if (!cfgS.exists && !items.length) continue; // (los hábitos viven en items: si no hay nada, no hay nada que avisar)
+    const habS = await db.doc(`agenda/${uid}/items/_avisos`).get();
+    const lista = [...avisosAgenda(items, cfgS.exists ? cfgS.data() : {}, ahora.getTime(), hoy), ...(habS.exists ? avisosHabitos(habS.data(), ahora.getTime()) : [])];
+    for (const a of lista) {
       const ref = db.doc(`recordatorios/ag_${uid}_${a.key}`);
       const nuevo = await db.runTransaction(async tx => { const s = await tx.get(ref); if (s.exists) return false; tx.set(ref, { enviado: admin.firestore.FieldValue.serverTimestamp() }); return true; });
       if (!nuevo) continue;
